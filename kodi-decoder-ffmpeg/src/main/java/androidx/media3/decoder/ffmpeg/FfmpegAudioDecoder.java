@@ -29,12 +29,11 @@ import androidx.media3.decoder.SimpleDecoderOutputBuffer;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-/** FFmpeg audio decoder. */
+/** FFmpeg audio decoder that keeps decoded/downmixed PCM in float until the audio sink. */
 /* package */ final class FfmpegAudioDecoder
     extends SimpleDecoder<DecoderInputBuffer, SimpleDecoderOutputBuffer, FfmpegDecoderException> {
 
-  private static final int INITIAL_OUTPUT_BUFFER_SIZE_16BIT = 65535;
-  private static final int INITIAL_OUTPUT_BUFFER_SIZE_32BIT = INITIAL_OUTPUT_BUFFER_SIZE_16BIT * 2;
+  private static final int INITIAL_OUTPUT_BUFFER_SIZE_FLOAT = 65535 * 2;
 
   private static final int AUDIO_DECODER_ERROR_INVALID_DATA = -1;
   private static final int AUDIO_DECODER_ERROR_OTHER = -2;
@@ -44,12 +43,12 @@ import java.util.List;
   private static final int FLAC_METADATA_TYPE_STREAM_INFO = 0;
   private static final int FLAC_METADATA_BLOCK_HEADER_SIZE = 4;
   private static final int FLAC_STREAM_INFO_DATA_SIZE = 34;
+  private static final @C.PcmEncoding int OUTPUT_ENCODING = C.ENCODING_PCM_FLOAT;
 
   private final String codecName;
   @Nullable private final byte[] extraData;
-  private final @C.PcmEncoding int encoding;
-  private final int outputChannelCount;
   private volatile int userCenterMixLevelDb;
+  private volatile boolean downmixNormalizationEnabled;
   private int outputBufferSize;
 
   private long nativeContext; // May be reassigned on resetting the codec.
@@ -62,7 +61,6 @@ import java.util.List;
       int numInputBuffers,
       int numOutputBuffers,
       int initialInputBufferSize,
-      boolean outputFloat,
       int outputChannelCount,
       @Nullable String requestedOutputLayoutName)
       throws FfmpegDecoderException {
@@ -73,15 +71,11 @@ import java.util.List;
     checkNotNull(format.sampleMimeType);
     codecName = checkNotNull(FfmpegLibrary.getCodecName(format.sampleMimeType));
     extraData = getExtraData(format.sampleMimeType, format.initializationData);
-    encoding = outputFloat ? C.ENCODING_PCM_FLOAT : C.ENCODING_PCM_16BIT;
-    this.outputChannelCount = outputChannelCount;
-    outputBufferSize =
-        outputFloat ? INITIAL_OUTPUT_BUFFER_SIZE_32BIT : INITIAL_OUTPUT_BUFFER_SIZE_16BIT;
+    outputBufferSize = INITIAL_OUTPUT_BUFFER_SIZE_FLOAT;
     nativeContext =
         ffmpegInitialize(
             codecName,
             extraData,
-            outputFloat,
             format.sampleRate,
             format.channelCount,
             outputChannelCount,
@@ -135,7 +129,8 @@ import java.util.List;
             outputBuffer,
             outputData,
             outputBufferSize,
-            userCenterMixLevelDb);
+            userCenterMixLevelDb,
+            downmixNormalizationEnabled);
     if (result == AUDIO_DECODER_ERROR_OTHER) {
       return new FfmpegDecoderException("Error decoding (see logcat).");
     } else if (result == AUDIO_DECODER_ERROR_INVALID_DATA) {
@@ -197,12 +192,17 @@ import java.util.List;
 
   /** Returns the encoding of output audio. */
   public @C.PcmEncoding int getEncoding() {
-    return encoding;
+    return OUTPUT_ENCODING;
   }
 
   /** Sets the center-mix offset in dB relative to stream metadata or Kodi's default (-3 dB). */
   public void setUserCenterMixLevelDb(int userCenterMixLevelDb) {
     this.userCenterMixLevelDb = userCenterMixLevelDb;
+  }
+
+  /** Enables or disables Kodi-style downmix normalization. */
+  public void setDownmixNormalizationEnabled(boolean downmixNormalizationEnabled) {
+    this.downmixNormalizationEnabled = downmixNormalizationEnabled;
   }
 
   /**
@@ -321,7 +321,6 @@ import java.util.List;
   private native long ffmpegInitialize(
       String codecName,
       @Nullable byte[] extraData,
-      boolean outputFloat,
       int rawSampleRate,
       int rawChannelCount,
       int outputChannelCount,
@@ -334,7 +333,8 @@ import java.util.List;
       SimpleDecoderOutputBuffer decoderOutputBuffer,
       ByteBuffer outputData,
       int outputSize,
-      int userCenterMixLevelDb);
+      int userCenterMixLevelDb,
+      boolean downmixNormalizationEnabled);
 
   private native int ffmpegGetChannelCount(long context);
 

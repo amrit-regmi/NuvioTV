@@ -64,8 +64,6 @@ extern "C" {
 
 #define ERROR_STRING_BUFFER_LENGTH 256
 
-// Output format corresponding to AudioFormat.ENCODING_PCM_16BIT.
-static const AVSampleFormat OUTPUT_FORMAT_PCM_16BIT = AV_SAMPLE_FMT_S16;
 // Output format corresponding to AudioFormat.ENCODING_PCM_FLOAT.
 static const AVSampleFormat OUTPUT_FORMAT_PCM_FLOAT = AV_SAMPLE_FMT_FLT;
 // Kodi's default downmix center level when no metadata is present (-3 dB).
@@ -79,11 +77,13 @@ static const int AUDIO_DECODER_ERROR_OTHER = -2;
 struct DecoderContext {
   AVCodecContext* codec_context;
   SwrContext* resample_context;
+  AVSampleFormat output_sample_format;
   AVChannelLayout input_layout;
   AVChannelLayout output_layout;
   jint requested_output_channel_count;
   char* requested_output_layout_name;
   double center_mix_level;
+  bool downmix_normalization_enabled;
   bool has_input_layout;
   bool has_output_layout;
   bool has_center_mix_level;
@@ -100,7 +100,7 @@ const AVCodec* getCodecByName(JNIEnv* env, jstring codecName);
  * Allocates and opens a new decoder context for the specified codec.
  */
 DecoderContext* createContext(JNIEnv* env, const AVCodec* codec,
-                              jbyteArray extraData, jboolean outputFloat,
+                              jbyteArray extraData,
                               jint rawSampleRate, jint rawChannelCount,
                               jint outputChannelCount,
                               jstring requestedOutputLayoutName);
@@ -121,13 +121,15 @@ struct GrowOutputBufferCallback {
 int decodePacket(DecoderContext* decoderContext, AVPacket* packet,
                  uint8_t* outputBuffer, int outputSize,
                  jint userCenterMixLevelDb,
+                 jboolean downmixNormalizationEnabled,
                  GrowOutputBufferCallback growBuffer);
 
 /**
  * Configures or recreates the resampler for the current frame.
  */
 int configureResampler(DecoderContext* decoderContext, AVFrame* frame,
-                       jint userCenterMixLevelDb);
+                       jint userCenterMixLevelDb,
+                       jboolean downmixNormalizationEnabled);
 
 /**
  * Transforms ffmpeg AVERROR into a negative AUDIO_DECODER_ERROR constant value.
@@ -199,7 +201,7 @@ LIBRARY_FUNC(jboolean, ffmpegHasDecoder, jstring codecName) {
 }
 
 AUDIO_DECODER_FUNC(jlong, ffmpegInitialize, jstring codecName,
-                   jbyteArray extraData, jboolean outputFloat,
+                   jbyteArray extraData,
                    jint rawSampleRate, jint rawChannelCount,
                    jint outputChannelCount,
                    jstring requestedOutputLayoutName) {
@@ -208,7 +210,7 @@ AUDIO_DECODER_FUNC(jlong, ffmpegInitialize, jstring codecName,
     LOGE("Codec not found.");
     return 0L;
   }
-  return (jlong)createContext(env, codec, extraData, outputFloat, rawSampleRate,
+  return (jlong)createContext(env, codec, extraData, rawSampleRate,
                               rawChannelCount, outputChannelCount,
                               requestedOutputLayoutName);
 }
@@ -216,7 +218,8 @@ AUDIO_DECODER_FUNC(jlong, ffmpegInitialize, jstring codecName,
 AUDIO_DECODER_FUNC(jint, ffmpegDecode, jlong context, jobject inputData,
                    jint inputSize, jobject decoderOutputBuffer,
                    jobject outputData, jint outputSize,
-                   jint userCenterMixLevelDb) {
+                   jint userCenterMixLevelDb,
+                   jboolean downmixNormalizationEnabled) {
   if (!context) {
     LOGE("Context must be non-NULL.");
     return -1;
@@ -245,6 +248,7 @@ AUDIO_DECODER_FUNC(jint, ffmpegDecode, jlong context, jobject inputData,
   const int ret =
       decodePacket((DecoderContext*)context, packet, outputBuffer, outputSize,
                    userCenterMixLevelDb,
+                   downmixNormalizationEnabled,
                    GrowOutputBufferCallback{env, thiz, decoderOutputBuffer});
   av_packet_free(&packet);
   return ret;
@@ -294,8 +298,6 @@ AUDIO_DECODER_FUNC(jlong, ffmpegReset, jlong jContext, jbyteArray extraData) {
   AVCodecContext* codecContext = decoderContext->codec_context;
   AVCodecID codecId = codecContext->codec_id;
   if (codecId == AV_CODEC_ID_TRUEHD) {
-    jboolean outputFloat =
-        (jboolean)(codecContext->request_sample_fmt == OUTPUT_FORMAT_PCM_FLOAT);
     jint outputChannelCount = decoderContext->requested_output_channel_count;
     jstring requestedOutputLayoutName = NULL;
     if (decoderContext->requested_output_layout_name) {
@@ -308,7 +310,7 @@ AUDIO_DECODER_FUNC(jlong, ffmpegReset, jlong jContext, jbyteArray extraData) {
       LOGE("Unexpected error finding codec %d.", codecId);
       return 0L;
     }
-    jlong context = (jlong)createContext(env, codec, extraData, outputFloat,
+    jlong context = (jlong)createContext(env, codec, extraData,
                                          /* rawSampleRate= */ -1,
                                          /* rawChannelCount= */ -1,
                                          outputChannelCount,
@@ -341,7 +343,7 @@ const AVCodec* getCodecByName(JNIEnv* env, jstring codecName) {
 }
 
 DecoderContext* createContext(JNIEnv* env, const AVCodec* codec,
-                              jbyteArray extraData, jboolean outputFloat,
+                              jbyteArray extraData,
                               jint rawSampleRate, jint rawChannelCount,
                               jint outputChannelCount,
                               jstring requestedOutputLayoutName) {
@@ -360,6 +362,7 @@ DecoderContext* createContext(JNIEnv* env, const AVCodec* codec,
   }
 
   decoderContext->codec_context = codecContext;
+  decoderContext->output_sample_format = OUTPUT_FORMAT_PCM_FLOAT;
   decoderContext->requested_output_channel_count = outputChannelCount;
   if (requestedOutputLayoutName) {
     const char* outputLayoutNameChars =
@@ -369,8 +372,6 @@ DecoderContext* createContext(JNIEnv* env, const AVCodec* codec,
       env->ReleaseStringUTFChars(requestedOutputLayoutName, outputLayoutNameChars);
     }
   }
-  codecContext->request_sample_fmt =
-      outputFloat ? OUTPUT_FORMAT_PCM_FLOAT : OUTPUT_FORMAT_PCM_16BIT;
   if (extraData) {
     jsize size = env->GetArrayLength(extraData);
     codecContext->extradata_size = size;
@@ -401,6 +402,7 @@ DecoderContext* createContext(JNIEnv* env, const AVCodec* codec,
 int decodePacket(DecoderContext* decoderContext, AVPacket* packet,
                  uint8_t* outputBuffer, int outputSize,
                  jint userCenterMixLevelDb,
+                 jboolean downmixNormalizationEnabled,
                  GrowOutputBufferCallback growBuffer) {
   AVCodecContext* codecContext = decoderContext->codec_context;
   int result = avcodec_send_packet(codecContext, packet);
@@ -427,7 +429,8 @@ int decodePacket(DecoderContext* decoderContext, AVPacket* packet,
     }
 
     result =
-        configureResampler(decoderContext, frame, userCenterMixLevelDb);
+        configureResampler(decoderContext, frame, userCenterMixLevelDb,
+                           downmixNormalizationEnabled);
     if (result < 0) {
       av_frame_free(&frame);
       return transformError(result);
@@ -436,7 +439,8 @@ int decodePacket(DecoderContext* decoderContext, AVPacket* packet,
     int sampleRate =
         frame->sample_rate > 0 ? frame->sample_rate : codecContext->sample_rate;
     int outputChannelCount = decoderContext->output_layout.nb_channels;
-    int outSampleSize = av_get_bytes_per_sample(codecContext->request_sample_fmt);
+    int outSampleSize =
+        av_get_bytes_per_sample(decoderContext->output_sample_format);
     int outSamples =
         swr_get_out_samples(decoderContext->resample_context, frame->nb_samples);
     int bufferOutSize = outSampleSize * outputChannelCount * outSamples;
@@ -478,7 +482,8 @@ int decodePacket(DecoderContext* decoderContext, AVPacket* packet,
 }
 
 int configureResampler(DecoderContext* decoderContext, AVFrame* frame,
-                       jint userCenterMixLevelDb) {
+                       jint userCenterMixLevelDb,
+                       jboolean downmixNormalizationEnabled) {
   AVCodecContext* codecContext = decoderContext->codec_context;
   AVChannelLayout inputLayout = {};
   if (!getInputChannelLayout(codecContext, frame, &inputLayout)) {
@@ -497,6 +502,7 @@ int configureResampler(DecoderContext* decoderContext, AVFrame* frame,
       frame->sample_rate > 0 ? frame->sample_rate : codecContext->sample_rate;
   AVSampleFormat inputSampleFormat = (AVSampleFormat)frame->format;
   bool isDownmixActive = outputLayout.nb_channels < inputLayout.nb_channels;
+  bool applyNormalization = isDownmixActive && downmixNormalizationEnabled;
   double centerMixLevel =
       getAdjustedCenterMixLevel(frame, userCenterMixLevelDb, isDownmixActive);
 
@@ -508,6 +514,7 @@ int configureResampler(DecoderContext* decoderContext, AVFrame* frame,
       !channelLayoutsEqual(&decoderContext->output_layout, &outputLayout) ||
       codecContext->sample_fmt != inputSampleFormat ||
       codecContext->sample_rate != inputSampleRate ||
+      decoderContext->downmix_normalization_enabled != applyNormalization ||
       (!decoderContext->has_center_mix_level && isDownmixActive) ||
       (decoderContext->has_center_mix_level != isDownmixActive) ||
       (isDownmixActive &&
@@ -523,7 +530,7 @@ int configureResampler(DecoderContext* decoderContext, AVFrame* frame,
 
   SwrContext* resampleContext = NULL;
   int result = swr_alloc_set_opts2(&resampleContext, &outputLayout,
-                                   codecContext->request_sample_fmt,
+                                   decoderContext->output_sample_format,
                                    inputSampleRate, &inputLayout,
                                    inputSampleFormat, inputSampleRate, 0, NULL);
   if (result < 0) {
@@ -535,6 +542,13 @@ int configureResampler(DecoderContext* decoderContext, AVFrame* frame,
 
   if (isDownmixActive) {
     av_opt_set_double(resampleContext, "center_mix_level", centerMixLevel, 0);
+    if ((decoderContext->output_sample_format == AV_SAMPLE_FMT_FLT ||
+         decoderContext->output_sample_format == AV_SAMPLE_FMT_FLTP) &&
+        (inputSampleFormat == AV_SAMPLE_FMT_FLT ||
+         inputSampleFormat == AV_SAMPLE_FMT_FLTP) &&
+        applyNormalization) {
+      av_opt_set_double(resampleContext, "rematrix_maxval", 1.0, 0);
+    }
   }
 
   result = swr_init(resampleContext);
@@ -558,6 +572,7 @@ int configureResampler(DecoderContext* decoderContext, AVFrame* frame,
   decoderContext->has_input_layout = true;
   decoderContext->has_output_layout = true;
   decoderContext->center_mix_level = centerMixLevel;
+  decoderContext->downmix_normalization_enabled = applyNormalization;
   decoderContext->has_center_mix_level = isDownmixActive;
 
   av_channel_layout_uninit(&inputLayout);
@@ -592,6 +607,7 @@ void clearResampler(DecoderContext* decoderContext) {
     av_channel_layout_uninit(&decoderContext->output_layout);
     decoderContext->has_output_layout = false;
   }
+  decoderContext->downmix_normalization_enabled = false;
   decoderContext->has_center_mix_level = false;
 }
 

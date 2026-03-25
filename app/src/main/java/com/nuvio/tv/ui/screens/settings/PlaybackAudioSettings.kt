@@ -2,6 +2,7 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,6 +68,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     onShowDecoderPriorityDialog: () -> Unit,
     onSetTrailerEnabled: (Boolean) -> Unit,
     onSetTrailerDelaySeconds: (Int) -> Unit,
+    onSetMaintainOriginalAudioOnDownmix: (Boolean) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetMapDV7ToHevc: (Boolean) -> Unit,
@@ -201,6 +203,18 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
             title = stringResource(R.string.audio_number_of_channels),
             subtitle = playerSettings.audioOutputChannels.displayLabel,
             onClick = onShowAudioOutputChannelsDialog,
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
+    item(key = "audio_downmix_normalization") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.audio_maintain_original_audio_on_downmix_title),
+            subtitle = stringResource(R.string.audio_maintain_original_audio_on_downmix_subtitle),
+            isChecked = playerSettings.maintainOriginalAudioOnDownmix,
+            onCheckedChange = onSetMaintainOriginalAudioOnDownmix,
             onFocused = onItemFocused,
             enabled = enabled
         )

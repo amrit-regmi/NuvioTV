@@ -190,6 +190,7 @@ data class PlayerSettings(
     // Audio settings
     val decoderPriority: Int = 1, // EXTENSION_RENDERER_MODE_ON (0=off, 1=on, 2=prefer)
     val audioOutputChannels: AudioOutputChannels = AudioOutputChannels.default,
+    val maintainOriginalAudioOnDownmix: Boolean = true,
     val tunnelingEnabled: Boolean = false,
     val skipSilence: Boolean = false,
     val audioAmplificationDb: Int = 0,
@@ -303,6 +304,10 @@ class PlayerSettingsDataStore @Inject constructor(
     // Audio settings keys
     private val decoderPriorityKey = intPreferencesKey("decoder_priority")
     private val audioOutputChannelsKey = stringPreferencesKey("audio_output_channels")
+    private val maintainOriginalAudioOnDownmixKey =
+        booleanPreferencesKey("maintain_original_audio_on_downmix")
+    private val downmixNormalizationEnabledLegacyKey =
+        booleanPreferencesKey("downmix_normalization_enabled")
     private val tunnelingEnabledKey = booleanPreferencesKey("tunneling_enabled")
     private val skipSilenceKey = booleanPreferencesKey("skip_silence")
     private val audioAmplificationDbKey = intPreferencesKey("audio_amplification_db")
@@ -444,6 +449,9 @@ class PlayerSettingsDataStore @Inject constructor(
                 audioOutputChannels = AudioOutputChannels.fromSettingValue(
                     prefs[audioOutputChannelsKey]
                 ),
+                maintainOriginalAudioOnDownmix =
+                    prefs[maintainOriginalAudioOnDownmixKey]
+                        ?: !(prefs[downmixNormalizationEnabledLegacyKey] ?: false),
                 tunnelingEnabled = prefs[tunnelingEnabledKey] ?: false,
                 skipSilence = prefs[skipSilenceKey] ?: false,
                 audioAmplificationDb = (prefs[audioAmplificationDbKey] ?: 0).coerceIn(
@@ -571,6 +579,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setAudioOutputChannels(channels: AudioOutputChannels) {
         store().edit { prefs ->
             prefs[audioOutputChannelsKey] = channels.settingValue
+        }
+    }
+
+    suspend fun setMaintainOriginalAudioOnDownmix(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[maintainOriginalAudioOnDownmixKey] = enabled
         }
     }
 

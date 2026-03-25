@@ -840,6 +840,8 @@
     <string name="audio_center_mix_value_db">%1$d dB</string>
     <string name="audio_center_mix_help">Nível de mixagem do centro em dB relativo ao metadata ou ao padrão (-3 dB)</string>
     <string name="audio_center_mix_unavailable">A mixagem do centro só está disponível quando o FFmpeg está realmente fazendo downmix porque o Número de canais é inferior ao da faixa. Se necessário, defina a prioridade do decoder de áudio para Preferir app.</string>
+    <string name="audio_maintain_original_audio_on_downmix_title">Manter Ã¡udio original no downmix</string>
+    <string name="audio_maintain_original_audio_on_downmix_subtitle">Ao desativar, a normalizaÃ§Ã£o do downmix pode reduzir o volume geral.</string>
 
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Legendas</string>

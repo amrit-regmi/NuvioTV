@@ -15,9 +15,6 @@
  */
 package androidx.media3.decoder.ffmpeg;
 
-import static androidx.media3.exoplayer.audio.AudioSink.SINK_FORMAT_SUPPORTED_DIRECTLY;
-import static androidx.media3.exoplayer.audio.AudioSink.SINK_FORMAT_SUPPORTED_WITH_TRANSCODING;
-import static androidx.media3.exoplayer.audio.AudioSink.SINK_FORMAT_UNSUPPORTED;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import android.os.Handler;
@@ -33,7 +30,6 @@ import androidx.media3.decoder.CryptoConfig;
 import androidx.media3.exoplayer.ExoPlaybackException;
 import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.audio.AudioSink;
-import androidx.media3.exoplayer.audio.AudioSink.SinkFormatSupport;
 import androidx.media3.exoplayer.audio.DecoderAudioRenderer;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
 
@@ -52,6 +48,7 @@ public final class FfmpegAudioRenderer extends DecoderAudioRenderer<FfmpegAudioD
   private volatile int userCenterMixLevelDb;
   @Nullable private volatile String requestedOutputLayoutName;
   private volatile int requestedOutputChannelCount;
+  private volatile boolean downmixNormalizationEnabled;
   @Nullable private volatile FfmpegAudioDecoder activeDecoder;
   private volatile boolean rendererEnabled;
   private volatile boolean downmixActive;
@@ -132,8 +129,7 @@ public final class FfmpegAudioRenderer extends DecoderAudioRenderer<FfmpegAudioD
     }
     int outputChannelCount = resolveOutputChannelCount(format.channelCount);
     boolean supportsConfiguredOutput =
-        sinkSupportsFormat(format, C.ENCODING_PCM_16BIT, outputChannelCount)
-            || sinkSupportsFormat(format, C.ENCODING_PCM_FLOAT, outputChannelCount);
+        sinkSupportsFormat(format, C.ENCODING_PCM_FLOAT, outputChannelCount);
     if (!supportsConfiguredOutput) {
       return C.FORMAT_UNSUPPORTED_SUBTYPE;
     }
@@ -165,10 +161,10 @@ public final class FfmpegAudioRenderer extends DecoderAudioRenderer<FfmpegAudioD
             NUM_BUFFERS,
             NUM_BUFFERS,
             initialInputBufferSize,
-            shouldOutputFloat(format, outputChannelCount),
             outputChannelCount,
             outputLayoutName);
     decoder.setUserCenterMixLevelDb(userCenterMixLevelDb);
+    decoder.setDownmixNormalizationEnabled(downmixNormalizationEnabled);
     activeDecoder = decoder;
     TraceUtil.endSection();
     return decoder;
@@ -200,6 +196,15 @@ public final class FfmpegAudioRenderer extends DecoderAudioRenderer<FfmpegAudioD
     requestedOutputChannelCount = outputChannelCount;
   }
 
+  /** Sets whether Kodi-style downmix normalization should be enabled. */
+  public void setDownmixNormalizationEnabled(boolean downmixNormalizationEnabled) {
+    this.downmixNormalizationEnabled = downmixNormalizationEnabled;
+    @Nullable FfmpegAudioDecoder decoder = activeDecoder;
+    if (decoder != null) {
+      decoder.setDownmixNormalizationEnabled(downmixNormalizationEnabled);
+    }
+  }
+
   /** Returns whether this renderer is the active playback path for FFmpeg downmix + center mix. */
   public boolean isCenterMixActive() {
     return rendererEnabled && activeDecoder != null && downmixActive;
@@ -215,30 +220,6 @@ public final class FfmpegAudioRenderer extends DecoderAudioRenderer<FfmpegAudioD
       return false;
     }
     return sinkSupportsFormat(Util.getPcmFormat(pcmEncoding, channelCount, inputFormat.sampleRate));
-  }
-
-  private boolean shouldOutputFloat(Format inputFormat, int outputChannelCount) {
-    if (!sinkSupportsFormat(inputFormat, C.ENCODING_PCM_16BIT, outputChannelCount)) {
-      // We have no choice because the sink doesn't support 16-bit integer PCM.
-      return true;
-    }
-
-    @SinkFormatSupport
-    int formatSupport =
-        getSinkFormatSupport(
-            Util.getPcmFormat(
-                C.ENCODING_PCM_FLOAT, outputChannelCount, inputFormat.sampleRate));
-    switch (formatSupport) {
-      case SINK_FORMAT_SUPPORTED_DIRECTLY:
-        // AC-3 is always 16-bit, so there's no point using floating point. Assume that it's worth
-        // using for all other formats.
-        return !MimeTypes.AUDIO_AC3.equals(inputFormat.sampleMimeType);
-      case SINK_FORMAT_UNSUPPORTED:
-      case SINK_FORMAT_SUPPORTED_WITH_TRANSCODING:
-      default:
-        // Always prefer 16-bit PCM if the sink does not provide direct support for floating point.
-        return false;
-    }
   }
 
   private int resolveOutputChannelCount(int inputChannelCount) {

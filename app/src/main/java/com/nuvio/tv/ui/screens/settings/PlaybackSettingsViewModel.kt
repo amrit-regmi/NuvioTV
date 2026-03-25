@@ -76,6 +76,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setAudioOutputChannels(channels)
     }
 
+    suspend fun setMaintainOriginalAudioOnDownmix(enabled: Boolean) {
+        playerSettingsDataStore.setMaintainOriginalAudioOnDownmix(enabled)
+    }
+
     suspend fun setTunnelingEnabled(enabled: Boolean) {
         playerSettingsDataStore.setTunnelingEnabled(enabled)
     }

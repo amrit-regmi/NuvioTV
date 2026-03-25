@@ -176,11 +176,15 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 subtitleDelayUsProvider = subtitleDelayUs::get,
                 gainAudioProcessor = gainAudioProcessor,
                 audioOutputChannels = playerSettings.audioOutputChannels,
+                downmixNormalizationEnabled = !playerSettings.maintainOriginalAudioOnDownmix,
                 onFfmpegAudioRendererChanged = { renderer ->
                     ffmpegAudioRenderer = renderer
                     renderer?.setAudioOutputChannels(
                         playerSettings.audioOutputChannels.ffmpegLayoutName,
                         playerSettings.audioOutputChannels.channelCount
+                    )
+                    renderer?.setDownmixNormalizationEnabled(
+                        !playerSettings.maintainOriginalAudioOnDownmix
                     )
                     applyCenterMixLevel(_uiState.value.centerMixLevelDb)
                     updateCenterMixAvailability()
@@ -583,6 +587,7 @@ private class SubtitleOffsetRenderersFactory(
     private val subtitleDelayUsProvider: () -> Long,
     private val gainAudioProcessor: GainAudioProcessor,
     private val audioOutputChannels: com.nuvio.tv.data.local.AudioOutputChannels,
+    private val downmixNormalizationEnabled: Boolean,
     private val onFfmpegAudioRendererChanged: (FfmpegAudioRenderer?) -> Unit
 ) : DefaultRenderersFactory(context) {
 
@@ -638,6 +643,7 @@ private class SubtitleOffsetRenderersFactory(
                 audioOutputChannels.ffmpegLayoutName,
                 audioOutputChannels.channelCount
             )
+            renderer.setDownmixNormalizationEnabled(downmixNormalizationEnabled)
         }
         onFfmpegAudioRendererChanged(out.filterIsInstance<FfmpegAudioRenderer>().firstOrNull())
     }
