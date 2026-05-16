@@ -572,7 +572,7 @@
     <string name="sub_mode_effects_gl_sub">Υποστήριξη κινούμενων σχεδίων με Media3 effects. Ταχύτερο από Canvas.</string>
     <string name="sub_mode_effects_canvas">Εφέ Canvas</string>
     <string name="sub_mode_effects_canvas_sub">Υποστήριξη κινούμενων σχεδίων με Media3 effects και απόδοση Canvas.</string>
-    <string name="sub_mode_standard">Τυπικά Cues</string>
+    <string name="sub_mode_standard">Τυπικοί Υπότιτλοι</string>
     <string name="sub_mode_standard_sub">Βασική απόδοση υπότιτλων χωρίς υποστήριξη κινούμενων σχεδίων. Πιο συμβατό.</string>
     <string name="sub_org_none">Κανένα (προεπιλεγμένη σειρά)</string>
     <string name="sub_org_by_lang">Ανά γλώσσα</string>
@@ -1280,7 +1280,7 @@
     <string name="library_delete_title">Διαγραφή αυτής της λίστας;</string>
     <string name="library_delete_subtitle">Αυτό θα διαγράψει τη λίστα και όλα τα στοιχεία της από το Trakt.</string>
     <string name="library_delete_confirm">Διαγραφή</string>
-    <string name="library_source_local">ΤΟΠΙΚΟ</string>
+    <string name="library_source_local">ΤΟΠΙΚΗ</string>
     <string name="library_source_nuvio">NUVIO</string>
     <string name="library_source_trakt">TRAKT</string>
     <string name="library_syncing_library">Συγχρονισμός βιβλιοθήκης…</string>
