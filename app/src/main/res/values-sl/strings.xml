@@ -1062,8 +1062,6 @@
     <string name="profile_pin_overlay_remove_verify_support">Za odstranitev zaklepanja vnesite trenutno 4-mestno kodo PIN.</string>
 	<string name="profile_pin_overlay_delete_verify_heading">Vnesite trenutno kodo PIN za izbris profila %1$s.</string>																								   
     <string name="profile_pin_overlay_set_support">Ta koda PIN bo zahtevana pred odpiranjem tega profila.</string>
-	<string name="profile_pin_overlay_set_support">Ta koda PIN bo potrebna pred odpiranjem tega profila.</string>																											  
-    <string name="profile_pin_overlay_confirm_support">Ponovno vnesite iste 4 števke, da dokončate namestitev.</string>
     <string name="profile_pin_overlay_mismatch">Kodi PIN se nista ujemali. Ponovno vnesite novo kodo PIN.</string>
     <string name="profile_pin_overlay_forgot_hint">Ste pozabili kodo PIN? Ponastavite jo v svojem računu Nuvio na spletni strani Nuvio.</string>
     <string name="profile_pin_overlay_back_hint">Pritisnite nazaj za preklic</string>															
@@ -1118,7 +1116,6 @@
     <string name="catalog_order_subtitle">To nadzira vrstni red katalogov na domačem zaslonu (Klasični + Moderni + Mrežni).</string>
     <string name="catalog_order_empty">Domači katalogi še niso na voljo.</string>
     <string name="catalog_order_follow_addons_desc">Katalogi sledijo vrstnemu redu v manifestu dodatkov. Zbirke je še vedno mogoče premikati med dodatki.</string>
-    <string name="catalog_order_empty">Na voljo ni še nobenega domačega kataloga.</string>
     <string name="catalog_order_disabled_on_home">Onemogočeno na domačem zaslonu</string>			   
     <string name="catalog_order_enable">Omogoči</string>
     <string name="catalog_order_disable">Onemogoči</string>
