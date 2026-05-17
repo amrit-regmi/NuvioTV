@@ -251,6 +251,14 @@
     <string name="tmdb_entity_rail_popular">Populer</string>
     <string name="tmdb_entity_rail_top_rated">Nilai Tertinggi</string>
     <string name="tmdb_entity_rail_recent">Terbaru</string>
+    <string name="tmdb_entity_rail_most_voted">Vote Terbanyak</string>
+    <string name="collections_editor_tmdb_watch_region">Wilayah Tayang</string>
+    <string name="collections_editor_tmdb_watch_region_helper">Kode negara ISO 3166-1 dimana judul dapat ditonton. Contoh: US, GB.</string>
+    <string name="collections_editor_tmdb_quick_watch_regions">Pintasan Wilayah Tayang</string>
+    <string name="collections_editor_tmdb_watch_providers">ID Penyedia Layanan</string>
+    <string name="collections_editor_tmdb_watch_providers_helper">Gunakan ID penyedia layanan dari TMDB. Pisahkan beberapa ID dengan koma untuk fungsi DAN, atau garis tegak untuk fungsi ATAU.</string>
+    <string name="collections_editor_tmdb_watch_providers_placeholder">8|337|350</string>
+    <string name="collections_editor_tmdb_quick_watch_providers">Pintasan Penyedia Layanan</string>
     <string name="tmdb_error_load_source">Tidak dapat memuat sumber TMDB</string>
     <string name="tmdb_error_list_not_found">Daftar TMDB tidak ditemukan</string>
     <string name="tmdb_error_collection_not_found">Koleksi TMDB tidak ditemukan</string>
@@ -1339,6 +1347,10 @@
     <string name="next_episode_finding_source">Mencari sumber…</string>
     <string name="next_episode_playing_via">Diputar via %1$s dalam %2$d dtk</string>
     <string name="next_episode_play">Putar</string>
+    <string name="player_next_episode_prompt_title">Lanjutkan menonton?</string>
+    <string name="player_next_episode_prompt_message">Apa anda ingin menonton episode berikutnya?</string>
+    <string name="player_next_episode_prompt_yes">Ya</string>
+    <string name="player_next_episode_prompt_no">Tidak, kembali ke detail</string>
     <string name="next_episode_unaired">Belum Tayang</string>
     <string name="next_episode_not_aired_yet">Episode berikutnya belum tayang</string>
     <string name="still_watching_title">Apakah Anda masih menonton?</string>
