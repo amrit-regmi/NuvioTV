@@ -176,7 +176,7 @@
     <string name="playback_skip_intro">Pomiń intro</string>
     <string name="playback_skip_intro_sub">Używaj introdb.app do wykrywania intro i podsumowań.</string>
     <string name="playback_parental_guide">Ostrzeżenie o charakterze treści</string>
-    <string name="playback_parental_guide_sub">Pokaż ostrzeżenie o nagości, przemocy i wulgarności przed odtwarzaniem.</string>
+    <string name="playback_parental_guide_sub">Pokaż ostrzeżenie o nagości, przemocy i wulgarności na początku odtwarzania.</string>
     <string name="playback_auto_frame_rate">Auto częstotliwość odświeżania</string>
     <string name="playback_section_player">Odtwarzacz i wybór źródła</string>
     <string name="playback_section_player_desc">Preferencje odtwarzacza, auto-play i filtrowanie źródeł.</string>
