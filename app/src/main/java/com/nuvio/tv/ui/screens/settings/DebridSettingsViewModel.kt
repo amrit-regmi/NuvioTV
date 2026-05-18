@@ -28,11 +28,12 @@ import javax.inject.Inject
 
 @HiltViewModel
 class DebridSettingsViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val dataStore: DebridSettingsDataStore,
     private val torboxApi: TorboxApi
 ) : ViewModel() {
     private var formatterServer: DebridFormatterConfigServer? = null
+    private var logoBytes: ByteArray? = null
 
     private val _uiState = MutableStateFlow(DebridSettingsUiState())
     val uiState: StateFlow<DebridSettingsUiState> = _uiState.asStateFlow()
@@ -44,11 +45,19 @@ class DebridSettingsViewModel @Inject constructor(
     val validationError: SharedFlow<String> = _validationError.asSharedFlow()
 
     init {
+        loadLogoBytes()
         viewModelScope.launch {
             dataStore.settings.collectLatest { settings ->
                 _uiState.update { it.fromSettings(settings) }
             }
         }
+    }
+
+    private fun loadLogoBytes() {
+        try {
+            val inputStream = context.resources.openRawResource(R.drawable.app_logo_wordmark)
+            logoBytes = inputStream.use { it.readBytes() }
+        } catch (_: Exception) { }
     }
 
     fun onEvent(event: DebridSettingsEvent) {
@@ -82,7 +91,9 @@ class DebridSettingsViewModel @Inject constructor(
                         descriptionTemplate = settings.descriptionTemplate
                     )
                 }
-            }
+            },
+            context = context,
+            logoProvider = { logoBytes }
         )
         val server = formatterServer
         if (server == null) {
