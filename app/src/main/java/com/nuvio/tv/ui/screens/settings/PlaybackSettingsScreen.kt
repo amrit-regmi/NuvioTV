@@ -107,7 +107,6 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Image
@@ -263,6 +262,7 @@ fun PlaybackSettingsContent(
                 onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
                 onSetOsdClockEnabled = { enabled -> coroutineScope.launch { viewModel.setOsdClockEnabled(enabled) } },
                 onSetSkipIntroEnabled = { enabled -> coroutineScope.launch { viewModel.setSkipIntroEnabled(enabled) } },
+                onSetParentalGuideEnabled = { enabled -> coroutineScope.launch { viewModel.setParentalGuideEnabled(enabled) } },
                 onSetAutoSkipSegmentTypeEnabled = { segmentType, enabled ->
                     coroutineScope.launch { viewModel.setAutoSkipSegmentTypeEnabled(segmentType, enabled) }
                 },
@@ -710,6 +710,79 @@ internal fun SliderSettingsItem(
     onFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
+    val span = (maxValue - minValue).toFloat()
+    val progress = if (span > 0f) (value - minValue).toFloat() / span else 0f
+
+    SliderSettingsItemLayout(
+        icon = icon,
+        title = title,
+        valueText = valueText,
+        subtitle = subtitle,
+        enabled = enabled,
+        progressFraction = progress,
+        onDecrease = {
+            val newValue = (value - step).coerceAtLeast(minValue)
+            if (newValue != value) onValueChange(newValue)
+        },
+        onIncrease = {
+            val newValue = (value + step).coerceAtMost(maxValue)
+            if (newValue != value) onValueChange(newValue)
+        },
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+internal fun SliderSettingsItem(
+    icon: ImageVector,
+    title: String,
+    values: List<Int>,
+    selected: Int,
+    valueText: String,
+    onValueChange: (Int) -> Unit,
+    subtitle: String? = null,
+    onFocused: () -> Unit = {},
+    enabled: Boolean = true,
+) {
+    require(values.isNotEmpty()) { "SliderSettingsItem.values must not be empty" }
+
+    val index = values.indexOf(selected).coerceAtLeast(0)
+    val lastIndex = values.lastIndex
+    val progress = if (lastIndex > 0) index.toFloat() / lastIndex.toFloat() else 0f
+
+    SliderSettingsItemLayout(
+        icon = icon,
+        title = title,
+        valueText = valueText,
+        subtitle = subtitle,
+        enabled = enabled,
+        progressFraction = progress,
+        onDecrease = {
+            val newIndex = (index - 1).coerceAtLeast(0)
+            val newValue = values[newIndex]
+            if (newValue != selected) onValueChange(newValue)
+        },
+        onIncrease = {
+            val newIndex = (index + 1).coerceAtMost(lastIndex)
+            val newValue = values[newIndex]
+            if (newValue != selected) onValueChange(newValue)
+        },
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun SliderSettingsItemLayout(
+    icon: ImageVector,
+    title: String,
+    valueText: String,
+    subtitle: String?,
+    enabled: Boolean,
+    progressFraction: Float,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+    onFocused: () -> Unit,
+) {
     var isFocused by remember { mutableStateOf(false) }
     val contentAlpha = if (enabled) 1f else 0.4f
 
@@ -729,13 +802,11 @@ internal fun SliderSettingsItem(
                 if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onKeyEvent false
                 when (event.nativeKeyEvent.keyCode) {
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        val newValue = (value - step).coerceAtLeast(minValue)
-                        if (newValue != value) onValueChange(newValue)
+                        onDecrease()
                         true
                     }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        val newValue = (value + step).coerceAtMost(maxValue)
-                        if (newValue != value) onValueChange(newValue)
+                        onIncrease()
                         true
                     }
                     else -> false
@@ -803,21 +874,14 @@ internal fun SliderSettingsItem(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Custom slider controls for TV - use Row with focusable buttons
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Decrease button
                 var decreaseFocused by remember { mutableStateOf(false) }
                 Card(
-                    onClick = {
-                        if (enabled) {
-                            val newValue = (value - step).coerceAtLeast(minValue)
-                            onValueChange(newValue)
-                        }
-                    },
+                    onClick = { if (enabled) onDecrease() },
                     modifier = Modifier
                         .onFocusChanged { state ->
                             val nowFocused = state.isFocused
@@ -852,7 +916,6 @@ internal fun SliderSettingsItem(
                     }
                 }
 
-                // Progress bar
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -860,25 +923,18 @@ internal fun SliderSettingsItem(
                         .clip(RoundedCornerShape(4.dp))
                         .background(NuvioColors.BackgroundElevated)
                 ) {
-                    val progress = ((value - minValue).toFloat() / (maxValue - minValue).toFloat()).coerceIn(0f, 1f)
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(progress)
+                            .fillMaxWidth(progressFraction.coerceIn(0f, 1f))
                             .height(8.dp)
                             .clip(RoundedCornerShape(4.dp))
                             .background(NuvioColors.Primary.copy(alpha = contentAlpha))
                     )
                 }
 
-                // Increase button
                 var increaseFocused by remember { mutableStateOf(false) }
                 Card(
-                    onClick = {
-                        if (enabled) {
-                            val newValue = (value + step).coerceAtMost(maxValue)
-                            onValueChange(newValue)
-                        }
-                    },
+                    onClick = { if (enabled) onIncrease() },
                     modifier = Modifier
                         .onFocusChanged { state ->
                             val nowFocused = state.isFocused

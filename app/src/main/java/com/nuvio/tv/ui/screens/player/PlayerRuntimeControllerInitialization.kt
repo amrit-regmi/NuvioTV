@@ -117,8 +117,7 @@ internal fun PlayerRuntimeController.initializePlayer(
         return
     }
 
-    playerInitializationJob?.cancel()
-    playerInitializationJob = scope.launch {
+    scope.launch {
         try {
             if (allowEngineFailover) {
                 startupEngineFailoverTriggered = false
@@ -427,22 +426,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                 prepare()
 
                 addListener(object : Player.Listener {
-                    override fun onPositionDiscontinuity(
-                        oldPosition: Player.PositionInfo,
-                        newPosition: Player.PositionInfo,
-                        reason: Int
-                    ) {
-                        if (reason == Player.DISCONTINUITY_REASON_SEEK) {
-                            if (playbackState == Player.STATE_READY) {
-                                // In-buffer seek: player is already ready, flush immediately
-                            } else {
-                                // Out-of-buffer seek: wait for STATE_READY
-                                pendingSeekFlush = true
-                            }
-                        }
-                    }
-
                     override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (isReleasingPlayer) return
                         val playerDuration = duration
                         if (playerDuration > lastKnownDuration) {
                             lastKnownDuration = playerDuration
@@ -467,8 +452,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                             }
                         }
                     
+                        
                         if (playbackState == Player.STATE_READY) {
-                            pendingSeekFlush = false
+
                             
                             // Don't auto-play on the initial STATE_READY — wait
                             // for onRenderedFirstFrame() to ensure A/V sync.
@@ -949,7 +935,7 @@ private class SubtitleOffsetRenderersFactory(
             .setAudioProcessors(arrayOf(gainAudioProcessor))
             .build()
         val playbackSpeedAwareAudioSink = PlaybackSpeedAwareAudioSink(
-            sink = baseAudioSink,
+            baseAudioSink,
             forceAudioProcessingPcmProvider = gainAudioProcessor::isGainEnabled
         )
         playbackSpeedAwareAudioSink.setInitialPlaybackSpeed(playbackSpeedProvider())

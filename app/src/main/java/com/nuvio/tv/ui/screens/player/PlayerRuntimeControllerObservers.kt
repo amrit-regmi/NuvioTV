@@ -325,8 +325,13 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             autoSwitchInternalPlayerOnErrorEnabled = settings.autoSwitchInternalPlayerOnError
             currentInternalPlayerEngine = resolvedInternalPlayerEngine
             streamAutoPlayModeSetting = settings.streamAutoPlayMode
-            _uiState.update { it.copy(streamAutoPlayMode = settings.streamAutoPlayMode) }
             streamAutoPlayNextEpisodeEnabledSetting = settings.streamAutoPlayNextEpisodeEnabled
+            _uiState.update {
+                it.copy(
+                    streamAutoPlayMode = settings.streamAutoPlayMode,
+                    streamAutoPlayNextEpisodeEnabled = settings.streamAutoPlayNextEpisodeEnabled
+                )
+            }
             streamAutoPlayPreferBingeGroupForNextEpisodeSetting =
                 settings.streamAutoPlayPreferBingeGroupForNextEpisode
             nextEpisodeThresholdModeSetting = settings.nextEpisodeThresholdMode
@@ -388,6 +393,7 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
 
             val wasEnabled = skipIntroEnabled
             skipIntroEnabled = settings.skipIntroEnabled
+            parentalGuideEnabled = settings.parentalGuideEnabled
             autoSkipSegmentTypes = settings.autoSkipSegmentTypes
             playerSettingsInitialized = true
             if (!skipIntroEnabled) {

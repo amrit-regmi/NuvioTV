@@ -153,7 +153,7 @@ class PlayerRuntimeController(
     internal var currentAddonName: String? = navigationArgs.addonName
     internal var currentAddonLogo: String? = navigationArgs.addonLogo
     internal var currentStreamDescription: String? = navigationArgs.streamDescription
-    internal val contentLanguage: String? = navigationArgs.contentLanguage
+    internal var contentLanguage: String? = navigationArgs.contentLanguage
     internal var currentVideoCodec: String? = null
     internal var currentVideoWidth: Int? = null
     internal var currentVideoHeight: Int? = null
@@ -278,6 +278,7 @@ class PlayerRuntimeController(
     
     internal var skipIntervals: List<SkipInterval> = emptyList()
     internal var skipIntroEnabled: Boolean = true
+    internal var parentalGuideEnabled: Boolean = true
     internal var autoSkipSegmentTypes: Set<AutoSkipSegmentType> = emptySet()
     internal var playerSettingsInitialized: Boolean = false
     internal var skipIntroFetchedKey: String? = null
@@ -327,7 +328,6 @@ class PlayerRuntimeController(
     internal var audioOutputRouteCallback: AudioDeviceCallback? = null
 
     internal var lastBufferLogTimeMs: Long = 0L
-    internal var pendingSeekFlush: Boolean = false
     
     internal val gainAudioProcessor = GainAudioProcessor()
     internal var trackSelector: DefaultTrackSelector? = null
@@ -364,7 +364,6 @@ class PlayerRuntimeController(
     internal var hasRequestedScrobbleStartForCurrentItem: Boolean = false
     internal var scrobbleStartRequestGeneration: Long = 0L
     internal var playbackPreparationJob: Job? = null
-    internal var playerInitializationJob: Job? = null
     internal var hasSentCompletionScrobbleForCurrentItem: Boolean = false
     internal var requestedUseLibassByUser: Boolean = false
     internal var libassPipelineOverrideForCurrentStream: Boolean? = null

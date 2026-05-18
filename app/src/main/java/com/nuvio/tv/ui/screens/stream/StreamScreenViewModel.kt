@@ -12,6 +12,7 @@ import com.nuvio.tv.core.torrent.TorrentSettings
 import com.nuvio.tv.core.player.StreamAutoPlayPolicy
 import com.nuvio.tv.core.player.StreamAutoPlaySelector
 import com.nuvio.tv.data.local.PlayerPreference
+import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamLinkCacheDataStore
@@ -195,6 +196,17 @@ class StreamScreenViewModel @Inject constructor(
                     playerPreference = playerSettings.playerPreference,
                     streamAutoPlayMode = playerSettings.streamAutoPlayMode
                 )
+                // In MANUAL mode, still enable direct auto-play if a persisted
+                // binge group exists - same behavior as playNextEpisode in the player.
+                if (!directAutoPlayFlowEnabledForSession &&
+                    playerSettings.playerPreference == PlayerPreference.INTERNAL &&
+                    playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode
+                ) {
+                    val hasBingeGroup = contentId?.let { bingeGroupCacheDataStore.get(it) } != null
+                    if (hasBingeGroup) {
+                        directAutoPlayFlowEnabledForSession = true
+                    }
+                }
                 directAutoPlayModeInitializedForSession = true
             }
 
@@ -439,7 +451,7 @@ class StreamScreenViewModel @Inject constructor(
 
             // After timeout: if streams arrived, auto-select now; if not, wait for first result from inner job
             val timeoutMs = playerSettings.streamAutoPlayTimeoutSeconds * 1_000L
-            if (timeoutMs > 0L && playerSettings.streamAutoPlayTimeoutSeconds < 11) {
+            if (PlayerSettings.isBoundedTimeout(playerSettings.streamAutoPlayTimeoutSeconds)) {
                 delay(timeoutMs)
             }
             timeoutElapsed = true
@@ -609,7 +621,12 @@ class StreamScreenViewModel @Inject constructor(
     private fun com.nuvio.tv.domain.model.Addon.supportsStreamResourceForChip(type: String): Boolean {
         return resources.any { resource ->
             resource.name == "stream" &&
-                (resource.types.isEmpty() || resource.types.any { it.equals(type, ignoreCase = true) })
+                (resource.types.isEmpty() || resource.types.any { it.equals(type, ignoreCase = true) }) &&
+                run {
+                    val prefixes = resource.idPrefixes?.takeIf { it.isNotEmpty() }
+                        ?: idPrefixes.takeIf { it.isNotEmpty() }
+                    prefixes == null || prefixes.any { prefix -> videoId.startsWith(prefix) }
+                }
         }
     }
 

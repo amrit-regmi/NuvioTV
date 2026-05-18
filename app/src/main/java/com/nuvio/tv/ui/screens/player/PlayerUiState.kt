@@ -156,6 +156,7 @@ data class PlayerUiState(
     val postPlayMode: PostPlayMode? = null,
     val postPlayDismissedForCurrentEpisode: Boolean = false,
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
+    val streamAutoPlayNextEpisodeEnabled: Boolean = false,
     // Stream source badge
     val showStreamSourceIndicator: Boolean = false,
     val streamSourceIndicatorText: String = "",

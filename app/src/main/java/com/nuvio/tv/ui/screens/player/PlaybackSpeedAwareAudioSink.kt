@@ -49,6 +49,10 @@ internal class PlaybackSpeedAwareAudioSink(
         }
     }
 
+    fun notifyAudioProcessingRequirementChanged() {
+        listener?.onAudioCapabilitiesChanged()
+    }
+
     override fun getFormatSupport(format: Format): Int {
         if (shouldRejectDirectPlayback(format)) {
             return AudioSink.SINK_FORMAT_UNSUPPORTED
@@ -65,10 +69,6 @@ internal class PlaybackSpeedAwareAudioSink(
 
     fun shouldForcePcmForFormat(format: Format): Boolean {
         return shouldRejectDirectPlayback(format)
-    }
-
-    fun notifyAudioProcessingRequirementChanged() {
-        listener?.onAudioCapabilitiesChanged()
     }
 
     private fun shouldRejectDirectPlayback(format: Format): Boolean {
