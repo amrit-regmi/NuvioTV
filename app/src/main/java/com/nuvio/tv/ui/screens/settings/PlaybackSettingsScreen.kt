@@ -1064,140 +1064,32 @@ internal fun LanguageSelectionDialog(
     onLanguageSelected: (String?) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val focusRequester = remember { FocusRequester() }
-
     val tmdbTitle = stringResource(R.string.tmdb_language_dialog_title)
     val sortedLanguages = remember {
         val baseList = if (title == tmdbTitle) AVAILABLE_TMDB_LANGUAGES else AVAILABLE_SUBTITLE_LANGUAGES
         baseList.sortedBy { it.displayName.lowercase() }
     }
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+    val languageOptions: List<SettingsPickerOption<String?>> = buildList {
+        if (showNoneOption) {
+            add(SettingsPickerOption(null, stringResource(R.string.action_none)))
+        }
+        extraOptions.forEach { (code, name) ->
+            add(SettingsPickerOption(code, name, trailing = code.uppercase()))
+        }
+        sortedLanguages.forEach { language ->
+            add(SettingsPickerOption(language.code, language.displayName, trailing = language.code.uppercase()))
+        }
     }
 
-    NuvioDialog(
-        onDismiss = onDismiss,
+    SettingsSingleChoiceDialog(
         title = title,
+        options = languageOptions,
+        selectedValue = selectedLanguage,
+        onOptionSelected = onLanguageSelected,
+        onDismiss = onDismiss,
         width = 400.dp,
-        suppressFirstKeyUp = false
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(320.dp)
-        ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 4.dp)
-            ) {
-                if (showNoneOption) {
-                    item(key = "language_none_option") {
-                        LanguageOptionItem(
-                            name = stringResource(R.string.action_none),
-                            code = null,
-                            isSelected = selectedLanguage == null,
-                            onClick = { onLanguageSelected(null) },
-                            modifier = Modifier.focusRequester(focusRequester)
-                        )
-                    }
-                }
-
-                items(
-                    items = extraOptions,
-                    key = { (code, _) -> "language_extra_$code" }
-                ) { (code, name) ->
-                    LanguageOptionItem(
-                        name = name,
-                        code = code,
-                        isSelected = selectedLanguage == code,
-                        onClick = { onLanguageSelected(code) },
-                        modifier = if (!showNoneOption && extraOptions.firstOrNull()?.first == code) {
-                            Modifier.focusRequester(focusRequester)
-                        } else {
-                            Modifier
-                        }
-                    )
-                }
-
-                items(
-                    count = sortedLanguages.size,
-                    key = { index -> sortedLanguages[index].code }
-                ) { index ->
-                    val language = sortedLanguages[index]
-                    LanguageOptionItem(
-                        name = language.displayName,
-                        code = language.code,
-                        isSelected = selectedLanguage == language.code,
-                        onClick = { onLanguageSelected(language.code) },
-                        modifier = if (!showNoneOption && index == 0) {
-                            Modifier.focusRequester(focusRequester)
-                        } else {
-                            Modifier
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LanguageOptionItem(
-    name: String,
-    code: String?,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(modifier)
-            .onFocusChanged { isFocused = it.isFocused },
-        colors = CardDefaults.colors(
-            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
-        ),
-        shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
-        scale = CardDefaults.scale(focusedScale = 1f)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
-                modifier = Modifier.weight(1f)
-            )
-            
-            if (code != null) {
-                Text(
-                    text = code.uppercase(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
-                )
-            }
-            
-            if (isSelected) {
-                Spacer(modifier = Modifier.width(12.dp))
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = stringResource(R.string.cd_selected),
-                    tint = NuvioColors.Primary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-    }
+        maxHeight = 320.dp
+    )
 }
 
 @Composable
@@ -1231,7 +1123,7 @@ internal fun ColorSelectionDialog(
             // Color grid using LazyRow for proper TV focus
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.focusRequester(focusRequester)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 items(
                     count = colors.size,
@@ -1247,6 +1139,11 @@ internal fun ColorSelectionDialog(
                             if (color.alpha < 1f) {
                                 alphaPercent = (color.alpha * 100f).roundToInt().coerceIn(0, 100)
                             }
+                        },
+                        modifier = if (color.toArgb() == currentChipColor.toArgb()) {
+                            Modifier.focusRequester(focusRequester)
+                        } else {
+                            Modifier
                         }
                     )
                 }
@@ -1402,7 +1299,8 @@ private fun ColorOption(
     color: Color,
     isSelected: Boolean,
     isTransparent: Boolean = false,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
     
@@ -1410,6 +1308,7 @@ private fun ColorOption(
         onClick = onClick,
         modifier = Modifier
             .size(48.dp)
+            .then(modifier)
             .onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
             containerColor = Color.Transparent
