@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -694,100 +695,128 @@ internal fun <T> SettingsMultiChoiceDialog(
         width = width,
         suppressFirstKeyUp = false
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = maxHeight)
+                .heightIn(max = maxHeight),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            LazyColumn(
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 4.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
             ) {
-                itemsIndexed(
-                    items = options,
-                    key = { index, option -> "$index-${option.value}" }
-                ) { index, option ->
-                    val isSelected = selected.contains(option.value)
-                    Card(
-                        onClick = {
-                            if (isSelected) {
-                                selected.remove(option.value)
-                            } else {
-                                selected.add(option.value)
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(if (index == firstSelectedIndex) Modifier.focusRequester(focusRequester) else Modifier),
-                        colors = CardDefaults.colors(
-                            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                            focusedContainerColor = NuvioColors.FocusBackground
-                        ),
-                        shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
-                        scale = CardDefaults.scale(focusedScale = 1f)
-                    ) {
-                        Row(
+                LazyColumn(
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    itemsIndexed(
+                        items = options,
+                        key = { index, option -> "$index-${option.value}" }
+                    ) { index, option ->
+                        val isSelected = selected.contains(option.value)
+                        Card(
+                            onClick = {
+                                if (isSelected) {
+                                    selected.remove(option.value)
+                                } else {
+                                    selected.add(option.value)
+                                }
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .then(if (index == firstSelectedIndex) Modifier.focusRequester(focusRequester) else Modifier),
+                            colors = CardDefaults.colors(
+                                containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
+                                focusedContainerColor = NuvioColors.FocusBackground
+                            ),
+                            shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1f)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = option.title,
-                                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontFamily = option.titleFontFamily
-                                )
-                                if (!option.description.isNullOrBlank()) {
-                                    Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = option.description,
-                                        color = NuvioColors.TextSecondary,
-                                        style = MaterialTheme.typography.bodySmall
+                                        text = option.title,
+                                        color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontFamily = option.titleFontFamily
+                                    )
+                                    if (!option.description.isNullOrBlank()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = option.description,
+                                            color = NuvioColors.TextSecondary,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                                if (isSelected) {
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = stringResource(R.string.cd_selected),
+                                        tint = NuvioColors.Primary,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
-                            }
-                            if (isSelected) {
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = stringResource(R.string.cd_selected),
-                                    tint = NuvioColors.Primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
                             }
                         }
                     }
                 }
             }
+            SettingsDialogActionRow {
+                SettingsDialogActionButton(
+                    text = stringResource(R.string.action_clear),
+                    onClick = { selected.clear() }
+                )
+                SettingsDialogActionButton(
+                    text = stringResource(R.string.action_save),
+                    onClick = { onValuesSelected(options.map { it.value }.filter { selected.contains(it) }) },
+                    primary = true
+                )
+            }
         }
+    }
+}
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            Button(
-                onClick = { selected.clear() },
-                colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundElevated,
-                    contentColor = NuvioColors.TextPrimary
-                )
-            ) {
-                Text(stringResource(R.string.action_clear))
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = { onValuesSelected(options.map { it.value }.filter { selected.contains(it) }) },
-                colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
-                )
-            ) {
-                Text(stringResource(R.string.action_save))
-            }
-        }
+@Composable
+internal fun SettingsDialogActionRow(
+    content: @Composable RowScope.() -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content
+    )
+}
+
+@Composable
+internal fun SettingsDialogActionButton(
+    text: String,
+    onClick: () -> Unit,
+    primary: Boolean = false,
+    enabled: Boolean = true
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        colors = ButtonDefaults.colors(
+            containerColor = if (primary) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
+            contentColor = NuvioColors.TextPrimary
+        )
+    ) {
+        Text(
+            text = text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

@@ -888,7 +888,7 @@
     <string name="debrid_section_account">Account</string>
     <string name="debrid_section_instant_playback">Instant Playback</string>
     <string name="debrid_section_filters">Filters &amp; Sorting</string>
-    <string name="debrid_section_formatting">Formatting</string>
+    <string name="debrid_section_formatting">Web Settings</string>
     <string name="debrid_provider_title">Provider</string>
     <string name="debrid_provider_subtitle">Additional providers will be added later</string>
     <string name="debrid_provider_torbox">Torbox</string>
@@ -940,12 +940,12 @@
     <string name="debrid_stream_codec_h264">H.264 / AVC</string>
     <string name="debrid_stream_codec_hevc">HEVC / H.265</string>
     <string name="debrid_stream_codec_av1">AV1</string>
-    <string name="debrid_formatter_title">Stream formatter</string>
-    <string name="debrid_formatter_subtitle">Controls how source names and metadata appear.</string>
-    <string name="debrid_formatter_configure">Open editor</string>
+    <string name="debrid_formatter_title">Web editor</string>
+    <string name="debrid_formatter_subtitle">Configure source display, filters, and sorting from another device.</string>
+    <string name="debrid_formatter_configure">Open web editor</string>
     <string name="debrid_formatter_reset_title">Reset formatting</string>
     <string name="debrid_formatter_reset_subtitle">Restore default source formatting.</string>
-    <string name="debrid_formatter_qr_instruction">Scan this QR code on your phone to edit Debrid source formatting.</string>
+    <string name="debrid_formatter_qr_instruction">Scan this QR code on your phone to configure Debrid source settings.</string>
 
     <!-- Anime-Skip -->
     <string name="animeskip_title">Anime Skip</string>

@@ -229,7 +229,7 @@ object DirectDebridStreamFilter {
         val normalized = value?.lowercase().orEmpty()
         return when {
             normalized.hasResolutionToken("2160p?", "4k", "uhd") -> DebridStreamResolution.P2160
-            normalized.hasResolutionToken("1440p?") -> DebridStreamResolution.P1440
+            normalized.hasResolutionToken("1440p?", "2k") -> DebridStreamResolution.P1440
             normalized.hasResolutionToken("1080p?", "fhd") -> DebridStreamResolution.P1080
             normalized.hasResolutionToken("720p?", "hd") -> DebridStreamResolution.P720
             normalized.hasResolutionToken("576p?") -> DebridStreamResolution.P576
@@ -304,7 +304,7 @@ object DirectDebridStreamFilter {
         val channels = mutableListOf<DebridStreamAudioChannel>()
         if (text.hasToken("7.1")) channels += DebridStreamAudioChannel.CH_7_1
         if (text.hasToken("6.1")) channels += DebridStreamAudioChannel.CH_6_1
-        if (text.hasToken("5.1")) channels += DebridStreamAudioChannel.CH_5_1
+        if (text.hasToken("5.1") || text.hasToken("6ch")) channels += DebridStreamAudioChannel.CH_5_1
         if (text.hasToken("2.0")) channels += DebridStreamAudioChannel.CH_2_0
         return channels.distinct().ifEmpty { listOf(DebridStreamAudioChannel.UNKNOWN) }
     }
@@ -364,8 +364,7 @@ object DirectDebridStreamFilter {
             normalized == "hdr10" ||
             normalized == "hdr10+" ||
             normalized == "hdr10plus" ||
-            normalized == "hlg" ||
-            isDolbyVisionToken()
+            normalized == "hlg"
     }
 
     private fun streamSize(stream: Stream): Long? {

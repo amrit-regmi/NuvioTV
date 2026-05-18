@@ -9,13 +9,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -45,8 +42,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
-import androidx.tv.material3.Button
-import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -176,6 +171,30 @@ fun DebridSettingsContent(
                         }
                     }
 
+                    item(key = "debrid_formatting_section") {
+                        DebridSectionLabel(text = stringResource(R.string.debrid_section_formatting))
+                    }
+
+                    item(key = "debrid_formatter") {
+                        SettingsActionRow(
+                            title = stringResource(R.string.debrid_formatter_title),
+                            subtitle = stringResource(R.string.debrid_formatter_subtitle),
+                            value = stringResource(R.string.debrid_formatter_configure),
+                            onClick = { viewModel.startFormatterQrMode() },
+                            enabled = uiState.enabled
+                        )
+                    }
+
+                    item(key = "debrid_formatter_reset") {
+                        SettingsActionRow(
+                            title = stringResource(R.string.debrid_formatter_reset_title),
+                            subtitle = stringResource(R.string.debrid_formatter_reset_subtitle),
+                            value = stringResource(R.string.layout_reset_default),
+                            onClick = { viewModel.resetFormatterTemplates() },
+                            enabled = uiState.enabled
+                        )
+                    }
+
                     item(key = "debrid_filters_section") {
                         DebridSectionLabel(text = stringResource(R.string.debrid_section_filters))
                     }
@@ -240,30 +259,6 @@ fun DebridSettingsContent(
                                 enabled = uiState.enabled
                             )
                         }
-                    }
-
-                    item(key = "debrid_formatting_section") {
-                        DebridSectionLabel(text = stringResource(R.string.debrid_section_formatting))
-                    }
-
-                    item(key = "debrid_formatter") {
-                        SettingsActionRow(
-                            title = stringResource(R.string.debrid_formatter_title),
-                            subtitle = stringResource(R.string.debrid_formatter_subtitle),
-                            value = stringResource(R.string.debrid_formatter_configure),
-                            onClick = { viewModel.startFormatterQrMode() },
-                            enabled = uiState.enabled
-                        )
-                    }
-
-                    item(key = "debrid_formatter_reset") {
-                        SettingsActionRow(
-                            title = stringResource(R.string.debrid_formatter_reset_title),
-                            subtitle = stringResource(R.string.debrid_formatter_reset_subtitle),
-                            value = stringResource(R.string.layout_reset_default),
-                            onClick = { viewModel.resetFormatterTemplates() },
-                            enabled = uiState.enabled
-                        )
                     }
                 }
                 SettingsVerticalScrollIndicators(state = state)
@@ -684,7 +679,7 @@ private fun DebridSortModeDialog(
     onDismiss: () -> Unit
 ) {
     val options = listOf(
-        DebridSortProfile.AIO,
+        DebridSortProfile.DEFAULT,
         DebridSortProfile.LARGEST,
         DebridSortProfile.SMALLEST,
         DebridSortProfile.AUDIO,
@@ -817,29 +812,16 @@ private fun DebridTextListDialog(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            Button(
-                onClick = { value = "" },
-                colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundElevated,
-                    contentColor = NuvioColors.TextPrimary
-                )
-            ) {
-                Text(stringResource(R.string.action_clear))
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
+        SettingsDialogActionRow {
+            SettingsDialogActionButton(
+                text = stringResource(R.string.action_clear),
+                onClick = { value = "" }
+            )
+            SettingsDialogActionButton(
+                text = stringResource(R.string.action_save),
                 onClick = { submit() },
-                colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
-                )
-            ) {
-                Text(stringResource(R.string.action_save))
-            }
+                primary = true
+            )
         }
     }
 }
@@ -855,7 +837,7 @@ private fun streamMaxResultsLabel(value: Int): String {
 
 private fun sortProfileLabel(value: DebridSortProfile): String {
     return when (value) {
-        DebridSortProfile.AIO -> "AIO default"
+        DebridSortProfile.DEFAULT -> "Default"
         DebridSortProfile.LARGEST -> "Largest first"
         DebridSortProfile.SMALLEST -> "Smallest first"
         DebridSortProfile.AUDIO -> "Best audio first"
@@ -867,10 +849,10 @@ private fun LazyListScope.debridRuleRows(
     preferences: DebridStreamPreferences,
     row: LazyListScope.(DebridStreamPicker, String, String?, String) -> Unit
 ) {
-    row(DebridStreamPicker.PREFERRED_RESOLUTIONS, "Preferred resolutions", "Sort selected resolutions first, in AIO order.", selectionCountLabel(preferences.preferredResolutions))
+    row(DebridStreamPicker.PREFERRED_RESOLUTIONS, "Preferred resolutions", "Sort selected resolutions first, in default order.", selectionCountLabel(preferences.preferredResolutions))
     row(DebridStreamPicker.REQUIRED_RESOLUTIONS, "Required resolutions", "Only show selected resolutions.", selectionCountLabel(preferences.requiredResolutions))
     row(DebridStreamPicker.EXCLUDED_RESOLUTIONS, "Excluded resolutions", "Hide selected resolutions.", selectionCountLabel(preferences.excludedResolutions))
-    row(DebridStreamPicker.PREFERRED_QUALITIES, "Preferred qualities", "Sort selected qualities first, in AIO order.", selectionCountLabel(preferences.preferredQualities))
+    row(DebridStreamPicker.PREFERRED_QUALITIES, "Preferred qualities", "Sort selected qualities first, in default order.", selectionCountLabel(preferences.preferredQualities))
     row(DebridStreamPicker.REQUIRED_QUALITIES, "Required qualities", "Only show selected source qualities.", selectionCountLabel(preferences.requiredQualities))
     row(DebridStreamPicker.EXCLUDED_QUALITIES, "Excluded qualities", "Hide selected source qualities.", selectionCountLabel(preferences.excludedQualities))
     row(DebridStreamPicker.PREFERRED_VISUAL_TAGS, "Preferred visual tags", "Sort DV, HDR, 10bit, IMAX and similar tags.", selectionCountLabel(preferences.preferredVisualTags))
@@ -919,7 +901,7 @@ private fun sortProfileFor(criteria: List<DebridStreamSortCriterion>): DebridSor
             DebridStreamSortKey.AUDIO_CHANNEL to DebridStreamSortDirection.DESC
         ) -> DebridSortProfile.AUDIO
         normalized.firstOrNull() == DebridStreamSortKey.LANGUAGE to DebridStreamSortDirection.DESC -> DebridSortProfile.LANGUAGE
-        else -> DebridSortProfile.AIO
+        else -> DebridSortProfile.DEFAULT
     }
 }
 
@@ -929,7 +911,7 @@ private fun sortProfileLabel(criteria: List<DebridStreamSortCriterion>): String 
 
 private fun sortCriteriaForProfile(profile: DebridSortProfile): List<DebridStreamSortCriterion> {
     return when (profile) {
-        DebridSortProfile.AIO -> DebridStreamSortCriterion.defaultOrder
+        DebridSortProfile.DEFAULT -> DebridStreamSortCriterion.defaultOrder
         DebridSortProfile.LARGEST -> listOf(DebridStreamSortCriterion(DebridStreamSortKey.SIZE, DebridStreamSortDirection.DESC))
         DebridSortProfile.SMALLEST -> listOf(DebridStreamSortCriterion(DebridStreamSortKey.SIZE, DebridStreamSortDirection.ASC))
         DebridSortProfile.AUDIO -> listOf(
@@ -949,7 +931,7 @@ private fun sortCriteriaForProfile(profile: DebridSortProfile): List<DebridStrea
 }
 
 private enum class DebridSortProfile {
-    AIO,
+    DEFAULT,
     LARGEST,
     SMALLEST,
     AUDIO,
@@ -1062,39 +1044,21 @@ private fun DebridApiKeyDialog(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundElevated,
-                    contentColor = NuvioColors.TextPrimary
-                )
-            ) {
-                Text(stringResource(R.string.action_cancel))
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = onClear,
-                colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundElevated,
-                    contentColor = NuvioColors.TextPrimary
-                )
-            ) {
-                Text(stringResource(R.string.action_clear))
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
+        SettingsDialogActionRow {
+            SettingsDialogActionButton(
+                text = stringResource(R.string.action_cancel),
+                onClick = onDismiss
+            )
+            SettingsDialogActionButton(
+                text = stringResource(R.string.action_clear),
+                onClick = onClear
+            )
+            SettingsDialogActionButton(
+                text = if (validating) stringResource(R.string.action_saving) else stringResource(R.string.action_save),
                 onClick = { submit() },
-                colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
-                )
-            ) {
-                Text(if (validating) stringResource(R.string.action_saving) else stringResource(R.string.action_save))
-            }
+                primary = true,
+                enabled = !validating
+            )
         }
     }
 }

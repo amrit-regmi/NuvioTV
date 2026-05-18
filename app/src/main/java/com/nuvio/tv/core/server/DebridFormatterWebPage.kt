@@ -12,7 +12,7 @@ object DebridFormatterWebPage {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>$appName - Direct Debrid Formatter</title>
+<title>$appName - Direct Debrid Settings</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
   * {
@@ -66,6 +66,35 @@ object DebridFormatterWebPage {
     color: rgba(255, 255, 255, 0.42);
     font-size: 0.875rem;
     font-weight: 300;
+  }
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+  }
+  .tab {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.58);
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    transition: all 0.25s ease;
+  }
+  .tab.active {
+    background: #fff;
+    border-color: #fff;
+    color: #000;
+  }
+  .panel {
+    display: none;
+  }
+  .panel.active {
+    display: block;
   }
   .section-label {
     font-size: 0.75rem;
@@ -217,6 +246,7 @@ object DebridFormatterWebPage {
     .header-logo { height: 32px; }
     .grid { grid-template-columns: 1fr; }
     .actions { flex-direction: column; }
+    .tab { padding: 0.75rem 0.6rem; }
   }
 </style>
 </head>
@@ -224,84 +254,93 @@ object DebridFormatterWebPage {
 <div class="page">
   <div class="header">
     <img src="/logo.png" alt="NuvioTV" class="header-logo">
-    <p>Direct Debrid Formatter</p>
+    <p>Direct Debrid Settings</p>
   </div>
 
   <div class="intro">
-    <div class="intro-title">Customize stream labels</div>
-    <div class="intro-copy">Adjust the name and description used for Direct Debrid streams.</div>
+    <div class="intro-title">Customize Debrid streams</div>
+    <div class="intro-copy">Adjust stream labels, filters, and sorting used for Direct Debrid results.</div>
   </div>
 
-  <div class="section-label">Template fields</div>
-  <div class="chips">
-    <span class="chip">{stream.resolution}</span>
-    <span class="chip">{stream.quality}</span>
-    <span class="chip">{stream.visualTags::join(' | ')}</span>
-    <span class="chip">{stream.audioTags::join(' | ')}</span>
-    <span class="chip">{stream.size::bytes}</span>
-    <span class="chip">{service.cached::istrue["Ready"||"Not Ready"]}</span>
+  <div class="tabs">
+    <button class="tab active" type="button" data-tab="formatter">Formatter</button>
+    <button class="tab" type="button" data-tab="rules">Filters &amp; Sort</button>
   </div>
 
-  <div class="field">
-    <label for="nameTemplate">Name Template</label>
-    <textarea id="nameTemplate" spellcheck="false"></textarea>
-  </div>
+  <div class="panel active" id="panel-formatter">
+    <div class="section-label">Template fields</div>
+    <div class="chips">
+      <span class="chip">{stream.resolution}</span>
+      <span class="chip">{stream.quality}</span>
+      <span class="chip">{stream.visualTags::join(' | ')}</span>
+      <span class="chip">{stream.audioTags::join(' | ')}</span>
+      <span class="chip">{stream.size::bytes}</span>
+      <span class="chip">{service.cached::istrue["Ready"||"Not Ready"]}</span>
+    </div>
 
-  <div class="field">
-    <label for="descriptionTemplate">Description Template</label>
-    <textarea id="descriptionTemplate" spellcheck="false"></textarea>
-  </div>
+    <div class="field">
+      <label for="nameTemplate">Name Template</label>
+      <textarea id="nameTemplate" spellcheck="false"></textarea>
+    </div>
 
-  <div class="section-label">Stream rules</div>
-  <div class="grid">
     <div class="field">
-      <label for="maxResults">Max Results</label>
-      <input id="maxResults" type="number" min="0" max="100" inputmode="numeric">
-    </div>
-    <div class="field">
-      <label for="maxPerResolution">Per Resolution</label>
-      <input id="maxPerResolution" type="number" min="0" max="100" inputmode="numeric">
-    </div>
-    <div class="field">
-      <label for="maxPerQuality">Per Quality</label>
-      <input id="maxPerQuality" type="number" min="0" max="100" inputmode="numeric">
-    </div>
-    <div class="field">
-      <label for="sizeMinGb">Min Size GB</label>
-      <input id="sizeMinGb" type="number" min="0" max="100" inputmode="numeric">
-    </div>
-    <div class="field">
-      <label for="sizeMaxGb">Max Size GB</label>
-      <input id="sizeMaxGb" type="number" min="0" max="100" inputmode="numeric">
-    </div>
-    <div class="field">
-      <label for="sortPreset">Sort</label>
-      <select id="sortPreset">
-        <option value="aio">AIO Default</option>
-        <option value="largest">Largest First</option>
-        <option value="smallest">Smallest First</option>
-        <option value="audio">Best Audio First</option>
-        <option value="language">Language First</option>
-      </select>
+      <label for="descriptionTemplate">Description Template</label>
+      <textarea id="descriptionTemplate" spellcheck="false"></textarea>
     </div>
   </div>
 
-  <div id="streamRules"></div>
-
-  <div class="grid">
-    <div class="field">
-      <label for="requiredReleaseGroups">Required Groups</label>
-      <textarea id="requiredReleaseGroups" spellcheck="false"></textarea>
+  <div class="panel" id="panel-rules">
+    <div class="section-label">Stream rules</div>
+    <div class="grid">
+      <div class="field">
+        <label for="maxResults">Max Results</label>
+        <input id="maxResults" type="number" min="0" max="100" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="maxPerResolution">Per Resolution</label>
+        <input id="maxPerResolution" type="number" min="0" max="100" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="maxPerQuality">Per Quality</label>
+        <input id="maxPerQuality" type="number" min="0" max="100" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="sizeMinGb">Min Size GB</label>
+        <input id="sizeMinGb" type="number" min="0" max="100" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="sizeMaxGb">Max Size GB</label>
+        <input id="sizeMaxGb" type="number" min="0" max="100" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="sortPreset">Sort</label>
+        <select id="sortPreset">
+          <option value="default">Default</option>
+          <option value="largest">Largest First</option>
+          <option value="smallest">Smallest First</option>
+          <option value="audio">Best Audio First</option>
+          <option value="language">Language First</option>
+        </select>
+      </div>
     </div>
-    <div class="field">
-      <label for="excludedReleaseGroups">Excluded Groups</label>
-      <textarea id="excludedReleaseGroups" spellcheck="false"></textarea>
+
+    <div id="streamRules"></div>
+
+    <div class="grid">
+      <div class="field">
+        <label for="requiredReleaseGroups">Required Groups</label>
+        <textarea id="requiredReleaseGroups" spellcheck="false"></textarea>
+      </div>
+      <div class="field">
+        <label for="excludedReleaseGroups">Excluded Groups</label>
+        <textarea id="excludedReleaseGroups" spellcheck="false"></textarea>
+      </div>
     </div>
   </div>
 
   <div class="actions">
     <button class="btn" id="defaults">Restore Default</button>
-    <button class="btn" id="save">Save Formatter</button>
+    <button class="btn" id="save">Save Settings</button>
   </div>
   <div class="status" id="status"></div>
 </div>
@@ -311,6 +350,13 @@ const nameBox = document.getElementById('nameTemplate');
 const descBox = document.getElementById('descriptionTemplate');
 const statusBox = document.getElementById('status');
 const streamRules = document.getElementById('streamRules');
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    const target=tab.dataset.tab;
+    document.querySelectorAll('.tab').forEach(item=>item.classList.toggle('active',item===tab));
+    document.querySelectorAll('.panel').forEach(panel=>panel.classList.toggle('active',panel.id==='panel-'+target));
+  });
+});
 const options = {
   resolutions: [['P2160','2160p'],['P1440','1440p'],['P1080','1080p'],['P720','720p'],['P576','576p'],['P480','480p'],['P360','360p'],['UNKNOWN','Unknown']],
   qualities: [['BLURAY_REMUX','BluRay REMUX'],['BLURAY','BluRay'],['WEB_DL','WEB-DL'],['WEBRIP','WEBRip'],['HDRIP','HDRip'],['HD_RIP','HC HD-Rip'],['DVDRIP','DVDRip'],['HDTV','HDTV'],['CAM','CAM'],['TS','TS'],['TC','TC'],['SCR','SCR'],['UNKNOWN','Unknown']],
@@ -356,7 +402,7 @@ function presetForSortCriteria(criteria){
   if(keys==='SIZE:ASC')return'smallest';
   if(keys.startsWith('AUDIO_TAG:DESC|AUDIO_CHANNEL:DESC'))return'audio';
   if(keys.startsWith('LANGUAGE:DESC'))return'language';
-  return'aio';
+  return'default';
 }
 function renderRules(){
   streamRules.innerHTML=groups.map(([id,title,source])=>'<div class="checks"><div class="checks-title">'+title+'</div><div class="check-grid">'+options[source].map(([value,label])=>'<label class="check"><input type="checkbox" data-group="'+id+'" value="'+value+'"><span>'+label+'</span></label>').join('')+'</div></div>').join('');
@@ -413,7 +459,7 @@ async function save(){
     body:JSON.stringify({nameTemplate:nameBox.value,descriptionTemplate:descBox.value,streamPreferences:collectPreferences()})
   });
   if(res.ok){
-    statusBox.textContent = 'Saved. New streams will use this formatter.';
+    statusBox.textContent = 'Saved. New streams will use these settings.';
   }else{
     const body = await res.json().catch(()=>({error:'Could not save'}));
     statusBox.textContent = body.error || 'Could not save';
@@ -428,7 +474,7 @@ document.getElementById('defaults').addEventListener('click',()=>{
   applyPreferences(defaults.streamPreferences);
 });
 renderRules();
-load().catch(()=>{statusBox.textContent='Could not load formatter settings';statusBox.className='status error';});
+load().catch(()=>{statusBox.textContent='Could not load Debrid settings';statusBox.className='status error';});
 </script>
 </body>
 </html>
