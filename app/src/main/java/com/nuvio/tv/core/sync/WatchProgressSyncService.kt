@@ -191,7 +191,10 @@ class WatchProgressSyncService @Inject constructor(
      * bypassing RLS (which would block linked devices from reading owner data).
      * Skips if Trakt is connected. Caller is responsible for merging into local.
      */
-    suspend fun pullFromRemote(): Result<List<Pair<String, WatchProgress>>> = withContext(Dispatchers.IO) {
+    suspend fun pullFromRemote(
+        sinceLastWatched: Long? = null,
+        limit: Int? = null
+    ): Result<List<Pair<String, WatchProgress>>> = withContext(Dispatchers.IO) {
         try {
             if (!shouldUseSupabaseWatchProgressSync()) {
                 Log.d(TAG, "Using Trakt watch progress, skipping watch progress pull")
@@ -201,13 +204,19 @@ class WatchProgressSyncService @Inject constructor(
             val profileId = profileManager.activeProfileId.value
             val params = buildJsonObject {
                 put("p_profile_id", profileId)
+                if (sinceLastWatched != null) {
+                    put("p_since_last_watched", sinceLastWatched)
+                }
+                if (limit != null) {
+                    put("p_limit", limit)
+                }
             }
             val response = withJwtRefreshRetry {
                 postgrest.rpc("sync_pull_watch_progress", params)
             }
             val remote = response.decodeList<SupabaseWatchProgress>()
 
-            Log.d(TAG, "pullFromRemote: fetched ${remote.size} entries from Supabase via RPC for profile $profileId")
+            Log.d(TAG, "pullFromRemote: fetched ${remote.size} entries from Supabase via RPC for profile $profileId sinceLastWatched=$sinceLastWatched")
             remote.forEach { entry ->
                 Log.d(TAG, "  pull entry: key=${entry.progressKey} contentId=${entry.contentId} type=${entry.contentType} pos=${entry.position} dur=${entry.duration} lastWatched=${entry.lastWatched}")
             }

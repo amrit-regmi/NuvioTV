@@ -268,9 +268,13 @@ class WatchProgressPreferences @Inject constructor(
     /**
      * Merges remote entries into local storage. Newer lastWatched wins per key.
      */
-    suspend fun mergeRemoteEntries(remoteEntries: Map<String, WatchProgress>, lastSuccessfulPushMs: Long = 0L): Boolean {
+    suspend fun mergeRemoteEntries(
+        remoteEntries: Map<String, WatchProgress>,
+        lastSuccessfulPushMs: Long = 0L,
+        removeMissingRemoteEntries: Boolean = true
+    ): Boolean {
         var preservedLocalItems = false
-        Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${remoteEntries.size} remote entries, lastPushMs=$lastSuccessfulPushMs")
+        Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${remoteEntries.size} remote entries, lastPushMs=$lastSuccessfulPushMs removeMissing=$removeMissingRemoteEntries")
         store().edit { preferences ->
             val json = preferences[watchProgressKey] ?: "{}"
             val local = parseProgressMap(json).toMutableMap()
@@ -279,7 +283,7 @@ class WatchProgressPreferences @Inject constructor(
             // Remove local entries that no longer exist on remote - but protect
             // entries created after the last successful push (they haven't reached
             // remote yet, so their absence doesn't mean deletion on another device).
-            if (remoteEntries.isNotEmpty()) {
+            if (removeMissingRemoteEntries && remoteEntries.isNotEmpty()) {
                 val removedKeys = local.keys - remoteEntries.keys
                 removedKeys.forEach { key ->
                     val localEntry = local[key]
