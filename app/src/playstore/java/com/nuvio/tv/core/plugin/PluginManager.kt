@@ -14,6 +14,7 @@ class PluginManager {
     val repositories: Flow<List<PluginRepository>> = flowOf(emptyList())
     val scrapers: Flow<List<ScraperInfo>> = flowOf(emptyList())
     val pluginsEnabled: Flow<Boolean> = flowOf(false)
+    val groupStreamsByRepository: Flow<Boolean> = flowOf(false)
     val enabledScrapers: Flow<List<ScraperInfo>> = flowOf(emptyList())
 
     var isSyncingFromRemote: Boolean = false
@@ -45,6 +46,8 @@ class PluginManager {
 
     suspend fun setPluginsEnabled(enabled: Boolean) = Unit
 
+    suspend fun setGroupStreamsByRepository(enabled: Boolean) = Unit
+
     suspend fun executeScrapers(
         tmdbId: String,
         mediaType: String,
@@ -57,7 +60,7 @@ class PluginManager {
         mediaType: String,
         season: Int? = null,
         episode: Int? = null
-    ): Flow<Pair<String, List<LocalScraperResult>>> = emptyFlow()
+    ): Flow<Pair<ScraperInfo, List<LocalScraperResult>>> = emptyFlow()
 
     suspend fun executeScraper(
         scraper: ScraperInfo,

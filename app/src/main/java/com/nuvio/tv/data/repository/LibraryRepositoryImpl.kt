@@ -40,6 +40,7 @@ import javax.inject.Singleton
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryRepositoryImpl @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val libraryPreferences: LibraryPreferences,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
@@ -258,7 +259,7 @@ class LibraryRepositoryImpl @Inject constructor(
 
     private suspend fun requireTraktAuth() {
         if (!traktAuthDataStore.isEffectivelyAuthenticated.first()) {
-            throw IllegalStateException("Trakt authentication required")
+            throw IllegalStateException(appContext.getString(com.nuvio.tv.R.string.trakt_error_auth_required))
         }
     }
 

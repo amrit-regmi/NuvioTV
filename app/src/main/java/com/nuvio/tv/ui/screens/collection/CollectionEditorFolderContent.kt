@@ -147,6 +147,7 @@ fun FolderEditorContent(
     }
 
     if (uiState.showEmojiPicker) {
+        BackHandler { viewModel.hideEmojiPicker() }
         EmojiPickerContent(
             selectedEmoji = folder.coverEmoji,
             onSelect = { emoji ->
@@ -172,6 +173,7 @@ fun FolderEditorContent(
         genrePickerCatalog != null &&
         genrePickerCatalog.genreOptions.isNotEmpty()
     ) {
+        BackHandler { viewModel.hideGenrePicker() }
         GenrePickerContent(
             title = genrePickerCatalog.catalogName,
             selectedGenre = genrePickerSource.genre,
@@ -185,6 +187,8 @@ fun FolderEditorContent(
         )
         return
     }
+
+    BackHandler { viewModel.cancelFolderEdit() }
 
     val titleFocusRequester = remember { FocusRequester() }
 
@@ -616,7 +620,12 @@ fun FolderEditorContent(
                         it.addonId == addon.addonId && it.type == addon.type && it.catalogId == addon.catalogId
                     }
                 }
-                val isMissing = addonSource != null && catalog == null
+                val addonCatalogInfo = addonSource?.let { src ->
+                    val exactKey = "${src.addonId}|${src.type}|${src.catalogId}"
+                    uiState.addonCatalogInfoByKey[exactKey]
+                        ?: uiState.addonCatalogInfoByKey["${src.addonId}|${src.type}|${src.catalogId.substringBefore(",")}"]
+                }
+                val isMissing = addonSource != null && catalog == null && addonCatalogInfo == null
                 val sourceKey = collectionSourceKey(source)
                 val removeFocusRequester = catalogFocusRequesters.getOrPut(sourceKey) { FocusRequester() }
                 val genreLabel = addonSource?.genre ?: if (catalog?.genreRequired == true) {
@@ -651,6 +660,7 @@ fun FolderEditorContent(
                                 text = catalog?.catalogName?.replaceFirstChar { it.uppercase() }
                                     ?: tmdbSource?.title
                                     ?: traktSource?.title
+                                    ?: addonCatalogInfo?.catalogName?.replaceFirstChar { it.uppercase() }
                                     ?: addonSource?.catalogId
                                     ?: stringResource(R.string.collections_editor_source),
                                 style = MaterialTheme.typography.bodyMedium,
@@ -660,6 +670,7 @@ fun FolderEditorContent(
                                 text = when {
                                     isMissing -> stringResource(R.string.collections_editor_addon_missing, addonSource.addonId)
                                     addonSource != null && catalog != null -> "$addonTypeLabel - ${catalog.addonName}"
+                                    addonSource != null && addonCatalogInfo != null -> "$addonTypeLabel - ${addonCatalogInfo.addonName}"
                                     tmdbSource != null -> tmdbSourceSubtitle(tmdbSource)
                                     traktSource != null -> traktSourceSubtitle(traktSource)
                                     else -> stringResource(R.string.collections_editor_source)

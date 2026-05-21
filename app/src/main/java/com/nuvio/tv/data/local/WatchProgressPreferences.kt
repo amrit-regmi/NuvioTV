@@ -33,6 +33,19 @@ class WatchProgressPreferences @Inject constructor(
 
     private val gson = Gson()
     private val watchProgressKey = stringPreferencesKey("watch_progress_map")
+    private val lastSuccessfulPushMsKey = androidx.datastore.preferences.core.longPreferencesKey("last_successful_push_ms")
+
+    /** Persisted timestamp of the last successful push to remote. */
+    suspend fun getLastSuccessfulPushMs(): Long {
+        val prefs = store().data.first()
+        return prefs[lastSuccessfulPushMsKey] ?: 0L
+    }
+
+    suspend fun setLastSuccessfulPushMs(timestampMs: Long) {
+        store().edit { prefs ->
+            prefs[lastSuccessfulPushMsKey] = timestampMs
+        }
+    }
 
     /**
      * Get all watch progress items, sorted by last watched (most recent first)
@@ -245,29 +258,49 @@ class WatchProgressPreferences @Inject constructor(
 
     /**
      * Returns the raw key→WatchProgress map from DataStore (for sync push).
+     *
+     * @param profileId Explicit profile to read from. Prevents race conditions
+     *   when the active profile changes between scheduling and execution of a sync.
      */
-    suspend fun getAllRawEntries(): Map<String, WatchProgress> {
-        val preferences = store().data.first()
+    suspend fun getAllRawEntries(profileId: Int = profileManager.activeProfileId.value): Map<String, WatchProgress> {
+        val preferences = store(profileId).data.first()
         val json = preferences[watchProgressKey] ?: "{}"
         return parseProgressMap(json)
     }
 
     /**
      * Merges remote entries into local storage. Newer lastWatched wins per key.
+     *
+     * @param profileId Explicit profile to write to. Prevents race conditions
+     *   when the active profile changes between pull and merge operations.
      */
-    suspend fun mergeRemoteEntries(remoteEntries: Map<String, WatchProgress>) {
-        Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${remoteEntries.size} remote entries")
-        store().edit { preferences ->
+    suspend fun mergeRemoteEntries(
+        remoteEntries: Map<String, WatchProgress>,
+        lastSuccessfulPushMs: Long = 0L,
+        profileId: Int = profileManager.activeProfileId.value,
+        removeMissingRemoteEntries: Boolean = true
+    ): Boolean {
+        var preservedLocalItems = false
+        Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${remoteEntries.size} remote entries, lastPushMs=$lastSuccessfulPushMs, profile=$profileId, removeMissing=$removeMissingRemoteEntries")
+        store(profileId).edit { preferences ->
             val json = preferences[watchProgressKey] ?: "{}"
             val local = parseProgressMap(json).toMutableMap()
             Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${local.size} existing local entries")
 
-            // Remove local entries that no longer exist on remote
-            if (remoteEntries.isNotEmpty()) {
+            // Remove local entries that no longer exist on remote - but protect
+            // entries created after the last successful push (they haven't reached
+            // remote yet, so their absence doesn't mean deletion on another device).
+            if (removeMissingRemoteEntries && remoteEntries.isNotEmpty()) {
                 val removedKeys = local.keys - remoteEntries.keys
                 removedKeys.forEach { key ->
-                    local.remove(key)
-                    Log.d("WatchProgressPrefs", "  removed key=$key (not in remote)")
+                    val localEntry = local[key]
+                    if (localEntry != null && localEntry.lastWatched > lastSuccessfulPushMs) {
+                        Log.d("WatchProgressPrefs", "  preserved key=$key (lastWatched=${localEntry.lastWatched} > lastPush=$lastSuccessfulPushMs)")
+                        preservedLocalItems = true
+                    } else {
+                        local.remove(key)
+                        Log.d("WatchProgressPrefs", "  removed key=$key (not in remote)")
+                    }
                 }
             }
 
@@ -278,6 +311,7 @@ class WatchProgressPreferences @Inject constructor(
                     Log.d("WatchProgressPrefs", "  merged key=$key (existing=${existing != null})")
                 } else {
                     Log.d("WatchProgressPrefs", "  skipped key=$key (local is newer)")
+                    preservedLocalItems = true
                 }
             }
 
@@ -285,11 +319,15 @@ class WatchProgressPreferences @Inject constructor(
             Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${pruned.size} entries after prune, writing to DataStore")
             preferences[watchProgressKey] = gson.toJson(pruned)
         }
+        return preservedLocalItems
     }
 
-    suspend fun replaceWithRemoteEntries(remoteEntries: Map<String, WatchProgress>) {
-        Log.d("WatchProgressPrefs", "replaceWithRemoteEntries: ${remoteEntries.size} remote entries")
-        store().edit { preferences ->
+    suspend fun replaceWithRemoteEntries(
+        remoteEntries: Map<String, WatchProgress>,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        Log.d("WatchProgressPrefs", "replaceWithRemoteEntries: ${remoteEntries.size} remote entries, profile=$profileId")
+        store(profileId).edit { preferences ->
             val currentJson = preferences[watchProgressKey] ?: "{}"
             val current = parseProgressMap(currentJson)
             if (remoteEntries.isEmpty() && current.isNotEmpty()) {

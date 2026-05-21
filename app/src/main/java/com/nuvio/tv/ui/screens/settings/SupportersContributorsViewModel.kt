@@ -43,6 +43,7 @@ data class SupportersContributorsUiState(
 
 @HiltViewModel
 class SupportersContributorsViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val supportersRepository: SupportersRepository,
     private val sponsorsRepository: SponsorsRepository,
     private val contributorsRepository: GitHubContributorsRepository
@@ -148,7 +149,7 @@ class SupportersContributorsViewModel @Inject constructor(
                             isSupportersLoading = false,
                             hasLoadedSupporters = false,
                             supporters = emptyList(),
-                            supportersErrorMessage = error.message ?: "Unable to load supporters."
+                            supportersErrorMessage = error.message ?: appContext.getString(com.nuvio.tv.R.string.supporters_error_load)
                         )
                     }
                 }
@@ -185,7 +186,7 @@ class SupportersContributorsViewModel @Inject constructor(
                             isContributorsLoading = false,
                             hasLoadedContributors = false,
                             contributors = emptyList(),
-                            contributorsErrorMessage = error.message ?: "Unable to load contributors."
+                            contributorsErrorMessage = error.message ?: appContext.getString(com.nuvio.tv.R.string.contributors_error_load)
                         )
                     }
                 }
@@ -222,7 +223,7 @@ class SupportersContributorsViewModel @Inject constructor(
                             isSponsorsLoading = false,
                             hasLoadedSponsors = false,
                             sponsors = emptyList(),
-                            sponsorsErrorMessage = error.message ?: "Unable to load sponsors."
+                            sponsorsErrorMessage = error.message ?: appContext.getString(com.nuvio.tv.R.string.sponsors_error_load)
                         )
                     }
                 }

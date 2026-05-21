@@ -69,13 +69,13 @@ fun EssentialAddonSetupScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Set up add-ons",
+                text = stringResource(R.string.essential_addon_setup_title),
                 style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                 color = NuvioColors.TextPrimary
             )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "Install one add-on to start streaming. You can add more later from Addons.",
+                text = stringResource(R.string.essential_addon_setup_subtitle),
                 style = MaterialTheme.typography.bodyLarge,
                 color = NuvioColors.TextSecondary
             )
@@ -204,7 +204,7 @@ fun EssentialAddonSetupScreen(
                             shape = ButtonDefaults.shape(RoundedCornerShape(50))
                         ) {
                             Icon(imageVector = Icons.Default.QrCode2, contentDescription = null)
-                            Text(text = "Show QR")
+                            Text(text = stringResource(R.string.essential_addon_show_qr))
                         }
                     }
                 }
@@ -221,7 +221,7 @@ fun EssentialAddonSetupScreen(
                 shape = ButtonDefaults.shape(RoundedCornerShape(50))
             ) {
                 Text(
-                    text = "Continue for now",
+                    text = stringResource(R.string.essential_addon_continue_for_now),
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp)
                 )
             }

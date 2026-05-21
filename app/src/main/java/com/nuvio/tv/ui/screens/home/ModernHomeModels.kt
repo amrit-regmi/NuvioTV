@@ -11,6 +11,7 @@ import com.nuvio.tv.domain.model.CollectionFolder
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
+import com.nuvio.tv.ui.util.computeAirDateBadgeText
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.components.formatContinueWatchingProgressLabel
@@ -181,10 +182,10 @@ class ModernCarouselRowBuildCache {
     var continueWatchingUpcomingLabel: String = ""
     var continueWatchingUseLandscapePosters: Boolean = false
     var continueWatchingRow: HeroCarouselRow? = null
-    internal val catalogRows = mutableMapOf<String, ModernCatalogRowBuildCacheEntry>()
-    internal val collectionRows = mutableMapOf<String, ModernCollectionRowBuildCacheEntry>()
+    internal val catalogRows = java.util.concurrent.ConcurrentHashMap<String, ModernCatalogRowBuildCacheEntry>()
+    internal val collectionRows = java.util.concurrent.ConcurrentHashMap<String, ModernCollectionRowBuildCacheEntry>()
     // per-item cache: rowKey -> (itemId -> cached carousel item + source MetaPreview)
-    internal val catalogItemCache = mutableMapOf<String, MutableMap<String, CachedCarouselItem>>()
+    internal val catalogItemCache = java.util.concurrent.ConcurrentHashMap<String, MutableMap<String, CachedCarouselItem>>()
 }
 
 internal data class CachedCarouselItem(
@@ -292,7 +293,7 @@ internal fun buildContinueWatchingItem(
                     context.getString(R.string.cw_new_episode)
                 }
             } else if (!item.info.hasAired) {
-                item.info.airDateLabel?.let { context.getString(R.string.cw_airs_date, it) }
+                computeAirDateBadgeText(context, item.info.released, item.info.airDateLabel)
                     ?: context.getString(R.string.cw_upcoming)
             } else {
                 context.getString(R.string.cw_next_up)
@@ -516,12 +517,9 @@ internal fun buildCollectionFolderItem(
     }
     // Cover image takes priority over emoji. Emoji is only used as fallback
     // when no cover image is available.
-    // When focusGifEnabled is off, the GIF URL acts as a regular poster (priority over cover image).
-    val imageUrl = if (!folder.focusGifEnabled) {
-        firstNonBlank(folder.focusGifUrl, folder.coverImageUrl, collection.backdropImageUrl)
-    } else {
-        firstNonBlank(folder.coverImageUrl, collection.backdropImageUrl)
-    }
+    // GIF URL is only used as an animated overlay on focus (when focusGifEnabled is true).
+    // Don't use it as a static poster — it would still animate via Coil's GIF decoder.
+    val imageUrl = firstNonBlank(folder.coverImageUrl, collection.backdropImageUrl)
     val heroBackdrop = firstNonBlank(folder.heroBackdropUrl, folder.coverImageUrl, collection.backdropImageUrl)
 
     return ModernCarouselItem(

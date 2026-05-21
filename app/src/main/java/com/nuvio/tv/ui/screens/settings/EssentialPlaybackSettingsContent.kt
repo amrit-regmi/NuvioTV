@@ -53,19 +53,19 @@ fun EssentialPlaybackSettingsContent(
         ) {
             item(key = "header") {
                 SettingsDetailHeader(
-                    title = "Playback",
-                    subtitle = "Simple playback, subtitle, audio, and P2P preferences."
+                    title = stringResource(R.string.essential_playback_header_title),
+                    subtitle = stringResource(R.string.essential_playback_header_subtitle)
                 )
             }
             item(key = "playback_basics") {
-                SettingsGroupCard(modifier = Modifier.fillMaxWidth(), title = "Playback basics") {
+                SettingsGroupCard(modifier = Modifier.fillMaxWidth(), title = stringResource(R.string.essential_playback_basics)) {
                     SettingsActionRow(
-                        title = "Stream selection",
-                        subtitle = "Choose manually or autoplay the first available stream.",
+                        title = stringResource(R.string.essential_stream_selection),
+                        subtitle = stringResource(R.string.essential_stream_selection_subtitle),
                         value = when (settings?.streamAutoPlayMode) {
-                            StreamAutoPlayMode.FIRST_STREAM -> "First stream"
-                            StreamAutoPlayMode.MANUAL -> "Manual"
-                            StreamAutoPlayMode.REGEX_MATCH -> "Smart match"
+                            StreamAutoPlayMode.FIRST_STREAM -> stringResource(R.string.stream_auto_play_first_stream)
+                            StreamAutoPlayMode.MANUAL -> stringResource(R.string.stream_auto_play_manual_short)
+                            StreamAutoPlayMode.REGEX_MATCH -> stringResource(R.string.stream_auto_play_smart_match)
                             null -> ""
                         },
                         trailingIcon = Icons.Default.PlayArrow,
@@ -86,8 +86,8 @@ fun EssentialPlaybackSettingsContent(
                         }
                     )
                     SettingsToggleRow(
-                        title = "Auto-play next episode",
-                        subtitle = "Continue to the next episode after a stream finishes.",
+                        title = stringResource(R.string.essential_autoplay_next_episode),
+                        subtitle = stringResource(R.string.essential_autoplay_next_episode_subtitle),
                         checked = settings?.streamAutoPlayNextEpisodeEnabled == true,
                         onToggle = {
                             val current = settings ?: return@SettingsToggleRow
@@ -98,8 +98,8 @@ fun EssentialPlaybackSettingsContent(
                         enabled = settings != null
                     )
                     SettingsToggleRow(
-                        title = "P2P streams",
-                        subtitle = "Allow peer-to-peer stream sources.",
+                        title = stringResource(R.string.essential_p2p_streams),
+                        subtitle = stringResource(R.string.essential_p2p_streams_subtitle),
                         checked = torrentSettings?.p2pEnabled == true,
                         onToggle = {
                             val current = torrentSettings ?: return@SettingsToggleRow
@@ -114,18 +114,18 @@ fun EssentialPlaybackSettingsContent(
                 }
             }
             item(key = "subtitles_audio") {
-                SettingsGroupCard(modifier = Modifier.fillMaxWidth(), title = "Subtitles and audio") {
+                SettingsGroupCard(modifier = Modifier.fillMaxWidth(), title = stringResource(R.string.essential_subtitles_and_audio)) {
                     SettingsActionRow(
-                        title = "Subtitle language",
-                        subtitle = "Preferred subtitle language.",
+                        title = stringResource(R.string.essential_subtitle_language),
+                        subtitle = stringResource(R.string.essential_subtitle_language_subtitle),
                         value = settings?.subtitleStyle?.preferredLanguage.orEmpty(),
                         trailingIcon = Icons.Default.VideoSettings,
                         onClick = { showSubtitleLanguageDialog = true },
                         enabled = settings != null
                     )
                     SettingsActionRow(
-                        title = "Audio language",
-                        subtitle = "Preferred audio language.",
+                        title = stringResource(R.string.essential_audio_language),
+                        subtitle = stringResource(R.string.essential_audio_language_subtitle),
                         value = settings?.preferredAudioLanguage.orEmpty(),
                         trailingIcon = Icons.Default.VideoSettings,
                         onClick = { showAudioLanguageDialog = true },
@@ -152,7 +152,7 @@ fun EssentialPlaybackSettingsContent(
 
     if (showSubtitleLanguageDialog && settings != null) {
         LanguageSelectionDialog(
-            title = "Subtitle language",
+            title = stringResource(R.string.essential_subtitle_language),
             selectedLanguage = settings.subtitleStyle.preferredLanguage,
             showNoneOption = false,
             onLanguageSelected = { language ->
@@ -166,13 +166,13 @@ fun EssentialPlaybackSettingsContent(
     }
     if (showAudioLanguageDialog && settings != null) {
         LanguageSelectionDialog(
-            title = "Audio language",
+            title = stringResource(R.string.essential_audio_language),
             selectedLanguage = settings.preferredAudioLanguage,
             showNoneOption = false,
             extraOptions = listOf(
-                AudioLanguageOption.DEFAULT to "Media default",
-                AudioLanguageOption.DEVICE to "Device language",
-                AudioLanguageOption.ORIGINAL to "Original language"
+                AudioLanguageOption.DEFAULT to stringResource(R.string.audio_lang_media_default),
+                AudioLanguageOption.DEVICE to stringResource(R.string.audio_lang_device),
+                AudioLanguageOption.ORIGINAL to stringResource(R.string.audio_lang_original)
             ),
             onLanguageSelected = { language ->
                 if (language != null) {

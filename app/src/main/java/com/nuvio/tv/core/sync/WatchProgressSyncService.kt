@@ -10,8 +10,11 @@ import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.data.remote.supabase.SupabaseWatchProgress
 import com.nuvio.tv.domain.model.WatchProgress
 import io.github.jan.supabase.postgrest.Postgrest
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -32,6 +35,32 @@ class WatchProgressSyncService @Inject constructor(
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val profileManager: ProfileManager
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Timestamp (epoch ms) of the last successful push to remote.
+     * Used by [WatchProgressPreferences.mergeRemoteEntries] to protect local entries
+     * that were created after the last push - these haven't reached remote yet,
+     * so their absence from a pull response does NOT mean they were deleted on
+     * another device.
+     */
+    @Volatile
+    var lastSuccessfulPushMs: Long = 0L
+        private set
+
+    /** Called after a successful push to record the sync point. */
+    fun markPushSucceeded() {
+        val now = System.currentTimeMillis()
+        lastSuccessfulPushMs = now
+        scope.launch {
+            watchProgressPreferences.setLastSuccessfulPushMs(now)
+        }
+    }
+
+    /** Restores persisted push timestamp on startup. */
+    suspend fun restoreLastPushTimestamp() {
+        lastSuccessfulPushMs = watchProgressPreferences.getLastSuccessfulPushMs()
+    }
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
         return try {
             block()
@@ -47,12 +76,11 @@ class WatchProgressSyncService @Inject constructor(
         return !(hasEffectiveTraktConnection && source == WatchProgressSource.TRAKT)
     }
 
-    suspend fun deleteFromRemote(keys: Collection<String>): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun deleteFromRemote(
+        keys: Collection<String>,
+        profileId: Int = profileManager.activeProfileId.value
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            if (!shouldUseSupabaseWatchProgressSync()) {
-                return@withContext Result.success(Unit)
-            }
-
             val distinctKeys = keys
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
@@ -61,7 +89,6 @@ class WatchProgressSyncService @Inject constructor(
                 return@withContext Result.success(Unit)
             }
 
-            val profileId = profileManager.activeProfileId.value
             val params = buildJsonObject {
                 put("p_keys", buildJsonArray {
                     distinctKeys.forEach { add(it) }
@@ -81,25 +108,25 @@ class WatchProgressSyncService @Inject constructor(
 
     /**
      * Push all local watch progress to Supabase via RPC.
-     * Skips if Trakt is connected (Trakt handles progress when active).
+     * Always syncs regardless of CW source — both Trakt and Nuvio Sync
+     * should have up-to-date progress data.
+     *
+     * @param profileId The profile to push data for. Captured at call-site to
+     *   prevent race conditions when the active profile changes mid-operation.
      */
-    suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun pushToRemote(
+        profileId: Int = profileManager.activeProfileId.value
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            if (!shouldUseSupabaseWatchProgressSync()) {
-                Log.d(TAG, "Using Trakt watch progress, skipping watch progress push")
-                return@withContext Result.success(Unit)
-            }
-
-            val rawEntries = watchProgressPreferences.getAllRawEntries()
+            val rawEntries = watchProgressPreferences.getAllRawEntries(profileId)
             val entries = canonicalizeForRemote(rawEntries).filterValues { progress ->
                 !(progress.position <= 1L && progress.duration <= 1L && progress.duration > 0L)
             }
-            Log.d(TAG, "pushToRemote: ${rawEntries.size} local entries, ${entries.size} canonical entries to push")
+            Log.d(TAG, "pushToRemote: ${rawEntries.size} local entries, ${entries.size} canonical entries to push for profile $profileId")
             entries.forEach { (key, progress) ->
                 Log.d(TAG, "  push entry: key=$key contentId=${progress.contentId} type=${progress.contentType} pos=${progress.position} dur=${progress.duration} lastWatched=${progress.lastWatched}")
             }
 
-            val profileId = profileManager.activeProfileId.value
             val params = buildJsonObject {
                 put("p_entries", buildJsonArray {
                     entries.forEach { (key, progress) ->
@@ -123,6 +150,7 @@ class WatchProgressSyncService @Inject constructor(
             }
 
             Log.d(TAG, "Pushed ${entries.size} watch progress entries to remote for profile $profileId")
+            markPushSucceeded()
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to push watch progress to remote", e)
@@ -131,15 +159,18 @@ class WatchProgressSyncService @Inject constructor(
     }
 
     
-    suspend fun pushSingleToRemote(key: String, progress: WatchProgress): Result<Unit> = withContext(Dispatchers.IO) {
+    /**
+     * Push a single watch progress entry to Supabase via RPC.
+     *
+     * @param profileId The profile to push data for. Captured at call-site to
+     *   prevent race conditions when the active profile changes mid-operation.
+     */
+    suspend fun pushSingleToRemote(
+        key: String,
+        progress: WatchProgress,
+        profileId: Int = profileManager.activeProfileId.value
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            if (!shouldUseSupabaseWatchProgressSync()) {
-                Log.d(TAG, "Using Trakt watch progress, skipping single watch progress push")
-                return@withContext Result.success(Unit)
-            }
-
-           
-            val profileId = profileManager.activeProfileId.value
             val params = buildJsonObject {
                 put("p_entries", buildJsonArray {
                     addJsonObject {
@@ -161,6 +192,7 @@ class WatchProgressSyncService @Inject constructor(
             }
 
             Log.d(TAG, "Pushed single watch progress entry to remote for profile $profileId (key=$key)")
+            markPushSucceeded()
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to push single watch progress to remote", e)
@@ -173,24 +205,36 @@ class WatchProgressSyncService @Inject constructor(
      * Uses get_sync_owner() server-side to fetch the correct user's data,
      * bypassing RLS (which would block linked devices from reading owner data).
      * Skips if Trakt is connected. Caller is responsible for merging into local.
+     *
+     * @param profileId The profile to pull data for. Captured at call-site to
+     *   prevent race conditions when the active profile changes mid-operation.
      */
-    suspend fun pullFromRemote(): Result<List<Pair<String, WatchProgress>>> = withContext(Dispatchers.IO) {
+    suspend fun pullFromRemote(
+        profileId: Int = profileManager.activeProfileId.value,
+        sinceLastWatched: Long? = null,
+        limit: Int? = null
+    ): Result<List<Pair<String, WatchProgress>>> = withContext(Dispatchers.IO) {
         try {
             if (!shouldUseSupabaseWatchProgressSync()) {
                 Log.d(TAG, "Using Trakt watch progress, skipping watch progress pull")
                 return@withContext Result.success(emptyList())
             }
 
-            val profileId = profileManager.activeProfileId.value
             val params = buildJsonObject {
                 put("p_profile_id", profileId)
+                if (sinceLastWatched != null) {
+                    put("p_since_last_watched", sinceLastWatched)
+                }
+                if (limit != null) {
+                    put("p_limit", limit)
+                }
             }
             val response = withJwtRefreshRetry {
                 postgrest.rpc("sync_pull_watch_progress", params)
             }
             val remote = response.decodeList<SupabaseWatchProgress>()
 
-            Log.d(TAG, "pullFromRemote: fetched ${remote.size} entries from Supabase via RPC for profile $profileId")
+            Log.d(TAG, "pullFromRemote: fetched ${remote.size} entries from Supabase via RPC for profile $profileId sinceLastWatched=$sinceLastWatched")
             remote.forEach { entry ->
                 Log.d(TAG, "  pull entry: key=${entry.progressKey} contentId=${entry.contentId} type=${entry.contentType} pos=${entry.position} dur=${entry.duration} lastWatched=${entry.lastWatched}")
             }

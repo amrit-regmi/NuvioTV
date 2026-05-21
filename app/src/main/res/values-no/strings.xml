@@ -58,6 +58,12 @@
     <string name="cw_min_left">%1$dm igjen</string>
     <string name="cw_almost_done">Nesten ferdig</string>
     <string name="cw_airs_date">Sendinger %1$s</string>
+    <string name="cw_airs_today">Sendes i dag</string>
+    <string name="cw_airs_tomorrow">Sendes i morgen</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">Sendes om %d dag</item>
+        <item quantity="other">Sendes om %d dager</item>
+    </plurals>
     <string name="cw_action_go_to_details">Gå til detaljer</string>
     <string name="cw_action_start_from_beginning">Start fra begynnelsen</string>
     <string name="cw_action_remove">Fjern</string>
@@ -345,6 +351,8 @@
     <string name="sub_forced_lang">Tvunget</string>
     <string name="sub_preferred_lang">Foretrukket språk</string>
     <string name="sub_secondary_lang">Sekundært foretrukket språk</string>
+    <string name="sub_use_forced_subtitles">Bruk tvungne undertekster</string>
+    <string name="sub_use_forced_subtitles_desc">Foretrekk tvungne undertekster når lydspråket samsvarer med undertekstspråket; hvis de ikke er tilgjengelige, velg ingenting</string>
     <string name="sub_show_only_preferred_languages">Vis bare foretrukne språk</string>
     <string name="sub_show_only_preferred_languages_desc">Skjul alle andre undertekstspråk fra valglisten</string>
     <string name="sub_organization">Undertekstorganisering</string>
@@ -894,7 +902,7 @@
     <string name="pause_back_to_details">Tilbake til detaljer</string>
     <string name="pause_as_character">som %1$s</string>
 
-    <!-- NextEpisodeCardOverlay -->
+    <!-- PostPlayOverlay -->
     <string name="next_episode_label">Neste episode</string>
     <string name="next_episode_finding_source">Finner kilde…</string>
     <string name="next_episode_playing_via">Avspilles via %1$s om %2$ds</string>

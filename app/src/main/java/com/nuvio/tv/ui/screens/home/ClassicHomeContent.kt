@@ -240,7 +240,8 @@ fun ClassicHomeContent(
     // Surfaced from [Modifier.dpadVerticalFastScroll] so cards inside the
     // LazyColumn can hide their focus chrome while the list is being dragged
     // by a held DPAD_UP / DPAD_DOWN (see [LocalFastScrollActive] below).
-    var isFastScrolling by remember { mutableStateOf(false) }
+    val isFastScrollingState = remember { mutableStateOf(false) }
+    var isFastScrolling by isFastScrollingState
 
     // Stabilize map references to avoid recomposing every row when a single trailer URL changes.
     val stableTrailerPreviewUrls = remember { androidx.compose.runtime.mutableStateOf(trailerPreviewUrls) }
@@ -249,11 +250,27 @@ fun ClassicHomeContent(
         .apply { value = trailerPreviewAudioUrls }
     var focusedArtwork by remember { mutableStateOf<ClassicFocusArtwork?>(null) }
     val latestOnItemFocus by rememberUpdatedState(onItemFocus)
+    val latestOnRequestTrailerPreview by rememberUpdatedState(onRequestTrailerPreview)
 
-    val handleMetaFocus: (MetaPreview) -> Unit = remember(uiState.classicFocusGradientEnabled, uiState.focusedPosterBackdropExpandEnabled) {
+    // Track focused catalog item for trailer preview requests (mirrors ModernHomeContent behavior).
+    var focusedCatalogItem by remember { mutableStateOf<MetaPreview?>(null) }
+    if (uiState.focusedPosterBackdropTrailerEnabled) {
+        LaunchedEffect(focusedCatalogItem) {
+            val item = focusedCatalogItem ?: return@LaunchedEffect
+            if (trailerPreviewUrls.containsKey(item.id)) return@LaunchedEffect
+            delay(150)
+            if (focusedCatalogItem?.id != item.id) return@LaunchedEffect
+            latestOnRequestTrailerPreview(item)
+        }
+    }
+
+    val handleMetaFocus: (MetaPreview) -> Unit = remember(uiState.classicFocusGradientEnabled, uiState.focusedPosterBackdropExpandEnabled, uiState.focusedPosterBackdropTrailerEnabled) {
         { item ->
             if (uiState.classicFocusGradientEnabled) {
                 focusedArtwork = item.toClassicFocusArtwork(uiState.focusedPosterBackdropExpandEnabled)
+            }
+            if (uiState.focusedPosterBackdropTrailerEnabled) {
+                focusedCatalogItem = item
             }
             latestOnItemFocus(item)
         }
@@ -324,7 +341,7 @@ fun ClassicHomeContent(
     }
     CompositionLocalProvider(
         LocalBringIntoViewSpec provides verticalBringIntoViewSpec,
-        LocalFastScrollActive provides isFastScrolling,
+        LocalFastScrollActive provides isFastScrollingState,
         LocalVerticalRowsScrolling provides isVerticalScrollingState
     ) {
     Box(modifier = Modifier.fillMaxSize()) {

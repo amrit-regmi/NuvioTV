@@ -189,7 +189,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                 // layout's onDispose doesn't poison the incoming layout
                 // (e.g., Modern dispose saves hasSavedFocus=true right
                 // before Classic composes, preventing hero initial focus).
-                if (previousState.homeLayout != prefs.layout) {
+                if (previousState.layoutPreferencesReady && previousState.homeLayout != prefs.layout) {
                     // Suppress the outgoing layout's onDispose from saving
                     // stale focus state before the incoming layout composes.
                     suppressFocusSave = true
@@ -265,7 +265,12 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                     && old.localeTag == new.localeTag
                     && old.catalogRows.size == new.catalogRows.size
             }
-            .debounce(80)
+            .debounce {
+                // Use a longer debounce while catalogs are still loading to
+                // avoid repeated expensive presentation builds during the
+                // initial burst of catalog arrivals.
+                if (catalogsLoadInProgress) 300L else 80L
+            }
             .collectLatest { input ->
                 val shouldWarmStart = uiState.value.modernHomePresentation.rows.list.isEmpty()
                 val visibleCatalogRowCount = input.catalogRows.count { it.items.isNotEmpty() }
@@ -341,76 +346,82 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
 ) {
     if (!AppFeaturePolicy.inAppTrailerPlaybackEnabled) return
     if (startupGracePeriodActive) return
-    if (activeTrailerPreviewItemId != itemId) {
-        activeTrailerPreviewItemId = itemId
-        trailerPreviewRequestVersion++
-    }
+
+    // Resolve fallbackYtId from catalog item if not provided
+    val resolvedFallbackYtId = fallbackYtId ?: findCatalogItemById(itemId)?.trailerYtIds?.firstOrNull()
+
+    // Always bump version — only the latest request (highest version) will proceed after debounce
+    activeTrailerPreviewItemId = itemId
+    trailerPreviewRequestVersion++
+    val requestVersion = trailerPreviewRequestVersion
 
     if (trailerPreviewNegativeCache.contains(itemId)) return
     if (trailerPreviewUrlsState.containsKey(itemId)) return
     if (!trailerPreviewLoadingIds.add(itemId)) return
 
-    val requestVersion = trailerPreviewRequestVersion
-
     viewModelScope.launch(Dispatchers.IO) {
-        val tmdbId = try {
-            tmdbService.ensureTmdbId(itemId, apiType)
-        } catch (_: Exception) {
-            null
-        }
+        try {
+            // Debounce: wait for focus to settle before hitting network
+            delay(180)
 
-        val trailerSource = trailerService.getTrailerPlaybackSource(
-            title = title,
-            year = extractYear(releaseInfo),
-            tmdbId = tmdbId,
-            type = apiType
-        )
+            // Only the LATEST request proceeds — all earlier ones are stale
+            if (trailerPreviewRequestVersion != requestVersion) {
+                return@launch
+            }
 
-        val isLatestFocusedItem =
-            activeTrailerPreviewItemId == itemId && trailerPreviewRequestVersion == requestVersion
-        if (!isLatestFocusedItem) {
-            trailerPreviewLoadingIds.remove(itemId)
-            return@launch
-        }
+            val tmdbId = try {
+                tmdbService.ensureTmdbId(itemId, apiType)
+            } catch (_: Exception) {
+                null
+            }
 
-        withContext(Dispatchers.Main) {
-            if (trailerSource?.videoUrl.isNullOrBlank()) {
-                val fallbackSource = fallbackYtId?.let { ytId ->
-                    trailerService.getTrailerPlaybackSourceFromYouTubeUrl(
-                        youtubeUrl = "https://www.youtube.com/watch?v=$ytId",
-                        title = title,
-                        year = extractYear(releaseInfo)
-                    )
-                }
-                if (fallbackSource?.videoUrl != null) {
-                    if (trailerPreviewUrlsState[itemId] != fallbackSource.videoUrl) {
-                        trailerPreviewUrlsState[itemId] = fallbackSource.videoUrl
+            val trailerSource = trailerService.getTrailerPlaybackSource(
+                title = title,
+                year = extractYear(releaseInfo),
+                tmdbId = tmdbId,
+                type = apiType
+            )
+
+            withContext(Dispatchers.Main) {
+                if (trailerSource?.videoUrl.isNullOrBlank()) {
+                    val fallbackSource = resolvedFallbackYtId?.let { ytId ->
+                        trailerService.getTrailerPlaybackSourceFromYouTubeUrl(
+                            youtubeUrl = "https://www.youtube.com/watch?v=$ytId",
+                            title = title,
+                            year = extractYear(releaseInfo)
+                        )
                     }
-                    val fallbackAudio = fallbackSource.audioUrl
-                    if (fallbackAudio.isNullOrBlank()) {
+                    if (fallbackSource?.videoUrl != null) {
+                        if (trailerPreviewUrlsState[itemId] != fallbackSource.videoUrl) {
+                            trailerPreviewUrlsState[itemId] = fallbackSource.videoUrl
+                        }
+                        val fallbackAudio = fallbackSource.audioUrl
+                        if (fallbackAudio.isNullOrBlank()) {
+                            trailerPreviewAudioUrlsState.remove(itemId)
+                        } else if (trailerPreviewAudioUrlsState[itemId] != fallbackAudio) {
+                            trailerPreviewAudioUrlsState[itemId] = fallbackAudio
+                        }
+                    } else {
+                        trailerPreviewNegativeCache.add(itemId)
+                        trailerPreviewUrlsState.remove(itemId)
                         trailerPreviewAudioUrlsState.remove(itemId)
-                    } else if (trailerPreviewAudioUrlsState[itemId] != fallbackAudio) {
-                        trailerPreviewAudioUrlsState[itemId] = fallbackAudio
                     }
                 } else {
-                    trailerPreviewNegativeCache.add(itemId)
-                    trailerPreviewUrlsState.remove(itemId)
-                    trailerPreviewAudioUrlsState.remove(itemId)
-                }
-            } else {
-                val videoUrl = trailerSource.videoUrl
-                if (trailerPreviewUrlsState[itemId] != videoUrl) {
-                    trailerPreviewUrlsState[itemId] = videoUrl
-                }
-                val audioUrl = trailerSource.audioUrl
-                if (audioUrl.isNullOrBlank()) {
-                    trailerPreviewAudioUrlsState.remove(itemId)
-                } else if (trailerPreviewAudioUrlsState[itemId] != audioUrl) {
-                    trailerPreviewAudioUrlsState[itemId] = audioUrl
+                    val videoUrl = trailerSource.videoUrl
+                    if (trailerPreviewUrlsState[itemId] != videoUrl) {
+                        trailerPreviewUrlsState[itemId] = videoUrl
+                    }
+                    val audioUrl = trailerSource.audioUrl
+                    if (audioUrl.isNullOrBlank()) {
+                        trailerPreviewAudioUrlsState.remove(itemId)
+                    } else if (trailerPreviewAudioUrlsState[itemId] != audioUrl) {
+                        trailerPreviewAudioUrlsState[itemId] = audioUrl
+                    }
                 }
             }
+        } finally {
+            trailerPreviewLoadingIds.remove(itemId)
         }
-        trailerPreviewLoadingIds.remove(itemId)
     }
 }
 
@@ -693,14 +704,13 @@ private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) 
     }
 
     // If external meta brought new trailerYtIds and the item has no trailer resolved yet, retry.
-    // Covers: (a) item was in negative cache, (b) pipeline finished without result but wasn't
-    // cached as negative (e.g. focus changed mid-flight), (c) pipeline still in-flight.
-    if (incomingTrailerYtIds.isNotEmpty() && !trailerPreviewUrlsState.containsKey(itemId)) {
+    // Only retry if this item is currently focused — avoid prefetching trailers for adjacent items.
+    if (incomingTrailerYtIds.isNotEmpty() && !trailerPreviewUrlsState.containsKey(itemId) && activeTrailerPreviewItemId == itemId) {
         trailerPreviewNegativeCache.remove(itemId)
         trailerPreviewLoadingIds.remove(itemId)
         // Bump version so any in-flight pipeline for this item treats itself as stale
         // and won't overwrite the retry result with a negative cache entry.
-        if (activeTrailerPreviewItemId == itemId) trailerPreviewRequestVersion++
+        trailerPreviewRequestVersion++
         val currentItem = findCatalogItemById(itemId) ?: return
         requestTrailerPreviewPipeline(currentItem)
     }

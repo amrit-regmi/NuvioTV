@@ -40,17 +40,24 @@ internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) 
     delayMpvResumeSeekUntilVideoTrack = false
     nextEpisodeAutoPlayJob?.cancel()
     nextEpisodeAutoPlayJob = null
+    debridResolveJob?.cancel()
+    debridResolveJob = null
+    stillWatchingPromptJob?.cancel()
+    stillWatchingPromptJob = null
     errorRetryJob?.cancel()
     errorRetryJob = null
     releaseMpvPlayer()
     _exoPlayer?.let { player ->
         runCatching { player.playWhenReady = false }
         runCatching { player.pause() }
-        runCatching { player.clearVideoSurface() }
         runCatching { player.stop() }
+        runCatching { player.clearMediaItems() }
+        runCatching { player.clearVideoSurface() }
         runCatching { player.release() }
     }
     _exoPlayer = null
+    ffmpegAudioRenderer = null
+    updateAudioControlAvailability()
     playbackSpeedAwareAudioSink = null
     resetPlaybackTimeline()
     isReleasingPlayer = false

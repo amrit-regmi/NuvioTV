@@ -53,6 +53,14 @@
     <string name="cw_min_left">נותרו %1$dד׳</string>
     <string name="cw_almost_done">כמעט סיום</string>
     <string name="cw_airs_date">שידור ב-%1$s</string>
+    <string name="cw_airs_today">שידור היום</string>
+    <string name="cw_airs_tomorrow">שידור מחר</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">שידור בעוד יום</item>
+        <item quantity="two">שידור בעוד יומיים</item>
+        <item quantity="many">שידור בעוד %d ימים</item>
+        <item quantity="other">שידור בעוד %d יום</item>
+    </plurals>
     <string name="cw_action_go_to_details">עבור לפרטים</string>
     <string name="cw_action_start_from_beginning">התחל מהתחלה</string>
     <string name="cw_action_remove">הסר</string>
@@ -668,7 +676,7 @@
     <string name="pause_back_to_details">חזור לפרטים</string>
     <string name="pause_as_character">בתפקיד %1$s</string>
 
-    <!-- NextEpisodeCardOverlay -->
+    <!-- PostPlayOverlay -->
     <string name="next_episode_label">פרק הבא</string>
     <string name="next_episode_finding_source">מחפש מקור…</string>
     <string name="next_episode_playing_via">מנגן דרך %1$s בעוד %2$dש׳</string>
@@ -1005,6 +1013,8 @@
     <string name="sub_section">כתוביות</string>
     <string name="sub_preferred_lang">שפה מועדפת</string>
     <string name="sub_secondary_lang">שפה מועדפת משנית</string>
+    <string name="sub_use_forced_subtitles">השתמש בכתוביות כפויות</string>
+    <string name="sub_use_forced_subtitles_desc">העדף כתוביות כפויות כאשר השמע תואם לשפת הכתוביות; אם אינן זמינות, אל תבחר דבר</string>
     <string name="sub_show_only_preferred_languages">הצג רק שפות מועדפות</string>
     <string name="sub_show_only_preferred_languages_desc">הסתר את כל שאר שפות הכתוביות מרשימת הבחירה</string>
     <string name="sub_forced_lang">מאולץ</string>

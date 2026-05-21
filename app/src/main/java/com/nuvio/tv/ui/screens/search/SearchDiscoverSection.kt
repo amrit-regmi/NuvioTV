@@ -76,6 +76,7 @@ internal fun DiscoverSection(
     watchedMovieIds: Set<String> = emptySet(),
     watchedSeriesIds: Set<String> = emptySet(),
     focusResults: Boolean,
+    showBuiltInHeader: Boolean = true,
     firstItemFocusRequester: FocusRequester,
     focusedItemIndex: Int,
     shouldRestoreFocusedItem: Boolean,
@@ -125,7 +126,7 @@ internal fun DiscoverSection(
         Text(
             text = stringResource(R.string.discover_title),
             style = MaterialTheme.typography.headlineMedium,
-            color = NuvioColors.TextPrimary
+            color = if (showBuiltInHeader) NuvioColors.TextPrimary else Color.Transparent
         )
 
         Row(

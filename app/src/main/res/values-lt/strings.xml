@@ -50,6 +50,14 @@
     <string name="cw_min_left">Liko %1$dm</string>
     <string name="cw_almost_done">Beveik baigta</string>
     <string name="cw_airs_date">Pasirodo %1$s</string>
+    <string name="cw_airs_today">Pasirodo šiandien</string>
+    <string name="cw_airs_tomorrow">Pasirodo rytoj</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">Pasirodo po %d dienos</item>
+        <item quantity="few">Pasirodo po %d dienų</item>
+        <item quantity="many">Pasirodo po %d dienos</item>
+        <item quantity="other">Pasirodo po %d dienų</item>
+    </plurals>
     <string name="cw_action_go_to_details">Eiti į informaciją</string>
     <string name="cw_action_start_from_beginning">Pradėti iš pradžių</string>
     <string name="cw_action_remove">Pašalinti</string>
@@ -301,6 +309,8 @@
     <string name="sub_forced_lang">Priverstiniai</string>
     <string name="sub_preferred_lang">Pageidaujama kalba</string>
     <string name="sub_secondary_lang">Antrinė pageidaujama kalba</string>
+    <string name="sub_use_forced_subtitles">Naudoti priverstinius subtitrus</string>
+    <string name="sub_use_forced_subtitles_desc">Teikti pirmenybę priverstiniams subtitrams, kai garsas atitinka subtitrų kalbą; jei jų nėra, nieko nepasirinkti</string>
     <string name="sub_show_only_preferred_languages">Rodyti tik pageidaujamas kalbas</string>
     <string name="sub_show_only_preferred_languages_desc">Slėpti visas kitas subtitrų kalbas iš pasirinkimo sąrašo</string>
     <string name="sub_organization">Subtitrų organizavimas</string>
@@ -787,7 +797,7 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="pause_back_to_details">Grįžti į informaciją</string>
     <string name="pause_as_character">kaip %1$s</string>
 
-    <!-- NextEpisodeCardOverlay -->
+    <!-- PostPlayOverlay -->
     <string name="next_episode_label">Kita serija</string>
     <string name="next_episode_finding_source">Ieškoma šaltinio…</string>
     <string name="next_episode_playing_via">Bus atkurta per %1$s po %2$ds</string>

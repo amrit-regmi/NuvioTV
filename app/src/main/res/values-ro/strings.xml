@@ -20,6 +20,13 @@
     <string name="cw_min_left">%1$dm rămase</string>
     <string name="cw_almost_done">Aproape gata</string>
     <string name="cw_airs_date">Difuzat %1$s</string>
+    <string name="cw_airs_today">Difuzat astăzi</string>
+    <string name="cw_airs_tomorrow">Difuzat mâine</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">Difuzat în %d zi</item>
+        <item quantity="few">Difuzat în %d zile</item>
+        <item quantity="other">Difuzat în %d de zile</item>
+    </plurals>
     <string name="cw_action_go_to_details">Accesează detalii</string>
     <string name="cw_action_start_from_beginning">Începe de la început</string>
     <string name="cw_action_remove">Elimină</string>
@@ -214,6 +221,8 @@
     <string name="sub_forced_lang">Forțat</string>
     <string name="sub_preferred_lang">Limba preferată</string>
     <string name="sub_secondary_lang">Limba preferată secundară</string>
+    <string name="sub_use_forced_subtitles">Folosește subtitrări forțate</string>
+    <string name="sub_use_forced_subtitles_desc">Preferă subtitrările forțate când sunetul corespunde limbii subtitrării; dacă nu sunt disponibile, nu selecta nimic</string>
     <string name="sub_show_only_preferred_languages">Afișează doar limbile preferate</string>
     <string name="sub_show_only_preferred_languages_desc">Ascunde toate celelalte limbi de subtitrare din lista de selecție</string>
     <string name="sub_organization">Organizarea subtitrărilor</string>
@@ -631,7 +640,7 @@
     <string name="pause_back_to_details">Înapoi la detalii</string>
     <string name="pause_as_character">ca %1$s</string>
 
-    <!-- NextEpisodeCardOverlay -->
+    <!-- PostPlayOverlay -->
     <string name="next_episode_label">Următorul episod</string>
     <string name="next_episode_finding_source">Se caută sursa…</string>
     <string name="next_episode_playing_via">Se redă prin %1$s în %2$ds</string>

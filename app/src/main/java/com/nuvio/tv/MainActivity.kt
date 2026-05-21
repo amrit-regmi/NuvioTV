@@ -1,38 +1,30 @@
 package com.nuvio.tv
 
-import android.os.Bundle
 import android.content.Context
 import android.content.res.Configuration
-import androidx.core.os.ConfigurationCompat
+import android.os.Bundle
 import android.util.Log
-import androidx.compose.ui.platform.LocalView
-import androidx.metrics.performance.JankStats
-import androidx.metrics.performance.PerformanceMetricsState
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.lifecycle.lifecycleScope
-import java.util.Locale
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDp
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,16 +42,20 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -67,9 +63,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -85,7 +81,9 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -93,14 +91,18 @@ import com.nuvio.tv.core.runtime.PluginRuntimeHooks
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.os.ConfigurationCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.lifecycleScope
+import androidx.metrics.performance.JankStats
+import androidx.metrics.performance.PerformanceMetricsState
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
+import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.ModalNavigationDrawer
@@ -108,27 +110,31 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
-import com.nuvio.tv.core.profile.ProfileManager
+import coil3.compose.rememberAsyncImagePainter
+import coil3.request.ImageRequest
+import com.nuvio.tv.R
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.core.sync.ProfileSettingsSyncService
+import com.nuvio.tv.core.sync.ProfileSyncService
+import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.data.local.AppOnboardingDataStore
 import com.nuvio.tv.data.local.ExperienceModeDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.ThemeDataStore
+import com.nuvio.tv.data.remote.supabase.AvatarRepository
 import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.AuthState
+import com.nuvio.tv.domain.model.DiscoverLocation
 import com.nuvio.tv.domain.model.ExperienceMode
 import com.nuvio.tv.domain.repository.AddonRepository
-import com.nuvio.tv.core.sync.ProfileSettingsSyncService
-import com.nuvio.tv.core.sync.ProfileSyncService
-import com.nuvio.tv.core.sync.StartupSyncService
-import com.nuvio.tv.data.remote.supabase.AvatarRepository
-import com.nuvio.tv.ui.navigation.NuvioNavHost
-import com.nuvio.tv.ui.navigation.Screen
 import com.nuvio.tv.ui.components.NuvioScrollDefaults
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
+import com.nuvio.tv.ui.navigation.NuvioNavHost
+import com.nuvio.tv.ui.navigation.Screen
 import com.nuvio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nuvio.tv.ui.screens.addon.EssentialAddonSetupScreen
 import com.nuvio.tv.ui.screens.profile.ProfileSelectionScreen
@@ -136,23 +142,23 @@ import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.util.LocalFastHorizontalNavigationEnabled
 import com.nuvio.tv.ui.util.LocalRecompositionHighlighterEnabled
+import com.nuvio.tv.ui.util.rememberDrawerItemFocusRequesters
 import com.nuvio.tv.updater.UpdateViewModel
 import com.nuvio.tv.updater.ui.UpdatePromptDialog
 import dagger.hilt.android.AndroidEntryPoint
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
+import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import coil3.compose.rememberAsyncImagePainter
-import coil3.request.ImageRequest
-import androidx.compose.ui.res.stringResource
-import com.nuvio.tv.R
 
 val LocalSidebarExpanded = compositionLocalOf { false }
 val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
+
+private const val SIDEBAR_AUTO_COLLAPSE_DELAY_MS = 4_000L
 
 data class DrawerItem(
     val route: String,
@@ -173,6 +179,7 @@ private data class MainUiPrefs(
     val sidebarCollapsed: Boolean = false,
     val modernSidebarEnabled: Boolean = false,
     val modernSidebarBlurPref: Boolean = false,
+    val discoverLocation: DiscoverLocation? = null,
     val smoothBringIntoViewEnabled: Boolean = true,
     val fastHorizontalNavigationEnabled: Boolean = false,
     val composeHighlighterEnabled: Boolean = false
@@ -216,6 +223,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var avatarRepository: AvatarRepository
+
+    @Inject
+    lateinit var trailerPlayerPool: com.nuvio.tv.core.player.TrailerPlayerPool
 
     private lateinit var jankStats: JankStats
 
@@ -340,6 +350,8 @@ class MainActivity : ComponentActivity() {
                     prefs.copy(amoledSurfacesMode = amoledSurfacesMode)
                 }.combine(layoutPreferenceDataStore.modernSidebarBlurEnabled) { prefs, modernSidebarBlurPref ->
                     prefs.copy(modernSidebarBlurPref = modernSidebarBlurPref)
+                }.combine(layoutPreferenceDataStore.discoverLocation) { prefs, discoverLocation ->
+                    prefs.copy(discoverLocation = discoverLocation)
                 }.combine(layoutPreferenceDataStore.smoothBringIntoViewEnabled) { prefs, smoothBringIntoViewEnabled ->
                     prefs.copy(smoothBringIntoViewEnabled = smoothBringIntoViewEnabled)
                 }.combine(layoutPreferenceDataStore.fastHorizontalNavigationEnabled) { prefs, fastHorizontalNavigationEnabled ->
@@ -352,6 +364,7 @@ class MainActivity : ComponentActivity() {
             val installedAddons by remember(addonRepository) {
                 addonRepository.getInstalledAddons()
             }.collectAsState(initial = null)
+            val discoverLocation = mainUiPrefs.discoverLocation
 
             NuvioTheme(
                 appTheme = mainUiPrefs.theme,
@@ -368,7 +381,8 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(
                     LocalBringIntoViewSpec provides bringIntoViewSpec,
                     LocalFastHorizontalNavigationEnabled provides mainUiPrefs.fastHorizontalNavigationEnabled,
-                    LocalRecompositionHighlighterEnabled provides mainUiPrefs.composeHighlighterEnabled
+                    LocalRecompositionHighlighterEnabled provides (BuildConfig.IS_DEBUG_BUILD && mainUiPrefs.composeHighlighterEnabled),
+                    com.nuvio.tv.core.player.LocalTrailerPlayerPool provides trailerPlayerPool
                 ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -515,55 +529,92 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    val rootRoutes = remember {
-                        setOf(
-                            Screen.Home.route,
-                            Screen.Search.route,
-                            Screen.Library.route,
-                            Screen.Settings.route,
-                            Screen.AddonManager.route
-                        )
+                    LaunchedEffect(discoverLocation, currentRoute) {
+                        if (discoverLocation == null) return@LaunchedEffect
+                        val onDiscoverRoute = currentRoute == Screen.Discover.route ||
+                            currentRoute?.startsWith("${Screen.Discover.route}/") == true
+                        if (discoverLocation == DiscoverLocation.OFF && onDiscoverRoute) {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(navController.graph.startDestinationId) { saveState = false }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+
+                    val rootRoutes = remember(discoverLocation) {
+                        buildSet {
+                            add(Screen.Home.route)
+                            add(Screen.Search.route)
+                            add(Screen.Library.route)
+                            add(Screen.Settings.route)
+                            add(Screen.AddonManager.route)
+                            if (discoverLocation == DiscoverLocation.IN_SIDEBAR) {
+                                add(Screen.Discover.route)
+                            }
+                        }
                     }
 
                     val strNavHome = stringResource(R.string.nav_home)
+                    val strNavDiscover = stringResource(R.string.nav_discover)
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
                     val strNavAddons = stringResource(R.string.nav_addons)
                     val strNavSettings = stringResource(R.string.nav_settings)
                     val drawerItems = remember(
                         strNavHome,
+                        strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
                         strNavAddons,
-                        strNavSettings
+                        strNavSettings,
+                        discoverLocation
                     ) {
-                        listOf(
-                            DrawerItem(
-                                route = Screen.Home.route,
-                                label = strNavHome,
-                                icon = Icons.Default.Home
-                            ),
-                            DrawerItem(
-                                route = Screen.Search.route,
-                                label = strNavSearch,
-                                iconRes = R.raw.sidebar_search
-                            ),
-                            DrawerItem(
-                                route = Screen.Library.route,
-                                label = strNavLibrary,
-                                iconRes = R.raw.sidebar_library
-                            ),
-                            DrawerItem(
-                                route = Screen.AddonManager.route,
-                                label = strNavAddons,
-                                iconRes = R.raw.sidebar_plugin
-                            ),
-                            DrawerItem(
-                                route = Screen.Settings.route,
-                                label = strNavSettings,
-                                iconRes = R.raw.sidebar_settings
+                        buildList {
+                            add(
+                                DrawerItem(
+                                    route = Screen.Home.route,
+                                    label = strNavHome,
+                                    icon = Icons.Default.Home
+                                )
                             )
-                        )
+                            if (discoverLocation == DiscoverLocation.IN_SIDEBAR) {
+                                add(
+                                    DrawerItem(
+                                        route = Screen.Discover.route,
+                                        label = strNavDiscover,
+                                        icon = Icons.Default.Explore
+                                    )
+                                )
+                            }
+                            add(
+                                DrawerItem(
+                                    route = Screen.Search.route,
+                                    label = strNavSearch,
+                                    iconRes = R.raw.sidebar_search
+                                )
+                            )
+                            add(
+                                DrawerItem(
+                                    route = Screen.Library.route,
+                                    label = strNavLibrary,
+                                    iconRes = R.raw.sidebar_library
+                                )
+                            )
+                            add(
+                                DrawerItem(
+                                    route = Screen.AddonManager.route,
+                                    label = strNavAddons,
+                                    iconRes = R.raw.sidebar_plugin
+                                )
+                            )
+                            add(
+                                DrawerItem(
+                                    route = Screen.Settings.route,
+                                    label = strNavSettings,
+                                    iconRes = R.raw.sidebar_settings
+                                )
+                            )
+                        }
                     }
                     val selectedDrawerRoute = drawerItems.firstOrNull { item ->
                         currentRoute == item.route || currentRoute?.startsWith("${item.route}/") == true
@@ -668,6 +719,27 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Composable
+private fun SidebarFocusRecoveryEffect(
+    drawerItems: List<DrawerItem>,
+    selectedDrawerRoute: String?,
+    drawerItemFocusRequesters: Map<String, FocusRequester>,
+    sidebarOwnsFocus: Boolean
+) {
+    LaunchedEffect(drawerItems, sidebarOwnsFocus, selectedDrawerRoute) {
+        if (!sidebarOwnsFocus) {
+            return@LaunchedEffect
+        }
+        if (selectedDrawerRoute != null && drawerItems.any { it.route == selectedDrawerRoute }) {
+            return@LaunchedEffect
+        }
+        val fallbackRoute = drawerItems.firstOrNull()?.route ?: return@LaunchedEffect
+        val requester = drawerItemFocusRequesters[fallbackRoute] ?: return@LaunchedEffect
+        repeat(2) { withFrameNanos { } }
+        runCatching { requester.requestFocus() }
+    }
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun LegacySidebarScaffold(
@@ -688,9 +760,7 @@ private fun LegacySidebarScaffold(
     onExitApp: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val drawerItemFocusRequesters = remember(drawerItems) {
-        drawerItems.associate { item -> item.route to FocusRequester() }
-    }
+    val drawerItemFocusRequesters = rememberDrawerItemFocusRequesters(drawerItems)
     val showSidebar = currentRoute in rootRoutes
 
     LaunchedEffect(currentRoute) {
@@ -706,6 +776,21 @@ private fun LegacySidebarScaffold(
     val contentFocusRequester = remember { FocusRequester() }
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
     var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
+    // Bumped on every key event the drawer sees so the auto-collapse timer
+    // resets while the user navigates between drawer items.
+    var legacyDrawerInteractionVersion by remember { mutableStateOf(0) }
+
+    // Auto-close the legacy drawer after a short period of inactivity, mirroring
+    // the modern sidebar behaviour. The timer resets every time the user
+    // navigates inside the drawer (legacyDrawerInteractionVersion change).
+    LaunchedEffect(drawerState.currentValue, legacyDrawerInteractionVersion, showSidebar) {
+        if (!showSidebar || drawerState.currentValue != DrawerValue.Open) {
+            return@LaunchedEffect
+        }
+        delay(SIDEBAR_AUTO_COLLAPSE_DELAY_MS)
+        pendingContentFocusTransfer = false
+        drawerState.setValue(DrawerValue.Closed)
+    }
 
     BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed) {
         pendingSidebarFocusRequest = true
@@ -729,7 +814,7 @@ private fun LegacySidebarScaffold(
         if (!showSidebar || !pendingSidebarFocusRequest || drawerState.currentValue != DrawerValue.Open) {
             return@LaunchedEffect
         }
-        val targetRoute = selectedDrawerRoute ?: run {
+        val targetRoute = selectedDrawerRoute ?: drawerItems.firstOrNull()?.route ?: run {
             pendingSidebarFocusRequest = false
             return@LaunchedEffect
         }
@@ -741,6 +826,13 @@ private fun LegacySidebarScaffold(
         runCatching { requester.requestFocus() }
         pendingSidebarFocusRequest = false
     }
+
+    SidebarFocusRecoveryEffect(
+        drawerItems = drawerItems,
+        selectedDrawerRoute = selectedDrawerRoute,
+        drawerItemFocusRequesters = drawerItemFocusRequesters,
+        sidebarOwnsFocus = showSidebar && drawerState.currentValue == DrawerValue.Open
+    )
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -755,6 +847,9 @@ private fun LegacySidebarScaffold(
                         .padding(12.dp)
                         .selectableGroup()
                         .onPreviewKeyEvent { keyEvent ->
+                            if (keyEvent.type == KeyEventType.KeyDown) {
+                                legacyDrawerInteractionVersion++
+                            }
                             val closeKey = if (isRtl) Key.DirectionLeft else Key.DirectionRight
                             if (keyEvent.key == closeKey && keyEvent.type == KeyEventType.KeyDown) {
                                 drawerState.setValue(DrawerValue.Closed)
@@ -766,7 +861,11 @@ private fun LegacySidebarScaffold(
                         }
                 ) {
                     val isExpanded = drawerValue == DrawerValue.Open
-                    val itemWidth = if (isExpanded) openDrawerItemWidth else 48.dp
+                    val itemWidth by animateDpAsState(
+                        targetValue = if (isExpanded) openDrawerItemWidth else 48.dp,
+                        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+                        label = "legacySidebarItemWidth"
+                    )
 
                     if (isExpanded) {
                         Column(
@@ -839,33 +938,37 @@ private fun LegacySidebarScaffold(
                             .offset(y = 28.dp)
                             .fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
-                        horizontalAlignment = if (isExpanded) Alignment.CenterHorizontally else Alignment.Start
+                        horizontalAlignment = Alignment.Start
                     ) {
                         drawerItems.forEach { item ->
-                            LegacySidebarButton(
-                                label = item.label,
-                                iconRes = item.iconRes,
-                                icon = item.icon,
-                                selected = selectedDrawerRoute == item.route,
-                                expanded = isExpanded,
-                                onClick = {
-                                    onNavigate(item.route)
-                                    navigateToDrawerRoute(
-                                        navController = navController,
-                                        currentRoute = currentRoute,
-                                        targetRoute = item.route
+                            key(item.route) {
+                                LegacySidebarButton(
+                                    label = item.label,
+                                    iconRes = item.iconRes,
+                                    icon = item.icon,
+                                    selected = selectedDrawerRoute == item.route,
+                                    expanded = isExpanded,
+                                    onClick = {
+                                        onNavigate(item.route)
+                                        navigateToDrawerRoute(
+                                            navController = navController,
+                                            currentRoute = currentRoute,
+                                            targetRoute = item.route
+                                        )
+                                        drawerState.setValue(DrawerValue.Closed)
+                                        pendingContentFocusTransfer = currentRoute == item.route
+                                    },
+                                    modifier = Modifier.focusRequester(
+                                        drawerItemFocusRequesters.getValue(item.route)
                                     )
-                                    drawerState.setValue(DrawerValue.Closed)
-                                    pendingContentFocusTransfer = true
-                                },
-                                modifier = Modifier.focusRequester(
-                                    drawerItemFocusRequesters.getValue(item.route)
-                                ).width(itemWidth)
-                            )
+                                        .width(itemWidth)
+                                        .offset(x = 12.dp)
+                                )
                         }
                     }
                 }
             }
+        }
         }
     ) {
         val contentStartPadding by animateDpAsState(
@@ -949,11 +1052,21 @@ private fun LegacySidebarButton(
         },
         label = "legacySidebarItemIconTint"
     )
+    val itemScale by animateFloatAsState(
+        targetValue = if (isFocused && expanded) 1.1f else 1f,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "legacySidebarItemScale"
+    )
 
     Card(
         onClick = onClick,
         modifier = modifier
             .height(52.dp)
+            .graphicsLayer {
+                scaleX = itemScale
+                scaleY = itemScale
+                transformOrigin = TransformOrigin.Center
+            }
             .focusProperties { canFocus = expanded }
             .onFocusChanged { isFocused = it.hasFocus },
         colors = CardDefaults.colors(
@@ -967,23 +1080,18 @@ private fun LegacySidebarButton(
                 shape = itemShape
             )
         ),
-        shape = CardDefaults.shape(shape = itemShape)
+        shape = CardDefaults.shape(shape = itemShape),
+        scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
         DrawerItemIcon(
             iconRes = iconRes,
             icon = icon,
             tint = iconTint,
-            modifier = if (expanded) {
-                Modifier
-                    .size(22.dp)
-                    .align(Alignment.CenterStart)
-                    .offset(x = 13.dp)
-            } else {
-                Modifier
-                    .size(22.dp)
-                    .align(Alignment.Center)
-            }
+            modifier = Modifier
+                .size(22.dp)
+                .align(Alignment.CenterStart)
+                .offset(x = 13.dp)
         )
         if (expanded) {
             com.nuvio.tv.ui.components.AutoResizeText(
@@ -1027,9 +1135,7 @@ private fun ModernSidebarScaffold(
     val focusManager = LocalFocusManager.current
     val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     val contentFocusRequester = remember { FocusRequester() }
-    val drawerItemFocusRequesters = remember(drawerItems) {
-        drawerItems.associate { item -> item.route to FocusRequester() }
-    }
+    val drawerItemFocusRequesters = rememberDrawerItemFocusRequesters(drawerItems)
 
     var isSidebarExpanded by remember { mutableStateOf(false) }
     var sidebarCollapsePending by remember { mutableStateOf(false) }
@@ -1080,6 +1186,32 @@ private fun ModernSidebarScaffold(
         delay(95L)
         isSidebarExpanded = false
         sidebarCollapsePending = false
+    }
+
+    // Auto-collapse the expanded sidebar after a short period of inactivity.
+    // The timer resets every time focus moves between drawer items, so the
+    // sidebar only folds back up once the user stops navigating it. We keep
+    // pendingContentFocusTransfer = false so the focus stays parked on the
+    // (now collapsed) sidebar pill instead of jumping back into the content.
+    LaunchedEffect(isSidebarExpanded, focusedDrawerIndex, sidebarCollapsePending, showSidebar) {
+        if (!showSidebar || !isSidebarExpanded || sidebarCollapsePending) {
+            return@LaunchedEffect
+        }
+        delay(SIDEBAR_AUTO_COLLAPSE_DELAY_MS)
+        pendingContentFocusTransfer = false
+        sidebarCollapsePending = true
+    }
+
+    // Auto-collapse the floating pill back to icon-only when the user reveals
+    // its label (DPAD UP from content) and then leaves it idle. The DPAD DOWN
+    // path already collapses it instantly, this just covers the case where the
+    // user releases UP and walks away.
+    LaunchedEffect(isFloatingPillIconOnly, keepFloatingPillExpanded, showSidebar, isSidebarExpanded) {
+        if (!showSidebar || isFloatingPillIconOnly || keepFloatingPillExpanded || isSidebarExpanded) {
+            return@LaunchedEffect
+        }
+        delay(SIDEBAR_AUTO_COLLAPSE_DELAY_MS)
+        isFloatingPillIconOnly = true
     }
 
     val sidebarVisible = showSidebar && (isSidebarExpanded || !sidebarCollapsed)
@@ -1207,7 +1339,7 @@ private fun ModernSidebarScaffold(
         if (!showSidebar || !pendingSidebarFocusRequest || !isSidebarExpanded) {
             return@LaunchedEffect
         }
-        val targetRoute = selectedDrawerRoute ?: run {
+        val targetRoute = selectedDrawerRoute ?: drawerItems.firstOrNull()?.route ?: run {
             pendingSidebarFocusRequest = false
             return@LaunchedEffect
         }
@@ -1219,6 +1351,13 @@ private fun ModernSidebarScaffold(
         runCatching { requester.requestFocus() }
         pendingSidebarFocusRequest = false
     }
+
+    SidebarFocusRecoveryEffect(
+        drawerItems = drawerItems,
+        selectedDrawerRoute = selectedDrawerRoute,
+        drawerItemFocusRequesters = drawerItemFocusRequesters,
+        sidebarOwnsFocus = showSidebar && isSidebarExpanded
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -1351,7 +1490,7 @@ private fun ModernSidebarScaffold(
                             pendingSidebarFocusRequest = false
                             isSidebarExpanded = false
                             sidebarCollapsePending = false
-                            pendingContentFocusTransfer = true
+                            pendingContentFocusTransfer = currentRoute == targetRoute
                         },
                         activeProfileName = activeProfileName,
                         activeProfileColorHex = activeProfileColorHex,
@@ -1567,6 +1706,7 @@ private fun rememberRawSvgPainter(rawIconRes: Int): Painter {
 
 object LocaleCache {
     const val UNSET = "__UNSET__"
+
     @Volatile
     var localeTag: String = UNSET
 }

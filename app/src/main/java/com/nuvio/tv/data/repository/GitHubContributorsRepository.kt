@@ -20,18 +20,19 @@ data class GitHubContributor(
 
 @Singleton
 class GitHubContributorsRepository @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val contributionsApi: UniqueContributionsApi,
     @param:Named("uniqueContributionsBaseUrl") private val contributionsBaseUrl: String
 ) {
 
     suspend fun getContributors(): Result<List<GitHubContributor>> = runCatching {
         if (contributionsBaseUrl.isBlank()) {
-            error("Contributors API is not configured.")
+            error(appContext.getString(com.nuvio.tv.R.string.contributors_error_api_not_configured))
         }
 
         val response = contributionsApi.getUniqueContributions()
         if (!response.isSuccessful) {
-            error("Contributors API error: ${response.code()}")
+            error(appContext.getString(com.nuvio.tv.R.string.contributors_error_api_http, response.code()))
         }
 
         response.body()

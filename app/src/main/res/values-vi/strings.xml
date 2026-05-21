@@ -21,6 +21,11 @@
     <string name="cw_min_left">Còn %1$dp</string>
     <string name="cw_almost_done">Sắp xong rồi</string>
     <string name="cw_airs_date">Phát sóng %1$s</string>
+    <string name="cw_airs_today">Phát sóng hôm nay</string>
+    <string name="cw_airs_tomorrow">Phát sóng ngày mai</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="other">Phát sóng trong %d ngày nữa</item>
+    </plurals>
     <string name="cw_action_go_to_details">Xem chi tiết</string>
     <string name="cw_action_start_from_beginning">Xem từ đầu</string>
     <string name="cw_action_remove">Xoá</string>
@@ -223,6 +228,8 @@
     <string name="sub_forced_lang">Bắt buộc</string>
     <string name="sub_preferred_lang">Ngôn ngữ ưa thích</string>
     <string name="sub_secondary_lang">Ngôn ngữ ưa thích thứ hai</string>
+    <string name="sub_use_forced_subtitles">Sử dụng phụ đề bắt buộc</string>
+    <string name="sub_use_forced_subtitles_desc">Ưu tiên phụ đề bắt buộc khi âm thanh khớp với ngôn ngữ phụ đề; nếu không có, không chọn gì</string>
     <string name="sub_show_only_preferred_languages">Chỉ hiển thị ngôn ngữ ưu tiên</string>
     <string name="sub_show_only_preferred_languages_desc">Ẩn tất cả ngôn ngữ phụ đề khác khỏi danh sách chọn</string>
     <string name="sub_organization">Sắp xếp phụ đề</string>
@@ -674,7 +681,7 @@
     <string name="pause_back_to_details">Quay lại chi tiết</string>
     <string name="pause_as_character">vai %1$s</string>
 
-    <!-- NextEpisodeCardOverlay -->
+    <!-- PostPlayOverlay -->
     <string name="next_episode_label">Tập tiếp theo</string>
     <string name="next_episode_finding_source">Đang tìm nguồn…</string>
     <string name="next_episode_playing_via">Xem từ %1$s sau %2$ds</string>

@@ -47,6 +47,10 @@ data class CollectionEditorUiState(
     val folders: List<CollectionFolder> = emptyList(),
     val isLoading: Boolean = true,
     val availableCatalogs: List<AvailableCatalog> = emptyList(),
+    /** Friendly catalog/addon names for every installed addon catalog, keyed by
+     *  `"addonId|type|catalogId"`. Unlike [availableCatalogs], this map is not
+     *  filtered to picker-compatible catalogs. */
+    val addonCatalogInfoByKey: Map<String, AddonCatalogInfo> = emptyMap(),
     val editingFolder: CollectionFolder? = null,
     val showFolderEditor: Boolean = false,
     val showCatalogPicker: Boolean = false,
@@ -86,6 +90,11 @@ data class AvailableCatalog(
     val catalogName: String,
     val genreOptions: List<String> = emptyList(),
     val genreRequired: Boolean = false
+)
+
+data class AddonCatalogInfo(
+    val catalogName: String,
+    val addonName: String
 )
 
 enum class TmdbBuilderMode {
@@ -147,6 +156,12 @@ class CollectionEditorViewModel @Inject constructor(
                         )
                     }
             }
+            val addonCatalogInfoByKey = addons.flatMap { addon ->
+                addon.catalogs.map { catalog ->
+                    "${addon.id}|${catalog.apiType}|${catalog.id}" to
+                        AddonCatalogInfo(catalogName = catalog.name, addonName = addon.displayName)
+                }
+            }.toMap()
 
             if (collectionIdArg.isNotBlank()) {
                 val collections = collectionsDataStore.collections.first()
@@ -164,6 +179,7 @@ class CollectionEditorViewModel @Inject constructor(
                             showAllTab = existing.showAllTab,
                             folders = existing.folders,
                             availableCatalogs = availableCatalogs,
+                            addonCatalogInfoByKey = addonCatalogInfoByKey,
                             isLoading = false
                         )
                     }
@@ -176,6 +192,7 @@ class CollectionEditorViewModel @Inject constructor(
                     isNew = true,
                     collectionId = collectionsDataStore.generateId(),
                     availableCatalogs = availableCatalogs,
+                    addonCatalogInfoByKey = addonCatalogInfoByKey,
                     isLoading = false
                 )
             }
@@ -551,7 +568,7 @@ class CollectionEditorViewModel @Inject constructor(
                 it.copy(
                     traktSearchResults = mapped,
                     traktSearchError = results.exceptionOrNull()?.message
-                        ?: if (mapped.isEmpty()) "No Trakt lists found" else null
+                        ?: if (mapped.isEmpty()) string(R.string.collection_editor_no_trakt_lists_found) else null
                 )
             }
         }
@@ -1062,7 +1079,7 @@ class CollectionEditorViewModel @Inject constructor(
         val rawFolder = _uiState.value.editingFolder ?: return
         if (rawFolder.sources.isEmpty()) return
         val cleanedFolder = rawFolder.copy(
-            title = rawFolder.title.ifBlank { "Untitled" },
+            title = rawFolder.title.ifBlank { string(R.string.collection_editor_untitled_folder) },
             coverImageUrl = rawFolder.coverImageUrl?.ifBlank { null },
             heroBackdropUrl = rawFolder.heroBackdropUrl?.ifBlank { null },
             heroVideoUrl = rawFolder.heroVideoUrl?.ifBlank { null },
@@ -1109,7 +1126,7 @@ class CollectionEditorViewModel @Inject constructor(
         viewModelScope.launch {
             val collection = Collection(
                 id = state.collectionId,
-                title = state.title.ifBlank { "Untitled Collection" },
+                title = state.title.ifBlank { string(R.string.collection_editor_untitled_collection) },
                 backdropImageUrl = state.backdropImageUrl.ifBlank { null },
                 pinToTop = state.pinToTop,
                 focusGlowEnabled = state.focusGlowEnabled,

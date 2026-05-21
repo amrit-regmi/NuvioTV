@@ -212,6 +212,23 @@ fun GenrePickerOptionCard(
     }
 }
 
+@androidx.annotation.StringRes
+private fun emojiCategoryLabel(key: String): Int = when (key) {
+    "Streaming" -> R.string.collections_editor_emoji_category_streaming
+    "Genres" -> R.string.collections_editor_emoji_category_genres
+    "Sports" -> R.string.collections_editor_emoji_category_sports
+    "Music" -> R.string.collections_editor_emoji_category_music
+    "Nature" -> R.string.collections_editor_emoji_category_nature
+    "Animals" -> R.string.collections_editor_emoji_category_animals
+    "Food" -> R.string.collections_editor_emoji_category_food
+    "Travel" -> R.string.collections_editor_emoji_category_travel
+    "People" -> R.string.collections_editor_emoji_category_people
+    "Objects" -> R.string.collections_editor_emoji_category_objects
+    "Flags" -> R.string.collections_editor_emoji_category_flags
+    "Symbols" -> R.string.collections_editor_emoji_category_symbols
+    else -> R.string.collections_editor_emoji_category_symbols
+}
+
 private val emojiCategories = linkedMapOf(
     "Streaming" to listOf("🎬", "🎭", "🎥", "📺", "🍿", "🎞️", "📽️", "🎦", "📡", "📻"),
     "Genres" to listOf("💀", "👻", "🔪", "💣", "🚀", "🛸", "🧙", "🦸", "🧟", "🤖", "💘", "😂", "😱", "🤯", "🥺", "😈"),
@@ -289,7 +306,7 @@ fun EmojiPickerContent(
             emojiCategories.forEach { (category, emojis) ->
                 item(key = "category_$category") {
                     Text(
-                        text = category,
+                        text = stringResource(emojiCategoryLabel(category)),
                         style = MaterialTheme.typography.titleSmall,
                         color = NuvioColors.TextSecondary
                     )

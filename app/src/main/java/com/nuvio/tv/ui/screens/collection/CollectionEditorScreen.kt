@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -34,7 +35,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -79,6 +83,7 @@ import com.nuvio.tv.domain.model.TmdbCollectionSort
 import com.nuvio.tv.domain.model.TmdbCollectionSource
 import com.nuvio.tv.domain.model.TmdbCollectionSourceType
 import com.nuvio.tv.ui.components.LoadingIndicator
+import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.R
 import androidx.compose.ui.res.stringResource
@@ -90,6 +95,33 @@ fun CollectionEditorScreen(
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val listState = rememberLazyListState()
+    var lastFocusedFolderId by rememberSaveable { mutableStateOf<String?>(null) }
+    val folderFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+
+    var folderToDelete by remember { mutableStateOf<CollectionFolder?>(null) }
+    val deleteDialogFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(folderToDelete) {
+        if (folderToDelete != null) {
+            repeat(3) { withFrameNanos { } }
+            try {
+                deleteDialogFocusRequester.requestFocus()
+            } catch (_: Exception) {}
+        }
+    }
+
+    LaunchedEffect(uiState.showFolderEditor) {
+        if (!uiState.showFolderEditor && lastFocusedFolderId != null) {
+            val targetId = lastFocusedFolderId!!
+            repeat(3) { withFrameNanos { } }
+
+            try {
+                folderFocusRequesters[targetId]?.requestFocus()
+            } catch (_: Exception) {}
+        }
+    }
 
     if (uiState.isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -107,6 +139,7 @@ fun CollectionEditorScreen(
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .padding(top = 48.dp),
@@ -398,13 +431,18 @@ fun CollectionEditorScreen(
             items = uiState.folders,
             key = { _, folder -> folder.id }
         ) { index, folder ->
+            val editFocusRequester = folderFocusRequesters.getOrPut(folder.id) { FocusRequester() }
             Box(modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp)) {
                 FolderListItem(
                     folder = folder,
                     isFirst = index == 0,
                     isLast = index == uiState.folders.size - 1,
-                    onEdit = { viewModel.editFolder(folder.id) },
-                    onDelete = { viewModel.removeFolder(folder.id) },
+                    editFocusRequester = editFocusRequester,
+                    onEdit = {
+                        lastFocusedFolderId = folder.id
+                        viewModel.editFolder(folder.id)
+                    },
+                    onDelete = { folderToDelete = folder },
                     onMoveUp = { viewModel.moveFolderUp(index) },
                     onMoveDown = { viewModel.moveFolderDown(index) }
                 )
@@ -412,11 +450,47 @@ fun CollectionEditorScreen(
         }
 
         item(key = "add_folder") {
+            val addFolderFocusRequester = folderFocusRequesters.getOrPut("add_folder") { FocusRequester() }
             Box(modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 4.dp)) {
-                NuvioButton(onClick = { viewModel.addFolder() }) {
+                NuvioButton(
+                    onClick = {
+                        lastFocusedFolderId = "add_folder"
+                        viewModel.addFolder()
+                    },
+                    modifier = Modifier.focusRequester(addFolderFocusRequester)
+                ) {
                     Icon(imageVector = Icons.Default.Add, contentDescription = stringResource(R.string.cd_add))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.collections_editor_add_folder))
+                }
+            }
+        }
+    }
+
+    folderToDelete?.let { folder ->
+        NuvioDialog(
+            onDismiss = { folderToDelete = null },
+            title = stringResource(R.string.collections_editor_delete_folder_title),
+            subtitle = stringResource(R.string.collections_editor_delete_folder_subtitle, folder.title),
+            suppressFirstKeyUp = false
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+            ) {
+                NuvioButton(
+                    onClick = { folderToDelete = null },
+                    modifier = Modifier.focusRequester(deleteDialogFocusRequester)
+                ) {
+                    Text(stringResource(R.string.collections_cancel))
+                }
+                NuvioButton(
+                    onClick = {
+                        viewModel.removeFolder(folder.id)
+                        folderToDelete = null
+                    }
+                ) {
+                    Text(stringResource(R.string.cd_delete))
                 }
             }
         }
@@ -429,6 +503,7 @@ private fun FolderListItem(
     folder: CollectionFolder,
     isFirst: Boolean,
     isLast: Boolean,
+    editFocusRequester: FocusRequester? = null,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onMoveUp: () -> Unit,
@@ -454,8 +529,15 @@ private fun FolderListItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                val shapeLabel = stringResource(
+                    when (folder.tileShape) {
+                        com.nuvio.tv.domain.model.PosterShape.POSTER -> R.string.collections_editor_shape_poster
+                        com.nuvio.tv.domain.model.PosterShape.LANDSCAPE -> R.string.collections_editor_shape_wide
+                        com.nuvio.tv.domain.model.PosterShape.SQUARE -> R.string.collections_editor_shape_square
+                    }
+                )
                 Text(
-                    text = "${folder.tileShape.name.lowercase().replaceFirstChar { it.uppercase() }} - ${stringResource(R.string.collections_editor_source_count, folder.sources.size)}",
+                    text = "$shapeLabel - ${stringResource(R.string.collections_editor_source_count, folder.sources.size)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextTertiary
                 )
@@ -468,7 +550,10 @@ private fun FolderListItem(
                 NuvioButton(onClick = onMoveDown) {
                     Icon(Icons.Default.KeyboardArrowDown, stringResource(R.string.cd_move_down), tint = if (!isLast) NuvioColors.TextSecondary else NuvioColors.TextTertiary)
                 }
-                NuvioButton(onClick = onEdit) {
+                NuvioButton(
+                    onClick = onEdit,
+                    modifier = if (editFocusRequester != null) Modifier.focusRequester(editFocusRequester) else Modifier
+                ) {
                     Icon(Icons.Default.Edit, stringResource(R.string.cd_edit), tint = NuvioColors.TextSecondary)
                 }
                 NuvioButton(onClick = onDelete) {

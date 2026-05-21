@@ -62,12 +62,16 @@ internal fun PlayerRuntimeController.buildMediaSessionMetadata(): MediaMetadata 
 internal fun PlayerRuntimeController.updateMediaSessionMetadata() {
     val session = currentMediaSession ?: return
     val metadata = buildMediaSessionMetadata()
+    val mediaId = currentFilename?.takeIf { it.isNotBlank() }
     try {
         // Media3 MediaSession reads metadata from the player's current MediaItem.
         // Setting mediaMetadata on the player propagates to the session automatically.
         _exoPlayer?.let { player ->
             val current = player.currentMediaItem ?: return@let
             val updated = current.buildUpon()
+                .apply {
+                    mediaId?.let(::setMediaId)
+                }
                 .setMediaMetadata(metadata)
                 .build()
             player.replaceMediaItem(player.currentMediaItemIndex, updated)
@@ -75,7 +79,7 @@ internal fun PlayerRuntimeController.updateMediaSessionMetadata() {
         Log.d(
             PlayerRuntimeController.TAG,
             "MediaSession metadata updated: title=${metadata.title}, " +
-                "artist=${metadata.artist}, artworkUri=${metadata.artworkUri}"
+                "artist=${metadata.artist}, mediaId=$mediaId, artworkUri=${metadata.artworkUri}"
         )
     } catch (e: Exception) {
         Log.w(PlayerRuntimeController.TAG, "Failed to update MediaSession metadata", e)

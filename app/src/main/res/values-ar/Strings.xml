@@ -115,6 +115,16 @@
     <string name="cw_min_left">متبقي %1$d د</string>
     <string name="cw_almost_done">على وشك الانتهاء</string>
     <string name="cw_airs_date">يُعرض في %1$s</string>
+    <string name="cw_airs_today">يُعرض اليوم</string>
+    <string name="cw_airs_tomorrow">يُعرض غداً</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="zero">يُعرض بعد %d يوم</item>
+        <item quantity="one">يُعرض بعد يوم</item>
+        <item quantity="two">يُعرض بعد يومين</item>
+        <item quantity="few">يُعرض بعد %d أيام</item>
+        <item quantity="many">يُعرض بعد %d يوماً</item>
+        <item quantity="other">يُعرض بعد %d يوم</item>
+    </plurals>
     <string name="cw_action_go_to_details">التفاصيل</string>
     <string name="cw_action_start_from_beginning">البدء من البداية</string>
     <string name="cw_action_remove">إزالة</string>
@@ -417,6 +427,8 @@
     <string name="sub_forced_lang">إجبارية</string>
     <string name="sub_preferred_lang">اللغة المفضلة</string>
     <string name="sub_secondary_lang">اللغة المفضلة الثانوية</string>
+    <string name="sub_use_forced_subtitles">استخدام الترجمات الإجبارية</string>
+    <string name="sub_use_forced_subtitles_desc">فضّل الترجمات الإجبارية عندما تطابق لغة الصوت لغة الترجمة؛ إذا لم تتوفر، لا تحدد شيئًا</string>
     <string name="sub_show_only_preferred_languages">إظهار اللغات المفضلة فقط</string>
     <string name="sub_show_only_preferred_languages_desc">إخفاء جميع لغات الترجمة الأخرى من قائمة الاختيار</string>
     <string name="sub_organization">تنظيم الترجمة</string>
@@ -1028,7 +1040,7 @@
     <string name="pause_back_to_details">العودة للتفاصيل</string>
     <string name="pause_as_character">بدور %1$s</string>
 
-    <!-- NextEpisodeCardOverlay -->
+    <!-- PostPlayOverlay -->
     <string name="next_episode_label">الحلقة التالية</string>
     <string name="next_episode_finding_source">جاري البحث عن مصدر…</string>
     <string name="next_episode_playing_via">سيتم التشغيل بواسطة %1$s خلال %2$dث</string>

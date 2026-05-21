@@ -66,7 +66,7 @@ class TorrServerBinary @Inject constructor(
         killOrphanedProcess()
 
         if (!isBinaryAvailable) {
-            throw TorrentException("TorrServer binary not found at ${binaryFile.absolutePath}")
+            throw TorrentException(context.getString(com.nuvio.tv.R.string.torrent_error_binary_missing, binaryFile.absolutePath))
         }
 
         if (!binaryFile.canExecute()) {
@@ -108,13 +108,13 @@ class TorrServerBinary @Inject constructor(
             if (!isProcessAlive(process)) {
                 val exitCode = process?.exitValue() ?: -1
                 process = null
-                throw TorrentException("TorrServer process died on startup (exit code $exitCode)")
+                throw TorrentException(context.getString(com.nuvio.tv.R.string.torrent_error_process_died, exitCode))
             }
             delay(HEALTH_CHECK_INTERVAL_MS)
         }
 
         stop()
-        throw TorrentException("TorrServer failed to start within ${STARTUP_TIMEOUT_MS / 1000}s")
+        throw TorrentException(context.getString(com.nuvio.tv.R.string.torrent_error_start_timeout, (STARTUP_TIMEOUT_MS / 1000).toInt()))
     }
 
     private fun killOrphanedProcess() {

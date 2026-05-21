@@ -440,7 +440,7 @@ class AddonManagerViewModel @Inject constructor(
                         .map {
                             TmdbSourceSearchResultInfo(
                                 id = it.id,
-                                title = it.name ?: "TMDB Company ${it.id}",
+                                title = it.name ?: context.getString(com.nuvio.tv.R.string.web_tmdb_company_fallback, it.id),
                                 subtitle = it.originCountry?.takeIf { value -> value.isNotBlank() }
                             )
                         }
@@ -448,7 +448,7 @@ class AddonManagerViewModel @Inject constructor(
                         .map {
                             TmdbSourceSearchResultInfo(
                                 id = it.id,
-                                title = it.name ?: "TMDB Collection ${it.id}",
+                                title = it.name ?: context.getString(com.nuvio.tv.R.string.web_tmdb_collection_fallback, it.id),
                                 subtitle = it.overview?.takeIf { value -> value.isNotBlank() }
                             )
                         }
@@ -759,7 +759,9 @@ class AddonManagerViewModel @Inject constructor(
                                         withKeywords = source.filters.withKeywords,
                                         withCompanies = source.filters.withCompanies,
                                         withNetworks = source.filters.withNetworks,
-                                        year = source.filters.year
+                                        year = source.filters.year,
+                                        watchRegion = source.filters.watchRegion,
+                                        withWatchProviders = source.filters.withWatchProviders
                                     )
                                 )
                                 is TraktCollectionSource -> CollectionSourceInfo(

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +25,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
+import com.nuvio.tv.domain.model.DiscoverLocation
 import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
@@ -33,6 +35,7 @@ import kotlin.math.roundToInt
 @Composable
 fun DiscoverScreen(
     viewModel: SearchViewModel = hiltViewModel(),
+    showBuiltInHeader: Boolean = true,
     onNavigateToDetail: (String, String, String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -55,6 +58,12 @@ fun DiscoverScreen(
         )
     }
 
+    LaunchedEffect(uiState.discoverLocation) {
+        if (uiState.discoverLocation != DiscoverLocation.OFF) {
+            viewModel.ensureDiscoverLoaded()
+        }
+    }
+
     val latestPendingDiscoverRestore by rememberUpdatedState(pendingDiscoverRestoreOnResume)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -71,7 +80,7 @@ fun DiscoverScreen(
         modifier = Modifier
             .fillMaxSize()
     ) {
-        if (!uiState.discoverEnabled) {
+        if (uiState.discoverLocation == DiscoverLocation.OFF) {
             EmptyScreenState(
                 title = stringResource(R.string.discover_disabled_title),
                 subtitle = stringResource(R.string.discover_disabled_subtitle),
@@ -84,6 +93,7 @@ fun DiscoverScreen(
                 watchedMovieIds = watchedMovieIds,
                 watchedSeriesIds = watchedSeriesIds,
                 focusResults = false,
+                showBuiltInHeader = showBuiltInHeader,
                 firstItemFocusRequester = discoverFirstItemFocusRequester,
                 focusedItemIndex = discoverFocusedItemIndex,
                 shouldRestoreFocusedItem = restoreDiscoverFocus,

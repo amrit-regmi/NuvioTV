@@ -170,7 +170,7 @@ fun CatalogSeeAllScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = catalogRow?.catalogName ?: "Catalog",
+                text = catalogRow?.catalogName ?: stringResource(R.string.catalog_see_all_title_fallback),
                 style = MaterialTheme.typography.headlineLarge,
                 color = NuvioColors.TextPrimary
             )

@@ -115,6 +115,14 @@
     <string name="cw_min_left">Осталось %1$d мин</string>
     <string name="cw_almost_done">Почти закончено</string>
     <string name="cw_airs_date">Выходит %1$s</string>
+    <string name="cw_airs_today">Выходит сегодня</string>
+    <string name="cw_airs_tomorrow">Выходит завтра</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">Выходит через %d день</item>
+        <item quantity="few">Выходит через %d дня</item>
+        <item quantity="many">Выходит через %d дней</item>
+        <item quantity="other">Выходит через %d дней</item>
+    </plurals>
     <string name="cw_action_go_to_details">Перейти к деталям</string>
     <string name="cw_action_start_from_beginning">Начать сначала</string>
     <string name="cw_action_remove">Удалить</string>
@@ -425,6 +433,8 @@
     <string name="sub_forced_lang">Принудительные (Forced)</string>
     <string name="sub_preferred_lang">Предпочитаемый язык</string>
     <string name="sub_secondary_lang">Второй предпочитаемый язык</string>
+    <string name="sub_use_forced_subtitles">Использовать принудительные субтитры</string>
+    <string name="sub_use_forced_subtitles_desc">Предпочитать принудительные субтитры, когда язык аудио совпадает с языком субтитров; если они недоступны, ничего не выбирать</string>
     <string name="sub_show_only_preferred_languages">Показывать только предпочитаемые языки</string>
     <string name="sub_show_only_preferred_languages_desc">Скрыть все остальные языки субтитров из списка выбора</string>
     <string name="sub_organization">Сортировка субтитров</string>
@@ -1017,7 +1027,7 @@
     <string name="pause_back_to_details">Назад к деталям</string>
     <string name="pause_as_character">роль: %1$s</string>
 
-    <!-- NextEpisodeCardOverlay -->
+    <!-- PostPlayOverlay -->
     <string name="next_episode_label">Следующий эпизод</string>
     <string name="next_episode_finding_source">Поиск источника…</string>
     <string name="next_episode_playing_via">Воспроизведение через %1$s через %2$d с</string>

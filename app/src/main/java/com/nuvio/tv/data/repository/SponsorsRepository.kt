@@ -15,13 +15,14 @@ data class DevelopmentSponsor(
 
 @Singleton
 class SponsorsRepository @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val sponsorsApi: SponsorsApi
 ) {
 
     suspend fun getSponsors(): Result<List<DevelopmentSponsor>> = runCatching {
         val response = sponsorsApi.getSponsors()
         if (!response.isSuccessful) {
-            error("Sponsors API error: ${response.code()}")
+            error(appContext.getString(com.nuvio.tv.R.string.sponsors_error_api_http, response.code()))
         }
 
         response.body()

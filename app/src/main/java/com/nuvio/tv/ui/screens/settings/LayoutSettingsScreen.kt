@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -55,11 +57,14 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.domain.model.ContinueWatchingSortMode
+import com.nuvio.tv.domain.model.DiscoverLocation
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.ui.components.ClassicLayoutPreview
 import com.nuvio.tv.ui.components.GridLayoutPreview
 import com.nuvio.tv.ui.components.ModernLayoutPreview
+import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
 
 @Composable
@@ -100,6 +105,7 @@ fun LayoutSettingsContent(
     var continueWatchingExpanded by rememberSaveable { mutableStateOf(false) }
     var focusedPosterExpanded by rememberSaveable { mutableStateOf(false) }
     var posterCardStyleExpanded by rememberSaveable { mutableStateOf(false) }
+    var showCwSortModeDialog by rememberSaveable { mutableStateOf(false) }
 
     val defaultHomeLayoutHeaderFocus = remember { FocusRequester() }
     val homeContentHeaderFocus = remember { FocusRequester() }
@@ -345,6 +351,14 @@ fun LayoutSettingsContent(
                             onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
                         )
                     }
+                    DiscoverLocationRow(
+                        selectedLocation = uiState.discoverLocation,
+                        rememberedLocation = uiState.lastNonOffDiscoverLocation,
+                        onLocationSelected = { location ->
+                            viewModel.onEvent(LayoutSettingsEvent.SetDiscoverLocation(location))
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
+                    )
                     if (uiState.selectedLayout != HomeLayout.MODERN) {
                         CompactToggleRow(
                             title = stringResource(R.string.layout_show_hero),
@@ -358,17 +372,6 @@ fun LayoutSettingsContent(
                             onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
                         )
                     }
-                    CompactToggleRow(
-                        title = stringResource(R.string.layout_show_discover),
-                        subtitle = stringResource(R.string.layout_show_discover_sub),
-                        checked = uiState.searchDiscoverEnabled,
-                        onToggle = {
-                            viewModel.onEvent(
-                                LayoutSettingsEvent.SetSearchDiscoverEnabled(!uiState.searchDiscoverEnabled)
-                            )
-                        },
-                        onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
-                    )
                     if (uiState.selectedLayout != HomeLayout.MODERN) {
                         CompactToggleRow(
                             title = stringResource(R.string.layout_poster_labels),
@@ -541,6 +544,17 @@ fun LayoutSettingsContent(
                         },
                         onFocused = { focusedSection = LayoutSettingsSection.CONTINUE_WATCHING }
                     )
+
+                    SettingsActionRow(
+                        title = stringResource(R.string.layout_cw_sort_mode),
+                        subtitle = stringResource(R.string.layout_cw_sort_mode_sub),
+                        value = when (uiState.continueWatchingSortMode) {
+                            ContinueWatchingSortMode.DEFAULT -> stringResource(R.string.layout_cw_sort_default)
+                            ContinueWatchingSortMode.STREAMING_STYLE -> stringResource(R.string.layout_cw_sort_streaming)
+                        },
+                        onClick = { showCwSortModeDialog = true },
+                        onFocused = { focusedSection = LayoutSettingsSection.CONTINUE_WATCHING }
+                    )
                 }
             }
 
@@ -687,7 +701,48 @@ fun LayoutSettingsContent(
         SettingsVerticalScrollIndicators(state = layoutListState)
         }
         }
+
+        if (showCwSortModeDialog) {
+            ContinueWatchingSortModeDialog(
+                currentMode = uiState.continueWatchingSortMode,
+                onModeSelected = { mode ->
+                    viewModel.onEvent(LayoutSettingsEvent.SetContinueWatchingSortMode(mode))
+                    showCwSortModeDialog = false
+                },
+                onDismiss = { showCwSortModeDialog = false }
+            )
+        }
     }
+}
+
+@Composable
+private fun ContinueWatchingSortModeDialog(
+    currentMode: ContinueWatchingSortMode,
+    onModeSelected: (ContinueWatchingSortMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf(
+        SettingsPickerOption(
+            ContinueWatchingSortMode.DEFAULT,
+            stringResource(R.string.layout_cw_sort_default),
+            stringResource(R.string.layout_cw_sort_default_desc)
+        ),
+        SettingsPickerOption(
+            ContinueWatchingSortMode.STREAMING_STYLE,
+            stringResource(R.string.layout_cw_sort_streaming),
+            stringResource(R.string.layout_cw_sort_streaming_desc)
+        )
+    )
+
+    SettingsSingleChoiceDialog(
+        title = stringResource(R.string.layout_cw_sort_mode),
+        options = options,
+        selectedValue = currentMode,
+        onOptionSelected = onModeSelected,
+        onDismiss = onDismiss,
+        width = 420.dp,
+        maxHeight = 320.dp
+    )
 }
 
 @Composable
@@ -780,6 +835,94 @@ private fun ModernTrailerPlaybackTargetRow(
             )
         }
     }
+}
+
+@Composable
+private fun DiscoverLocationRow(
+    selectedLocation: DiscoverLocation,
+    rememberedLocation: DiscoverLocation,
+    onLocationSelected: (DiscoverLocation) -> Unit,
+    onFocused: () -> Unit
+) {
+    val sectionEnabled = selectedLocation != DiscoverLocation.OFF
+    var dialogOpen by remember { mutableStateOf(false) }
+
+    CompactToggleRow(
+        title = stringResource(R.string.layout_show_discover),
+        subtitle = stringResource(R.string.layout_show_discover_sub),
+        checked = sectionEnabled,
+        onToggle = {
+            onLocationSelected(
+                when (selectedLocation) {
+                    DiscoverLocation.OFF -> rememberedLocation
+                    DiscoverLocation.IN_SEARCH,
+                    DiscoverLocation.IN_SIDEBAR -> DiscoverLocation.OFF
+                }
+            )
+        },
+        onFocused = onFocused
+    )
+    if (sectionEnabled) {
+        val currentLabel = when (selectedLocation) {
+            DiscoverLocation.IN_SIDEBAR -> stringResource(R.string.layout_discover_location_in_sidebar)
+            DiscoverLocation.IN_SEARCH -> stringResource(R.string.layout_discover_location_in_search)
+            DiscoverLocation.OFF -> ""
+        }
+        SettingsActionRow(
+            title = stringResource(R.string.layout_discover_location_action),
+            subtitle = currentLabel,
+            onClick = { dialogOpen = true },
+            onFocused = onFocused
+        )
+    }
+
+    if (dialogOpen) {
+        DiscoverLocationDialog(
+            selectedLocation = selectedLocation,
+            onLocationSelected = { location ->
+                onLocationSelected(location)
+                dialogOpen = false
+            },
+            onDismiss = { dialogOpen = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun DiscoverLocationDialog(
+    selectedLocation: DiscoverLocation,
+    onLocationSelected: (DiscoverLocation) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf(
+        SettingsPickerOption(
+            DiscoverLocation.IN_SEARCH,
+            stringResource(R.string.layout_discover_location_in_search),
+            stringResource(R.string.layout_discover_location_in_search_desc)
+        ),
+        SettingsPickerOption(
+            DiscoverLocation.IN_SIDEBAR,
+            stringResource(R.string.layout_discover_location_in_sidebar),
+            stringResource(R.string.layout_discover_location_in_sidebar_desc)
+        )
+    )
+
+    val effectiveSelected = if (selectedLocation == DiscoverLocation.OFF) {
+        DiscoverLocation.IN_SEARCH
+    } else {
+        selectedLocation
+    }
+
+    SettingsSingleChoiceDialog(
+        title = stringResource(R.string.layout_discover_location_dialog_title),
+        options = options,
+        selectedValue = effectiveSelected,
+        onOptionSelected = onLocationSelected,
+        onDismiss = onDismiss,
+        width = 460.dp,
+        maxHeight = 320.dp
+    )
 }
 
 @Composable

@@ -25,6 +25,11 @@ enum class WatchProgressSource {
     }
 }
 
+enum class MoreLikeThisSourcePreference {
+    TRAKT,
+    TMDB
+}
+
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class TraktSettingsDataStore @Inject constructor(
@@ -39,6 +44,7 @@ class TraktSettingsDataStore @Inject constructor(
         const val DEFAULT_SHOW_META_COMMENTS = true
         val DEFAULT_WATCH_PROGRESS_SOURCE = WatchProgressSource.TRAKT
         val DEFAULT_LIBRARY_SOURCE_MODE = LibrarySourceMode.TRAKT
+        val DEFAULT_MORE_LIKE_THIS_SOURCE = MoreLikeThisSourcePreference.TRAKT
         const val MIN_CONTINUE_WATCHING_DAYS_CAP = 7
         const val MAX_CONTINUE_WATCHING_DAYS_CAP = 365
     }
@@ -53,6 +59,7 @@ class TraktSettingsDataStore @Inject constructor(
     private val showMetaCommentsKey = booleanPreferencesKey("show_meta_comments")
     private val watchProgressSourceKey = stringPreferencesKey("watch_progress_source")
     private val librarySourceModeKey = stringPreferencesKey("library_source_mode")
+    private val moreLikeThisSourceKey = stringPreferencesKey("more_like_this_source")
 
     val continueWatchingDaysCap: Flow<Int> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
@@ -64,7 +71,10 @@ class TraktSettingsDataStore @Inject constructor(
 
     val dismissedNextUpKeys: Flow<Set<String>> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
-            prefs[dismissedNextUpKeysKey] ?: emptySet()
+            val raw = prefs[dismissedNextUpKeysKey] ?: emptySet()
+            // Normalize: extract contentId from legacy "contentId|season|episode" keys
+            // so the check `contentId in dismissedSet` works for both old and new formats.
+            raw.mapTo(mutableSetOf()) { it.substringBefore("|") }
         }
     }
 
@@ -114,18 +124,23 @@ class TraktSettingsDataStore @Inject constructor(
 
     suspend fun addDismissedNextUpKey(key: String) {
         if (key.isBlank()) return
+        // Store just the contentId (no season/episode suffix) so dismiss
+        // survives anime episode remapping and seed changes.
+        val contentIdOnly = key.trim().substringBefore("|")
         store().edit { prefs ->
             val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
-            prefs[dismissedNextUpKeysKey] = current + key
+            prefs[dismissedNextUpKeysKey] = current + contentIdOnly
         }
     }
 
     suspend fun removeDismissedNextUpKeysForContent(contentId: String) {
         if (contentId.isBlank()) return
-        val prefix = "${contentId.trim()}|"
+        val trimmed = contentId.trim()
+        val prefix = "$trimmed|"
         store().edit { prefs ->
             val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
-            val filtered = current.filterNot { it.startsWith(prefix) }
+            // Remove both legacy format ("contentId|season|episode") and new format ("contentId")
+            val filtered = current.filterNot { it == trimmed || it.startsWith(prefix) }
             if (filtered.size != current.size) {
                 prefs[dismissedNextUpKeysKey] = filtered.toSet()
             }
@@ -160,6 +175,20 @@ class TraktSettingsDataStore @Inject constructor(
     suspend fun setLibrarySourceMode(mode: LibrarySourceMode) {
         store().edit { prefs ->
             prefs[librarySourceModeKey] = mode.name
+        }
+    }
+
+    val moreLikeThisSource: Flow<MoreLikeThisSourcePreference> = profileManager.activeProfileId.flatMapLatest { pid ->
+        factory.get(pid, FEATURE).data.map { prefs ->
+            val stored = prefs[moreLikeThisSourceKey]
+            MoreLikeThisSourcePreference.entries.firstOrNull { it.name == stored }
+                ?: DEFAULT_MORE_LIKE_THIS_SOURCE
+        }
+    }
+
+    suspend fun setMoreLikeThisSource(source: MoreLikeThisSourcePreference) {
+        store().edit { prefs ->
+            prefs[moreLikeThisSourceKey] = source.name
         }
     }
 }

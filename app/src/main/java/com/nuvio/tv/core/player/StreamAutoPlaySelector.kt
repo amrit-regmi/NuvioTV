@@ -13,13 +13,24 @@ object StreamAutoPlaySelector {
     ): List<AddonStreams> {
         if (streams.isEmpty()) return streams
 
-        val (addonEntries, pluginEntries) = streams.partition { it.addonName in installedOrder }
-        val orderedAddons = addonEntries.sortedBy { installedOrder.indexOf(it.addonName) }
-        return orderedAddons + pluginEntries
+        val addonRankByName = HashMap<String, Int>(installedOrder.size)
+        installedOrder.forEachIndexed { index, addonName ->
+            if (addonName !in addonRankByName) {
+                addonRankByName[addonName] = index
+            }
+        }
+
+        val (directDebridEntries, remainingEntries) = streams.partition {
+            it.streams.any { stream -> stream.isDirectDebrid() }
+        }
+        if (installedOrder.isEmpty()) return directDebridEntries + remainingEntries
+        val (addonEntries, pluginEntries) = remainingEntries.partition { it.addonName in addonRankByName }
+        val orderedAddons = addonEntries.sortedBy { addonRankByName.getValue(it.addonName) }
+        return directDebridEntries + orderedAddons + pluginEntries
     }
 
     private fun isPlayable(stream: Stream): Boolean =
-        stream.getStreamUrl() != null || stream.isTorrent()
+        stream.getStreamUrl() != null || stream.isTorrent() || stream.isDirectDebrid()
 
 
 
@@ -57,7 +68,6 @@ object StreamAutoPlaySelector {
             }
         }
         if (candidateStreams.isEmpty()) return null
-        if (mode == StreamAutoPlayMode.MANUAL) return null
 
         val targetBingeGroup = preferredBingeGroup?.trim().orEmpty()
         if (preferBingeGroupInSelection && targetBingeGroup.isNotEmpty()) {
@@ -70,6 +80,8 @@ object StreamAutoPlaySelector {
             // return null so the caller shows the stream picker instead.
             if (bingeGroupOnly) return null
         }
+
+        if (mode == StreamAutoPlayMode.MANUAL) return null
 
         return when (mode) {
             StreamAutoPlayMode.MANUAL -> null

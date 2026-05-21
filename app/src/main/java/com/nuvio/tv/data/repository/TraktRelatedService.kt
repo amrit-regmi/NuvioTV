@@ -32,6 +32,7 @@ internal data class ResolvedRelatedTarget(
 
 @Singleton
 class TraktRelatedService @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService
 ) {
@@ -73,7 +74,7 @@ class TraktRelatedService @Inject constructor(
                         id = target.pathId,
                         limit = RELATED_LIMIT
                     )
-                } ?: throw IllegalStateException("Trakt related request failed")
+                } ?: throw IllegalStateException(appContext.getString(com.nuvio.tv.R.string.trakt_related_error_request_failed))
 
                 when {
                     response.code() == 404 -> emptyList()
@@ -95,7 +96,7 @@ class TraktRelatedService @Inject constructor(
                         id = target.pathId,
                         limit = RELATED_LIMIT
                     )
-                } ?: throw IllegalStateException("Trakt related request failed")
+                } ?: throw IllegalStateException(appContext.getString(com.nuvio.tv.R.string.trakt_related_error_request_failed))
 
                 when {
                     response.code() == 404 -> emptyList()

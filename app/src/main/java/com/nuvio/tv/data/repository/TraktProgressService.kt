@@ -68,6 +68,7 @@ import javax.inject.Singleton
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class TraktProgressService @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
     private val metaRepository: MetaRepository,
@@ -80,6 +81,8 @@ class TraktProgressService @Inject constructor(
 ) {
     companion object {
         private const val TAG = "TraktProgressSvc"
+        private val MAPPING_CONCURRENCY =
+            maxOf(2, minOf(Runtime.getRuntime().availableProcessors() * 2, 16))
     }
 
     private fun trace(message: String) {
@@ -211,6 +214,7 @@ class TraktProgressService @Inject constructor(
     @Volatile
     private var metadataWarmupScheduled: Boolean = false
     private val episodeProgressActivityVersion = AtomicLong(0L)
+    private val mappingSemaphore = Semaphore(MAPPING_CONCURRENCY)
 
     private val playbackCacheTtlMs = 30_000L
     private val userStatsCacheTtlMs = Long.MAX_VALUE
@@ -462,16 +466,19 @@ class TraktProgressService @Inject constructor(
             watchedShowSeedsState,
             hiddenProgressShowIds
         ) { seeds, _ ->
-            // Replace IMDB-based seeds with TMDB when sibling mapping is available.
-            // This prevents addon meta resolution from returning anthology data.
+            // Replace IMDB-based seeds with TMDB ONLY for ambiguous IDs (anthology shows).
+            // Non-ambiguous shows keep their IMDB ID for correct deduplication.
             val currentSiblings = showIdSiblingsMap
             seeds
                 .filter { !isShowHiddenFromProgress(it.contentId) }
                 .map { seed ->
                     if (seed.contentId.startsWith("tt") && currentSiblings.isNotEmpty()) {
                         val siblings = currentSiblings[seed.contentId]
-                        val tmdbSibling = siblings?.firstOrNull { it.startsWith("tmdb:") }
-                        if (tmdbSibling != null) seed.copy(contentId = tmdbSibling) else seed
+                        val isAmbiguous = siblings != null && "__ambiguous__" in siblings
+                        if (isAmbiguous) {
+                            val tmdbSibling = siblings?.firstOrNull { it.startsWith("tmdb:") }
+                            if (tmdbSibling != null) seed.copy(contentId = tmdbSibling) else seed
+                        } else seed
                     } else seed
                 }
         }.onStart {
@@ -597,7 +604,7 @@ class TraktProgressService @Inject constructor(
             "contentType=${progress.contentType} title=$title year=$year")
 
         val body = buildHistoryAddRequest(progress, title, year)
-            ?: throw IllegalStateException("Insufficient Trakt IDs to mark watched")
+            ?: throw IllegalStateException(appContext.getString(com.nuvio.tv.R.string.trakt_error_insufficient_ids_mark_watched))
 
         val isSeriesEpisode = isSeriesEpisodeProgress(progress)
         val watchedShowSeedsSnapshot = if (isSeriesEpisode) {
@@ -616,7 +623,7 @@ class TraktProgressService @Inject constructor(
         val response = try {
             traktAuthService.executeAuthorizedWriteRequest { authHeader ->
                 traktApi.addHistory(authHeader, body)
-            } ?: throw IllegalStateException("Trakt request failed")
+            } ?: throw IllegalStateException(appContext.getString(com.nuvio.tv.R.string.trakt_error_request_failed))
         } catch (error: Throwable) {
             if (watchedShowSeedsSnapshot != null) {
                 restoreWatchedShowSeeds(watchedShowSeedsSnapshot)
@@ -668,7 +675,7 @@ class TraktProgressService @Inject constructor(
             if (watchedShowSeedsSnapshot != null) {
                 restoreWatchedShowSeeds(watchedShowSeedsSnapshot)
             }
-            throw IllegalStateException("Failed to mark watched on Trakt ($effectiveResponseCode)")
+            throw IllegalStateException(appContext.getString(com.nuvio.tv.R.string.trakt_error_mark_watched_failed, effectiveResponseCode))
         }
         if (!hasSuccessfulHistoryAdd(responseBody)) {
             trace("markAsWatched: Trakt accepted request with no new history rows (code=$effectiveResponseCode)")
@@ -1276,11 +1283,12 @@ class TraktProgressService @Inject constructor(
                 .map { it.key }
                 .toSet()
 
-            // Fix seeds that use IMDB as contentId when a TMDB sibling is known.
-            // Addons resolve meta more accurately by TMDB — using IMDB can return
-            // anthology meta (combined seasons from different shows) causing wrong next-up.
+            // Fix seeds that use IMDB as contentId when a TMDB sibling is known
+            // BUT ONLY for ambiguous IDs (anthology shows where one IMDB ID maps to
+            // multiple Trakt entries). Non-ambiguous shows must keep their IMDB ID
+            // so that deduplication against local in-progress items works correctly.
             val fixedWatchedShowSeeds = watchedShowSeeds.map { seed ->
-                if (seed.contentId.startsWith("tt")) {
+                if (seed.contentId.startsWith("tt") && seed.contentId in ambiguousIds) {
                     val siblings = siblingsMap[seed.contentId]
                     val tmdbSibling = siblings?.firstOrNull { it.startsWith("tmdb:") }
                     if (tmdbSibling != null) {
@@ -1631,15 +1639,20 @@ class TraktProgressService @Inject constructor(
             val historyDeferred = async { fetchRecentEpisodeHistorySnapshot() }
             val moviesDeferred = async {
                 val playback = getPlayback("movies", force = force, startAt = playbackStartAt)
-                playback.map { item -> async { mapPlaybackMovie(item) } }
+                playback.map { item -> async {
+                    mappingSemaphore.withPermit { mapPlaybackMovie(item) }
+                } }
                     .awaitAll()
                     .filterNotNull()
             }
             val episodesDeferred = async {
                 val playback = getPlayback("episodes", force = force, startAt = playbackStartAt)
-                playback.map { item -> async { mapPlaybackEpisode(item, applyAddonRemap = true) } }
-                    .awaitAll()
-                    .filterNotNull()
+                
+                playback.map { item ->
+                    async {
+                        mappingSemaphore.withPermit { mapPlaybackEpisode(item, applyAddonRemap = true) }
+                    }
+                }.awaitAll().filterNotNull()
             }
             val history = historyDeferred.await()
             val movies = moviesDeferred.await()
@@ -1741,11 +1754,22 @@ class TraktProgressService @Inject constructor(
                 }
             }
 
-            // Map candidates in parallel to speed up videoId resolution.
+            // Pre-fetch addon episode data for all unique shows so the mapping
+            // phase hits warm caches instead of waiting on per-show network calls.
             if (candidateItems.isNotEmpty()) {
+                val uniqueShowIds = candidateItems
+                    .mapNotNull { normalizeContentId(it.show?.ids).takeIf { id -> id.isNotBlank() } }
+                    .distinct()
+                traktEpisodeMappingService.prefetchAddonEpisodes(uniqueShowIds, concurrency = MAPPING_CONCURRENCY)
+
+                // Map candidates in parallel to speed up videoId resolution.
                 val mapped = coroutineScope {
                     candidateItems.map { item ->
-                        async { mapEpisodeHistoryItem(item, applyAddonRemap = true) }
+                        async {
+                            mappingSemaphore.withPermit {
+                                mapEpisodeHistoryItem(item, applyAddonRemap = true)
+                            }
+                        }
                     }.awaitAll()
                 }
                 mapped.filterNotNull().forEach { progress ->

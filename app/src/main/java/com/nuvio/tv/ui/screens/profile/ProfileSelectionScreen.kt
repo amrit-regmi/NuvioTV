@@ -96,6 +96,7 @@ import com.nuvio.tv.ui.components.AvatarPickerGrid
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
 import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.util.rememberLongPressKeyTracker
 import kotlinx.coroutines.delay
 
 private object ProfileSelectionSpacing {
@@ -106,11 +107,19 @@ private object ProfileSelectionSpacing {
     val LogoToHeading = 28.dp
     val HeadingToSubheading = 12.dp
     val GridItemGap = 28.dp
+    val CompactGridItemGap = 12.dp
     val CardWidth = 152.dp
+    val CompactCardWidth = 128.dp
     val CardPaddingHorizontal = 10.dp
     val CardPaddingVertical = 8.dp
     val AvatarContainer = 126.dp
+    val CompactAvatarContainer = 104.dp
+    val CompactAvatarSize = 82.dp
+    val CompactFocusedAvatarSize = 88.dp
+    val CompactOuterAvatarSize = 98.dp
+    val CompactFocusedOuterAvatarSize = 104.dp
     val AvatarToName = 12.dp
+    val CompactAvatarToName = 10.dp
     val NameToMeta = 8.dp
     val MetaSlotHeight = 16.dp
     val EditorPanelMaxWidth = 980.dp
@@ -302,7 +311,7 @@ fun ProfileSelectionScreen(
                                         is SetProfilePinResult.Success -> {
                                             pinOverlayState = null
                                             pinOverlayError = null
-                                            pinActionMessage = "PIN saved for ${activePinOverlay.profile.name}."
+                                            pinActionMessage = context.getString(R.string.profile_pin_saved_for_profile, activePinOverlay.profile.name)
                                         }
                                         is SetProfilePinResult.CurrentPinRequired -> {
                                             pinOverlayState = ProfilePinOverlayState.VerifyCurrentForChange(
@@ -370,7 +379,7 @@ fun ProfileSelectionScreen(
                                     if (success) {
                                         pinOverlayError = null
                                         pinOverlayState = null
-                                        pinActionMessage = "PIN lock removed for ${activePinOverlay.profile.name}."
+                                        pinActionMessage = context.getString(R.string.profile_pin_lock_removed_for_profile, activePinOverlay.profile.name)
                                     } else {
                                         pinOverlayError = context.getString(R.string.profile_pin_incorrect)
                                     }
@@ -738,6 +747,7 @@ private fun ProfileGrid(
     val focusRequesters = remember(totalItems) {
         List(totalItems) { FocusRequester() }
     }
+    val useCompactCards = totalItems >= 6
 
     LaunchedEffect(totalItems, initialFocusIndex, isManagementMode) {
         repeat(2) { withFrameNanos { } }
@@ -760,7 +770,10 @@ private fun ProfileGrid(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(ProfileSelectionSpacing.GridItemGap),
+                horizontalArrangement = Arrangement.spacedBy(
+                    if (useCompactCards) ProfileSelectionSpacing.CompactGridItemGap
+                    else ProfileSelectionSpacing.GridItemGap
+                ),
                 verticalAlignment = Alignment.Top
             ) {
                 profiles.forEachIndexed { index, profile ->
@@ -769,6 +782,7 @@ private fun ProfileGrid(
                         avatarImageUrl = profile.avatarUrl?.takeIf { it.isNotBlank() }
                             ?: profile.avatarId?.let(avatarImageUrlsById::get),
                         focusRequester = focusRequesters[index],
+                        compact = useCompactCards,
                         onFocused = { onProfileFocused(profile.avatarColorHex) },
                         onClick = { onProfileSelected(profile) },
                         onLongPress = { onProfileLongPress(profile) }
@@ -777,6 +791,7 @@ private fun ProfileGrid(
                 if (canAddProfile) {
                     AddProfileCard(
                         focusRequester = focusRequesters[profiles.size],
+                        compact = useCompactCards,
                         onFocused = { onProfileFocused("#555555") },
                         onClick = onAddProfileClick
                     )
@@ -791,12 +806,14 @@ private fun ProfileCard(
     profile: UserProfile,
     avatarImageUrl: String?,
     focusRequester: FocusRequester,
+    compact: Boolean,
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onLongPress: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
+    val longPressKeyTracker = rememberLongPressKeyTracker()
     val interactionSource = remember { MutableInteractionSource() }
     val focusProgress by animateFloatAsState(
         targetValue = if (isFocused) 1f else 0f,
@@ -804,8 +821,16 @@ private fun ProfileCard(
         label = "profileFocusProgress"
     )
     val itemScale = 1f + (0.04f * focusProgress)
-    val avatarSize = androidx.compose.ui.unit.lerp(96.dp, 102.dp, focusProgress)
-    val outerAvatarSize = androidx.compose.ui.unit.lerp(114.dp, 122.dp, focusProgress)
+    val avatarSize = androidx.compose.ui.unit.lerp(
+        if (compact) ProfileSelectionSpacing.CompactAvatarSize else 96.dp,
+        if (compact) ProfileSelectionSpacing.CompactFocusedAvatarSize else 102.dp,
+        focusProgress
+    )
+    val outerAvatarSize = androidx.compose.ui.unit.lerp(
+        if (compact) ProfileSelectionSpacing.CompactOuterAvatarSize else 114.dp,
+        if (compact) ProfileSelectionSpacing.CompactFocusedOuterAvatarSize else 122.dp,
+        focusProgress
+    )
     val ringWidth = androidx.compose.ui.unit.lerp(1.dp, 3.dp, focusProgress)
     val ringColor = lerp(
         NuvioColors.Border.copy(alpha = 0.75f),
@@ -821,7 +846,10 @@ private fun ProfileCard(
 
     Column(
         modifier = Modifier
-            .width(ProfileSelectionSpacing.CardWidth)
+            .width(
+                if (compact) ProfileSelectionSpacing.CompactCardWidth
+                else ProfileSelectionSpacing.CardWidth
+            )
             .graphicsLayer {
                 scaleX = itemScale
                 scaleY = itemScale
@@ -839,16 +867,20 @@ private fun ProfileCard(
                         onLongPress()
                         return@onPreviewKeyEvent true
                     }
-                    val isLongPress = native.isLongPress || native.repeatCount > 0
-                    if (isLongPress && isProfileSelectKey(native.keyCode)) {
+                }
+                if (longPressKeyTracker.handle(native, ::isProfileSelectKey) {
                         longPressTriggered = true
                         onLongPress()
-                        return@onPreviewKeyEvent true
                     }
+                ) {
+                    if (native.action == AndroidKeyEvent.ACTION_UP) {
+                        longPressTriggered = false
+                    }
+                    return@onPreviewKeyEvent true
                 }
                 if (native.action == AndroidKeyEvent.ACTION_UP &&
                     longPressTriggered &&
-                    isProfileSelectKey(native.keyCode)
+                    (isProfileSelectKey(native.keyCode) || native.keyCode == AndroidKeyEvent.KEYCODE_MENU)
                 ) {
                     longPressTriggered = false
                     return@onPreviewKeyEvent true
@@ -867,7 +899,10 @@ private fun ProfileCard(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier.size(ProfileSelectionSpacing.AvatarContainer),
+            modifier = Modifier.size(
+                if (compact) ProfileSelectionSpacing.CompactAvatarContainer
+                else ProfileSelectionSpacing.AvatarContainer
+            ),
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -894,7 +929,7 @@ private fun ProfileCard(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .offset(x = 2.dp, y = 1.dp)
-                        .size(26.dp)
+                        .size(if (compact) 22.dp else 26.dp)
                         .clip(CircleShape)
                         .background(Color(0xFFFFB300), CircleShape)
                         .border(
@@ -907,7 +942,7 @@ private fun ProfileCard(
                     Text(
                         text = "\u2605",
                         color = Color.White,
-                        fontSize = 14.sp,
+                        fontSize = if (compact) 12.sp else 14.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
                     )
@@ -915,12 +950,17 @@ private fun ProfileCard(
             }
         }
 
-        Spacer(modifier = Modifier.height(ProfileSelectionSpacing.AvatarToName))
+        Spacer(
+            modifier = Modifier.height(
+                if (compact) ProfileSelectionSpacing.CompactAvatarToName
+                else ProfileSelectionSpacing.AvatarToName
+            )
+        )
 
         Text(
             text = profile.name,
             color = nameColor,
-            fontSize = 17.sp,
+            fontSize = if (compact) 15.sp else 17.sp,
             fontWeight = nameWeight,
             textAlign = TextAlign.Center,
             maxLines = 1,
@@ -954,6 +994,7 @@ private fun parseProfileColor(colorHex: String): Color {
 @Composable
 private fun AddProfileCard(
     focusRequester: FocusRequester,
+    compact: Boolean,
     onFocused: () -> Unit,
     onClick: () -> Unit
 ) {
@@ -965,7 +1006,11 @@ private fun AddProfileCard(
         label = "addFocusProgress"
     )
     val itemScale = 1f + (0.04f * focusProgress)
-    val outerAvatarSize = androidx.compose.ui.unit.lerp(114.dp, 122.dp, focusProgress)
+    val outerAvatarSize = androidx.compose.ui.unit.lerp(
+        if (compact) ProfileSelectionSpacing.CompactOuterAvatarSize else 114.dp,
+        if (compact) ProfileSelectionSpacing.CompactFocusedOuterAvatarSize else 122.dp,
+        focusProgress
+    )
     val ringWidth = androidx.compose.ui.unit.lerp(1.dp, 3.dp, focusProgress)
     val ringColor = lerp(
         NuvioColors.Border.copy(alpha = 0.5f),
@@ -990,7 +1035,10 @@ private fun AddProfileCard(
 
     Column(
         modifier = Modifier
-            .width(ProfileSelectionSpacing.CardWidth)
+            .width(
+                if (compact) ProfileSelectionSpacing.CompactCardWidth
+                else ProfileSelectionSpacing.CardWidth
+            )
             .graphicsLayer {
                 scaleX = itemScale
                 scaleY = itemScale
@@ -1012,7 +1060,10 @@ private fun AddProfileCard(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier.size(ProfileSelectionSpacing.AvatarContainer),
+            modifier = Modifier.size(
+                if (compact) ProfileSelectionSpacing.CompactAvatarContainer
+                else ProfileSelectionSpacing.AvatarContainer
+            ),
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -1028,12 +1079,12 @@ private fun AddProfileCard(
                 contentAlignment = Alignment.Center
             ) {
                 Box(
-                    modifier = Modifier.size(34.dp),
+                    modifier = Modifier.size(if (compact) 30.dp else 34.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
-                            .width(26.dp)
+                            .width(if (compact) 22.dp else 26.dp)
                             .height(3.dp)
                             .clip(RoundedCornerShape(999.dp))
                             .background(plusColor)
@@ -1041,7 +1092,7 @@ private fun AddProfileCard(
                     Box(
                         modifier = Modifier
                             .width(3.dp)
-                            .height(26.dp)
+                            .height(if (compact) 22.dp else 26.dp)
                             .clip(RoundedCornerShape(999.dp))
                             .background(plusColor)
                     )
@@ -1049,15 +1100,21 @@ private fun AddProfileCard(
             }
         }
 
-        Spacer(modifier = Modifier.height(ProfileSelectionSpacing.AvatarToName))
+        Spacer(
+            modifier = Modifier.height(
+                if (compact) ProfileSelectionSpacing.CompactAvatarToName
+                else ProfileSelectionSpacing.AvatarToName
+            )
+        )
 
         Text(
             text = stringResource(R.string.profile_add_new),
             color = nameColor,
-            fontSize = 17.sp,
+            fontSize = if (compact) 15.sp else 17.sp,
             fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Medium,
             textAlign = TextAlign.Center,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
 
         Spacer(modifier = Modifier.height(ProfileSelectionSpacing.NameToMeta))

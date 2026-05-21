@@ -50,6 +50,12 @@
     <string name="cw_min_left">%1$dm बाकी</string>
     <string name="cw_almost_done">लगभग पूरा</string>
     <string name="cw_airs_date">%1$s को प्रसारित होगा</string>
+    <string name="cw_airs_today">आज प्रसारित होगा</string>
+    <string name="cw_airs_tomorrow">कल प्रसारित होगा</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">%d दिन में प्रसारित होगा</item>
+        <item quantity="other">%d दिनों में प्रसारित होगा</item>
+    </plurals>
     <string name="cw_action_go_to_details">विवरण देखें</string>
     <string name="cw_action_start_from_beginning">शुरुआत से चलाएँ</string>
     <string name="cw_action_remove">हटाएँ</string>
@@ -301,6 +307,8 @@
     <string name="sub_forced_lang">फोर्स्ड</string>
     <string name="sub_preferred_lang">पसंदीदा भाषा</string>
     <string name="sub_secondary_lang">दूसरी पसंदीदा भाषा</string>
+    <string name="sub_use_forced_subtitles">फोर्स्ड सबटाइटल इस्तेमाल करें</string>
+    <string name="sub_use_forced_subtitles_desc">जब ऑडियो सबटाइटल भाषा से मेल खाए तो फोर्स्ड सबटाइटल को प्राथमिकता दें; उपलब्ध न होने पर कुछ भी न चुनें</string>
     <string name="sub_show_only_preferred_languages">केवल पसंदीदा भाषाएं दिखाएं</string>
     <string name="sub_show_only_preferred_languages_desc">चयन सूची से अन्य सभी उपशीर्षक भाषाएं छिपाएं</string>
     <string name="sub_organization">सबटाइटल संगठन</string>
@@ -776,7 +784,7 @@
     <string name="pause_back_to_details">डिटेल्स पर वापस जाएँ</string>
     <string name="pause_as_character">%1$s के रूप में</string>
 
-    <!-- NextEpisodeCardOverlay -->
+    <!-- PostPlayOverlay -->
     <string name="next_episode_label">अगला एपिसोड</string>
     <string name="next_episode_finding_source">सोर्स खोजा जा रहा है…</string>
     <string name="next_episode_playing_via">%1$s के माध्यम से %2$ds में चल रहा है</string>

@@ -124,52 +124,52 @@ class CollectionsDataStore @Inject constructor(
     }
 
     fun validateCollectionsJson(json: String): ValidationResult {
-        if (json.isBlank()) return ValidationResult(false, "Empty input")
+        if (json.isBlank()) return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_empty_input))
         return try {
             val type = object : TypeToken<List<Map<String, Any?>>>() {}.type
             val parsed = gson.fromJson<List<Map<String, Any?>>>(json, type)
-                ?: return ValidationResult(false, "Invalid format: expected an array")
-            if (parsed.isEmpty()) return ValidationResult(false, "Empty array: no collections found")
+                ?: return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_expected_array))
+            if (parsed.isEmpty()) return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_empty_array))
 
             var folderCount = 0
             val validShapes = setOf("POSTER", "LANDSCAPE", "SQUARE", "poster", "wide", "square")
 
             for ((i, item) in parsed.withIndex()) {
                 val id = item["id"] as? String
-                if (id.isNullOrBlank()) return ValidationResult(false, "Collection ${i + 1}: missing or invalid \"id\"")
+                if (id.isNullOrBlank()) return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_missing_id, i + 1))
                 val title = item["title"] as? String
-                    ?: return ValidationResult(false, "Collection \"$id\": missing or invalid \"title\"")
+                    ?: return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_missing_title, id))
                 val folders = item["folders"] as? List<*>
-                    ?: return ValidationResult(false, "Collection \"$title\": \"folders\" must be an array")
+                    ?: return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_folders_array, title))
 
                 for ((j, f) in folders.withIndex()) {
                     val folder = f as? Map<*, *>
-                        ?: return ValidationResult(false, "Collection \"$title\", folder ${j + 1}: invalid format")
+                        ?: return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_folder_invalid, title, j + 1))
                     val folderId = folder["id"] as? String
-                    if (folderId.isNullOrBlank()) return ValidationResult(false, "Collection \"$title\", folder ${j + 1}: missing \"id\"")
+                    if (folderId.isNullOrBlank()) return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_folder_missing_id, title, j + 1))
                     val folderTitle = folder["title"] as? String
-                        ?: return ValidationResult(false, "Collection \"$title\", folder \"$folderId\": missing \"title\"")
+                        ?: return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_folder_missing_title, title, folderId))
                     val sources = (folder["sources"] as? List<*>) ?: (folder["catalogSources"] as? List<*>)
-                        ?: return ValidationResult(false, "Collection \"$title\", folder \"$folderTitle\": \"sources\" must be an array")
+                        ?: return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_sources_array, title, folderTitle))
                     val shape = folder["tileShape"] as? String
                     if (shape != null && shape !in validShapes) {
-                        return ValidationResult(false, "Collection \"$title\", folder \"$folderTitle\": invalid tileShape \"$shape\"")
+                        return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_invalid_tile_shape, title, folderTitle, shape))
                     }
                     for ((k, s) in sources.withIndex()) {
                         val source = s as? Map<*, *>
-                            ?: return ValidationResult(false, "Collection \"$title\", folder \"$folderTitle\", source ${k + 1}: invalid format")
+                            ?: return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_source_invalid, title, folderTitle, k + 1))
                         val provider = (source["provider"] as? String)?.lowercase()
                         val isAddonSource = provider == null || provider == "addon"
                         val isTmdbSource = provider == "tmdb"
                         val isTraktSource = provider == "trakt"
                         if (isAddonSource && (source["addonId"] !is String || source["type"] !is String || source["catalogId"] !is String)) {
-                            return ValidationResult(false, "Collection \"$title\", folder \"$folderTitle\", source ${k + 1}: missing required fields")
+                            return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_source_required_fields, title, folderTitle, k + 1))
                         }
                         if (isTmdbSource && source["tmdbSourceType"] !is String) {
-                            return ValidationResult(false, "Collection \"$title\", folder \"$folderTitle\", source ${k + 1}: missing TMDB source type")
+                            return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_missing_tmdb_type, title, folderTitle, k + 1))
                         }
                         if (isTraktSource && (source["traktListId"] as? Number)?.toLong() == null) {
-                            return ValidationResult(false, "Collection \"$title\", folder \"$folderTitle\", source ${k + 1}: missing Trakt list ID")
+                            return ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_missing_trakt_list_id, title, folderTitle, k + 1))
                         }
                     }
                     folderCount++
@@ -177,7 +177,7 @@ class CollectionsDataStore @Inject constructor(
             }
             ValidationResult(true, collectionCount = parsed.size, folderCount = folderCount)
         } catch (e: Exception) {
-            ValidationResult(false, "JSON parse error: ${e.message}")
+            ValidationResult(false, appContext.getString(com.nuvio.tv.R.string.collections_import_error_json_parse, e.message.orEmpty()))
         }
     }
 
@@ -251,7 +251,9 @@ class CollectionsDataStore @Inject constructor(
         val withKeywords: String? = null,
         val withCompanies: String? = null,
         val withNetworks: String? = null,
-        val year: Int? = null
+        val year: Int? = null,
+        val watchRegion: String? = null,
+        val withWatchProviders: String? = null
     )
 
     @androidx.annotation.Keep
@@ -337,7 +339,9 @@ class CollectionsDataStore @Inject constructor(
         withKeywords = withKeywords,
         withCompanies = withCompanies,
         withNetworks = withNetworks,
-        year = year
+        year = year,
+        watchRegion = watchRegion,
+        withWatchProviders = withWatchProviders
     )
 
     private fun SerializableCollection.toDomain() = Collection(
@@ -439,6 +443,8 @@ class CollectionsDataStore @Inject constructor(
         withKeywords = withKeywords,
         withCompanies = withCompanies,
         withNetworks = withNetworks,
-        year = year
+        year = year,
+        watchRegion = watchRegion,
+        withWatchProviders = withWatchProviders
     )
 }

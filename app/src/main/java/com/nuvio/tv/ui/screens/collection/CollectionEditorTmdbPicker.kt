@@ -362,9 +362,9 @@ private fun TmdbBasicSourceForm(
             onValueChange = onInputChange,
             placeholder = when (uiState.tmdbBuilderMode) {
                 TmdbBuilderMode.LIST -> "https://www.themoviedb.org/list/8504994 or 8504994"
-                TmdbBuilderMode.NETWORK -> "213 for Netflix, 49 for HBO, 2739 for Disney+"
-                TmdbBuilderMode.COLLECTION -> "10 for Star Wars Collection"
-                TmdbBuilderMode.PRODUCTION -> "Marvel Studios, 420, or company URL"
+                TmdbBuilderMode.NETWORK -> stringResource(R.string.collections_editor_tmdb_network_placeholder_example)
+                TmdbBuilderMode.COLLECTION -> stringResource(R.string.collections_editor_tmdb_collection_placeholder_example)
+                TmdbBuilderMode.PRODUCTION -> stringResource(R.string.collections_editor_tmdb_company_placeholder_example)
                 TmdbBuilderMode.PERSON,
                 TmdbBuilderMode.DIRECTOR -> stringResource(R.string.collections_editor_tmdb_person_placeholder)
                 else -> stringResource(R.string.collections_editor_tmdb_id_or_url)
@@ -586,6 +586,44 @@ private fun TmdbDiscoverForm(
         ) {
             onFiltersChange(filters.copy(year = it.toIntOrNull()))
         }
+        TmdbQuickChips(
+            label = stringResource(R.string.collections_editor_tmdb_quick_watch_providers),
+            chips = listOf(
+                "Netflix" to "8",
+                "Prime Video" to "119",
+                "Disney+" to "337",
+                "Apple TV+" to "350",
+                "Hulu" to "15"
+            ),
+            onSelect = { onFiltersChange(filters.copy(withWatchProviders = it)) }
+        )
+        TmdbFilterField(
+            label = stringResource(R.string.collections_editor_tmdb_watch_providers),
+            helper = stringResource(R.string.collections_editor_tmdb_watch_providers_helper),
+            placeholder = stringResource(R.string.collections_editor_tmdb_watch_providers_placeholder),
+            value = filters.withWatchProviders
+        ) {
+            onFiltersChange(filters.copy(withWatchProviders = it.ifBlank { null }))
+        }
+        TmdbQuickChips(
+            label = stringResource(R.string.collections_editor_tmdb_quick_watch_regions),
+            chips = listOf(
+                stringResource(R.string.collections_editor_country_us) to "US",
+                stringResource(R.string.collections_editor_country_uk) to "GB",
+                "Canada" to "CA",
+                "Australia" to "AU",
+                "Germany" to "DE"
+            ),
+            onSelect = { onFiltersChange(filters.copy(watchRegion = it)) }
+        )
+        TmdbFilterField(
+            label = stringResource(R.string.collections_editor_tmdb_watch_region),
+            helper = stringResource(R.string.collections_editor_tmdb_watch_region_helper),
+            placeholder = "US",
+            value = filters.watchRegion
+        ) {
+            onFiltersChange(filters.copy(watchRegion = it.ifBlank { null }))
+        }
         TmdbActionButtons(onSearch = null, onAdd = onAdd, addLabel = actionLabel)
     }
 }
@@ -721,23 +759,24 @@ private fun TmdbQuickChips(
     }
 }
 
+@Composable
 private fun tmdbGenreQuickChips(mediaType: TmdbCollectionMediaType): List<Pair<String, String>> {
     return when (mediaType) {
         TmdbCollectionMediaType.MOVIE -> listOf(
-            "Action" to "28",
-            "Adventure" to "12",
-            "Animation" to "16",
-            "Comedy" to "35",
-            "Horror" to "27",
-            "Sci-Fi" to "878"
+            stringResource(R.string.collections_editor_tmdb_genre_action) to "28",
+            stringResource(R.string.collections_editor_tmdb_genre_adventure) to "12",
+            stringResource(R.string.collections_editor_tmdb_genre_animation) to "16",
+            stringResource(R.string.collections_editor_tmdb_genre_comedy) to "35",
+            stringResource(R.string.collections_editor_tmdb_genre_horror) to "27",
+            stringResource(R.string.collections_editor_tmdb_genre_scifi) to "878"
         )
         TmdbCollectionMediaType.TV -> listOf(
-            "Drama" to "18",
-            "Comedy" to "35",
-            "Animation" to "16",
-            "Crime" to "80",
-            "Sci-Fi" to "10765",
-            "Reality" to "10764"
+            stringResource(R.string.collections_editor_tmdb_genre_drama) to "18",
+            stringResource(R.string.collections_editor_tmdb_genre_comedy) to "35",
+            stringResource(R.string.collections_editor_tmdb_genre_animation) to "16",
+            stringResource(R.string.collections_editor_tmdb_genre_crime) to "80",
+            stringResource(R.string.collections_editor_tmdb_genre_scifi) to "10765",
+            stringResource(R.string.collections_editor_tmdb_genre_reality) to "10764"
         )
     }
 }
@@ -805,6 +844,7 @@ fun TmdbMediaSortControls(
                     if (showOriginalSort) add(TmdbCollectionSort.ORIGINAL.value to stringResource(R.string.collections_editor_sort_original))
                     if (showPopularSort) add(TmdbCollectionSort.POPULAR_DESC.value to stringResource(R.string.tmdb_entity_rail_popular))
                     add(TmdbCollectionSort.VOTE_AVERAGE_DESC.value to stringResource(R.string.tmdb_entity_rail_top_rated))
+                    add(TmdbCollectionSort.VOTE_COUNT_DESC.value to stringResource(R.string.tmdb_entity_rail_most_voted))
                     add(
                         if (mediaType == TmdbCollectionMediaType.TV && !bothSelected) {
                             TmdbCollectionSort.FIRST_AIR_DATE_DESC.value to stringResource(R.string.tmdb_entity_rail_recent)

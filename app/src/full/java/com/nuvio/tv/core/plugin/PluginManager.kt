@@ -1,7 +1,6 @@
 package com.nuvio.tv.core.plugin
 
 import android.util.Log
-import com.lagradost.cloudstream3.TvType
 import com.nuvio.tv.core.plugin.cloudstream.toNuvioType
 import com.nuvio.tv.core.plugin.cloudstream.tvTypeFromString
 import com.nuvio.tv.core.plugin.cloudstream.ExternalExtensionLoader
@@ -27,7 +26,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
@@ -230,6 +228,8 @@ class PluginManager @Inject constructor(
     
     // Flow of plugins enabled state
     val pluginsEnabled: Flow<Boolean> = dataStore.pluginsEnabled
+
+    val groupStreamsByRepository: Flow<Boolean> = dataStore.groupStreamsByRepository
     
     private val syncScope = kotlinx.coroutines.CoroutineScope(
         kotlinx.coroutines.SupervisorJob() + Dispatchers.IO
@@ -624,6 +624,10 @@ class PluginManager @Inject constructor(
     suspend fun setPluginsEnabled(enabled: Boolean) {
         dataStore.setPluginsEnabled(enabled)
     }
+
+    suspend fun setGroupStreamsByRepository(enabled: Boolean) {
+        dataStore.setGroupStreamsByRepository(enabled)
+    }
     
     /**
      * Execute all enabled scrapers for a given media
@@ -680,7 +684,7 @@ class PluginManager @Inject constructor(
         mediaType: String,
         season: Int? = null,
         episode: Int? = null
-    ): Flow<Pair<String, List<LocalScraperResult>>> = channelFlow {
+    ): Flow<Pair<ScraperInfo, List<LocalScraperResult>>> = channelFlow {
         val enabledList = enabledScrapers.first()
             .filter { it.supportsType(mediaType) }
         
@@ -705,7 +709,7 @@ class PluginManager @Inject constructor(
                 try {
                     val results = executeScraperWithSingleFlight(scraper, tmdbId, mediaType, season, episode)
                     if (results.isNotEmpty()) {
-                        send(scraper.name to results)
+                        send(scraper to results)
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Scraper ${scraper.name} failed in streaming: ${e.message}")

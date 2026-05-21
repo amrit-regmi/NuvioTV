@@ -151,16 +151,6 @@ fun PluginScreenContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            if (showHeader) {
-                item {
-                    PluginHeader(
-                        pluginsEnabled = uiState.pluginsEnabled,
-                        isReadOnly = viewModel.isReadOnly,
-                        onPluginsEnabledChange = { viewModel.onEvent(PluginUiEvent.SetPluginsEnabled(it)) }
-                    )
-                }
-            }
-
             if (viewModel.isReadOnly) {
                 item {
                     androidx.compose.material3.Card(
@@ -199,6 +189,24 @@ fun PluginScreenContent(
                 item {
                     ManageFromPhoneCard(onClick = { viewModel.onEvent(PluginUiEvent.StartQrMode) })
                 }
+            }
+
+            item {
+                PluginsEnabledCard(
+                    pluginsEnabled = uiState.pluginsEnabled,
+                    isReadOnly = viewModel.isReadOnly,
+                    onPluginsEnabledChange = { viewModel.onEvent(PluginUiEvent.SetPluginsEnabled(it)) }
+                )
+            }
+
+            item {
+                PluginStreamGroupingCard(
+                    groupStreamsByRepository = uiState.groupStreamsByRepository,
+                    isReadOnly = viewModel.isReadOnly,
+                    onGroupStreamsByRepositoryChange = {
+                        viewModel.onEvent(PluginUiEvent.SetGroupStreamsByRepository(it))
+                    }
+                )
             }
 
             // Repositories section
@@ -307,70 +315,123 @@ fun PluginScreenContent(
 }
 
 @Composable
-private fun PluginHeader(
+private fun PluginStreamGroupingCard(
+    groupStreamsByRepository: Boolean,
+    isReadOnly: Boolean,
+    onGroupStreamsByRepositoryChange: (Boolean) -> Unit
+) {
+    Surface(
+        onClick = {
+            if (!isReadOnly) {
+                onGroupStreamsByRepositoryChange(!groupStreamsByRepository)
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = NuvioColors.BackgroundCard,
+            focusedContainerColor = NuvioColors.FocusBackground
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(12.dp)
+            )
+        ),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.plugin_group_by_repository_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NuvioColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.plugin_group_by_repository_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Switch(
+                checked = groupStreamsByRepository,
+                onCheckedChange = null,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = NuvioColors.Secondary,
+                    checkedTrackColor = NuvioColors.Secondary.copy(alpha = 0.3f)
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun PluginsEnabledCard(
     pluginsEnabled: Boolean,
     isReadOnly: Boolean,
     onPluginsEnabledChange: (Boolean) -> Unit
 ) {
-    Row(
+    Surface(
+        onClick = {
+            if (!isReadOnly) {
+                onPluginsEnabledChange(!pluginsEnabled)
+            }
+        },
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = NuvioColors.BackgroundCard,
+            focusedContainerColor = NuvioColors.FocusBackground
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(12.dp)
+            )
+        ),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.plugin_title),
-                style = MaterialTheme.typography.headlineMedium,
-                color = NuvioColors.Secondary
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = stringResource(R.string.plugin_subtitle),
-                style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary
-            )
-        }
-
-        Surface(
-            onClick = {
-                if (!isReadOnly) {
-                    onPluginsEnabledChange(!pluginsEnabled)
-                }
-            },
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                focusedContainerColor = NuvioColors.FocusBackground
-            ),
-            border = ClickableSurfaceDefaults.border(
-                focusedBorder = Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                    shape = RoundedCornerShape(12.dp)
-                )
-            ),
-            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (pluginsEnabled) stringResource(R.string.plugin_enabled) else stringResource(R.string.plugin_disabled),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (pluginsEnabled) NuvioColors.Secondary else NuvioColors.TextSecondary
+                    text = stringResource(R.string.plugin_enable_plugins_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NuvioColors.TextPrimary
                 )
-                Switch(
-                    checked = pluginsEnabled,
-                    onCheckedChange = null,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = NuvioColors.Secondary,
-                        checkedTrackColor = NuvioColors.Secondary.copy(alpha = 0.3f)
-                    )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.plugin_enable_plugins_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
                 )
             }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Switch(
+                checked = pluginsEnabled,
+                onCheckedChange = null,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = NuvioColors.Secondary,
+                    checkedTrackColor = NuvioColors.Secondary.copy(alpha = 0.3f)
+                )
+            )
         }
     }
 }

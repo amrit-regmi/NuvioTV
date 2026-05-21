@@ -8,6 +8,7 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.tmdb.TmdbCollectionSourceResolver
+import com.nuvio.tv.core.util.isUnreleased
 import com.nuvio.tv.core.trakt.TraktPublicListSourceResolver
 import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.data.local.CollectionsDataStore
@@ -532,7 +533,7 @@ class FolderDetailViewModel @Inject constructor(
                             val tabs = state.tabs.toMutableList()
                             if (tabIndex < tabs.size) {
                                 tabs[tabIndex] = tabs[tabIndex].copy(
-                                    catalogRow = result.data,
+                                    catalogRow = result.data.filteredForRelease(state.hideUnreleasedContent),
                                     isLoading = false
                                 )
                             }
@@ -621,7 +622,13 @@ class FolderDetailViewModel @Inject constructor(
                             val currentTab = s.tabs.getOrNull(tabIndex)
                             val currentRow = currentTab?.catalogRow ?: return@update s
                             val existingIds = currentRow.items.map { "${it.apiType}:${it.id}" }.toHashSet()
-                            val newItems = result.data.items.filter { "${it.apiType}:${it.id}" !in existingIds }
+                            val incomingFiltered = if (s.hideUnreleasedContent) {
+                                val today = java.time.LocalDate.now()
+                                result.data.items.filterNot { it.isUnreleased(today) }
+                            } else {
+                                result.data.items
+                            }
+                            val newItems = incomingFiltered.filter { "${it.apiType}:${it.id}" !in existingIds }
                             val mergedItems = currentRow.items + newItems
                             val hasMore = if (newItems.isEmpty()) false else result.data.hasMore
 
@@ -766,16 +773,17 @@ class FolderDetailViewModel @Inject constructor(
                         _uiState.update { s ->
                             val tabs = s.tabs.toMutableList()
                             val currentRow = tabs.getOrNull(tabIndex)?.catalogRow
+                            val filteredData = result.data.filteredForRelease(s.hideUnreleasedContent)
                             val row = if (append && currentRow != null) {
                                 val existingIds = currentRow.items.map { "${it.apiType}:${it.id}" }.toHashSet()
-                                val newItems = result.data.items.filter { "${it.apiType}:${it.id}" !in existingIds }
-                                result.data.copy(
+                                val newItems = filteredData.items.filter { "${it.apiType}:${it.id}" !in existingIds }
+                                filteredData.copy(
                                     items = currentRow.items + newItems,
-                                    hasMore = result.data.hasMore && newItems.isNotEmpty(),
+                                    hasMore = filteredData.hasMore && newItems.isNotEmpty(),
                                     isLoading = false
                                 )
                             } else {
-                                result.data
+                                filteredData
                             }
                             if (tabIndex < tabs.size) tabs[tabIndex] = tabs[tabIndex].copy(catalogRow = row, isLoading = false)
                             s.copy(tabs = tabs)
@@ -823,16 +831,17 @@ class FolderDetailViewModel @Inject constructor(
                         _uiState.update { s ->
                             val tabs = s.tabs.toMutableList()
                             val currentRow = tabs.getOrNull(tabIndex)?.catalogRow
+                            val filteredData = result.data.filteredForRelease(s.hideUnreleasedContent)
                             val row = if (append && currentRow != null) {
                                 val existingIds = currentRow.items.map { "${it.apiType}:${it.id}" }.toHashSet()
-                                val newItems = result.data.items.filter { "${it.apiType}:${it.id}" !in existingIds }
-                                result.data.copy(
+                                val newItems = filteredData.items.filter { "${it.apiType}:${it.id}" !in existingIds }
+                                filteredData.copy(
                                     items = currentRow.items + newItems,
-                                    hasMore = result.data.hasMore && newItems.isNotEmpty(),
+                                    hasMore = filteredData.hasMore && newItems.isNotEmpty(),
                                     isLoading = false
                                 )
                             } else {
-                                result.data
+                                filteredData
                             }
                             if (tabIndex < tabs.size) tabs[tabIndex] = tabs[tabIndex].copy(catalogRow = row, isLoading = false)
                             s.copy(tabs = tabs)
@@ -913,13 +922,6 @@ class FolderDetailViewModel @Inject constructor(
         }
         if (item.id in enrichedItemIds) return
 
-        // Check if any enrichment source is active — if so, signal enriching immediately
-        // so hero content hides until enrichment completes.
-        val viewMode = _uiState.value.viewMode
-        if (viewMode == FolderViewMode.FOLLOW_LAYOUT && _uiState.value.homeLayout == HomeLayout.MODERN) {
-            _enrichingItemId.value = item.id
-        }
-
         enrichFocusJob?.cancel()
         enrichFocusJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             kotlinx.coroutines.delay(350)
@@ -928,7 +930,20 @@ class FolderDetailViewModel @Inject constructor(
             val tmdbEnabled = tmdbSettings.enabled &&
                 (homeLayout != HomeLayout.MODERN || tmdbSettings.modernHomeEnabled)
             val externalMetaEnabled = layoutPreferenceDataStore.preferExternalMetaAddonDetail.first()
+
+            // Only signal enriching if at least one source is active and we're
+            // in modern follow-layout mode — prevents hero from hiding indefinitely
+            // when no enrichment source can provide data.
+            val viewMode = _uiState.value.viewMode
+            val willEnrich = tmdbEnabled || externalMetaEnabled
+            if (willEnrich && viewMode == FolderViewMode.FOLLOW_LAYOUT && homeLayout == HomeLayout.MODERN) {
+                _enrichingItemId.value = item.id
+            }
+
             if (!tmdbEnabled && !externalMetaEnabled) {
+                // No enrichment source is active — mark as failed so the hero
+                // shows addon data immediately instead of waiting indefinitely.
+                _failedEnrichmentIds.value = _failedEnrichmentIds.value + item.id
                 if (_enrichingItemId.value == item.id) _enrichingItemId.value = null
                 return@launch
             }
@@ -990,9 +1005,42 @@ class FolderDetailViewModel @Inject constructor(
                             status = finalEnrichment.status ?: result.status
                         )
                     }
+                    // Propagate TMDB-fetched localized trailer YT ids onto the item
+                    // so the trailer pipeline can use them as a fallback when the
+                    // direct TMDB videos lookup misses the user locale (e.g. Trakt
+                    // list items that didn't carry trailers from their addon).
+                    val enrichedYtIds = finalEnrichment.trailers.mapNotNull { it.ytId }.distinct()
+                    if (enrichedYtIds.isNotEmpty() && result.trailerYtIds.isEmpty()) {
+                        result = result.copy(trailerYtIds = enrichedYtIds)
+                    }
                 }
                 result
             }
+            }
+
+            // If the trailer pipeline already ran for this item without a hit and
+            // enrichment just brought localized YT ids, retry now using them as
+            // fallback. Mirrors the behaviour in HomeViewModelPresentationPipeline.
+            if (enrichment != null) {
+                val ytFallback = enrichment.trailers.mapNotNull { it.ytId }.firstOrNull()
+                if (ytFallback != null && !_trailerPreviewUrls.value.containsKey(item.id)) {
+                    trailerPreviewNegativeCache.remove(item.id)
+                    trailerPreviewLoadingIds.remove(item.id)
+                    if (activeTrailerPreviewItemId == item.id) trailerPreviewRequestVersion++
+                    val refreshedItem = _uiState.value.tabs
+                        .firstNotNullOfOrNull { tab ->
+                            tab.catalogRow?.items?.firstOrNull { it.id == item.id }
+                        }
+                    if (refreshedItem != null) {
+                        requestTrailerPreview(
+                            itemId = refreshedItem.id,
+                            title = refreshedItem.name,
+                            releaseInfo = refreshedItem.releaseInfo,
+                            apiType = refreshedItem.apiType,
+                            fallbackYtId = ytFallback
+                        )
+                    }
+                }
             }
 
             // External meta addon fallback when TMDB didn't enrich.
@@ -1034,7 +1082,13 @@ class FolderDetailViewModel @Inject constructor(
         }
     }
 
-    fun requestTrailerPreview(itemId: String, title: String, releaseInfo: String?, apiType: String) {
+    fun requestTrailerPreview(
+        itemId: String,
+        title: String,
+        releaseInfo: String?,
+        apiType: String,
+        fallbackYtId: String? = null
+    ) {
         if (!AppFeaturePolicy.inAppTrailerPlaybackEnabled) return
         if (activeTrailerPreviewItemId != itemId) {
             activeTrailerPreviewItemId = itemId
@@ -1061,13 +1115,27 @@ class FolderDetailViewModel @Inject constructor(
                 return@launch
             }
 
-            if (trailerSource?.videoUrl.isNullOrBlank()) {
+            // Prefer the localized YT id provided by the caller (typically TMDB
+            // enrichment trailers in the user locale) when the direct TMDB videos
+            // lookup didn't find anything for this language and we'd otherwise
+            // fall through to TMDB's en-US fallback.
+            val resolvedSource = if (trailerSource?.videoUrl.isNullOrBlank() && !fallbackYtId.isNullOrBlank()) {
+                trailerService.getTrailerPlaybackSourceFromYouTubeUrl(
+                    youtubeUrl = "https://www.youtube.com/watch?v=$fallbackYtId",
+                    title = title,
+                    year = extractYear(releaseInfo)
+                )
+            } else {
+                trailerSource
+            }
+
+            if (resolvedSource?.videoUrl.isNullOrBlank()) {
                 trailerPreviewNegativeCache.add(itemId)
                 _trailerPreviewUrls.update { it - itemId }
                 _trailerPreviewAudioUrls.update { it - itemId }
             } else {
-                _trailerPreviewUrls.update { it + (itemId to trailerSource.videoUrl) }
-                val audioUrl = trailerSource.audioUrl
+                _trailerPreviewUrls.update { it + (itemId to resolvedSource.videoUrl) }
+                val audioUrl = resolvedSource.audioUrl
                 if (audioUrl.isNullOrBlank()) {
                     _trailerPreviewAudioUrls.update { it - itemId }
                 } else {
@@ -1225,4 +1293,12 @@ class FolderDetailViewModel @Inject constructor(
         }
     }
 
+}
+
+/** Drops unreleased items from a freshly-loaded row when the user toggle is on. */
+private fun CatalogRow.filteredForRelease(hideUnreleased: Boolean): CatalogRow {
+    if (!hideUnreleased) return this
+    val today = java.time.LocalDate.now()
+    val filtered = items.filterNot { it.isUnreleased(today) }
+    return if (filtered.size == items.size) this else copy(items = filtered)
 }

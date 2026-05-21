@@ -16,10 +16,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.MetaTrailer
@@ -47,13 +49,14 @@ fun TrailerSection(
 ) {
     if (trailers.isEmpty()) return
 
-    val trailerItems = remember(trailers) {
+    val trailerFallbackTitle = stringResource(R.string.detail_tab_trailer)
+    val trailerItems = remember(trailers, trailerFallbackTitle) {
         trailers.mapNotNull { trailer ->
             val ytId = trailer.ytId?.trim().orEmpty()
             if (ytId.isBlank()) return@mapNotNull null
             val title = trailer.name?.takeIf { it.isNotBlank() }
                 ?: trailer.type?.takeIf { it.isNotBlank() }
-                ?: "Trailer"
+                ?: trailerFallbackTitle
             val subtitle = buildList {
                 trailer.type?.takeIf { it.isNotBlank() }?.let(::add)
                 trailer.lang?.takeIf { it.isNotBlank() }?.uppercase()?.let(::add)

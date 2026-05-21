@@ -16,6 +16,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -51,6 +52,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 20_000L
 private const val MPV_AFR_SETTLE_DELAY_MS = 2_000L
+private const val AUDIO_DELAY_REFRESH_DEBOUNCE_MS = 120L
+private const val PLAYER_RELEASE_TIMEOUT_MS = 3000L
+private const val PLAYER_REBUILD_SETTLE_DELAY_MS = 120L
 
 internal data class StartupSubtitlePreparation(
     val fetchedSubtitles: List<Subtitle>,
@@ -81,6 +85,25 @@ private suspend fun PlayerRuntimeController.resolveCurrentStreamMimeType(
     )
 }
 
+private fun PlayerRuntimeController.disposeExoPlayerBeforeRebuild() {
+    notifyAudioSessionUpdate(false)
+    try {
+        currentMediaSession?.release()
+        currentMediaSession = null
+    } catch (_: Exception) {
+    }
+    _exoPlayer?.let { player ->
+        runCatching { player.playWhenReady = false }
+        runCatching { player.pause() }
+        runCatching { player.stop() }
+        runCatching { player.clearMediaItems() }
+        runCatching { player.clearVideoSurface() }
+        runCatching { player.release() }
+    }
+    _exoPlayer = null
+    playbackSpeedAwareAudioSink = null
+}
+
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.initializePlayer(
     url: String,
@@ -104,8 +127,13 @@ internal fun PlayerRuntimeController.initializePlayer(
                 userPausedManually = true
                 shouldEnforceAutoplayOnFirstReady = false
             }
-            hasTriedAudioPcmFallback = false
+            val applyPcmFallbackOnStartup = pendingAudioPcmFallbackRebuild
+            val applyDv7FallbackOnStartup = forceDv7ToHevc
+            if (!applyPcmFallbackOnStartup) {
+                hasTriedAudioPcmFallback = false
+            }
             hasTriedDv7HevcFallback = false
+            forceDv7ToHevc = false
             mpvDelayStartAfterAfrSwitch = false
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             rememberAudioDelayPerDeviceEnabled = playerSettings.rememberAudioDelayPerDevice
@@ -243,6 +271,16 @@ internal fun PlayerRuntimeController.initializePlayer(
                         )
                     }
                 }
+                // When forced subtitles are disabled, tell ExoPlayer to ignore
+                // SELECTION_FLAG_FORCED so it won't auto-select forced tracks.
+                if (!playerSettings.subtitleStyle.useForcedSubtitles) {
+                    val currentFlags = parameters.ignoredTextSelectionFlags
+                    setParameters(
+                        buildUponParameters().setIgnoredTextSelectionFlags(
+                            currentFlags or C.SELECTION_FLAG_FORCED
+                        )
+                    )
+                }
             }
 
             
@@ -263,10 +301,23 @@ internal fun PlayerRuntimeController.initializePlayer(
                         PlayerSubtitleUtils.mimeTypeFromUrl(selectedAddonSubtitle.url) == MimeTypes.TEXT_VTT
                 },
                 gainAudioProcessor = gainAudioProcessor,
+                downmixEnabled = playerSettings.downmixEnabled,
+                audioOutputChannels = playerSettings.audioOutputChannels,
+                downmixNormalizationEnabled = !playerSettings.maintainOriginalAudioOnDownmix,
                 playbackSpeedProvider = { _uiState.value.playbackSpeed },
-                onPlaybackSpeedAwareAudioSinkCreated = { playbackSpeedAwareAudioSink = it }
+                onPlaybackSpeedAwareAudioSinkCreated = { playbackSpeedAwareAudioSink = it },
+                onFfmpegAudioRendererChanged = { renderer ->
+                    ffmpegAudioRenderer = renderer
+                    renderer?.applyDownmixSettings(
+                        downmixEnabled = playerSettings.downmixEnabled,
+                        audioOutputChannels = playerSettings.audioOutputChannels,
+                        downmixNormalizationEnabled = !playerSettings.maintainOriginalAudioOnDownmix
+                    )
+                    applyCenterMixLevel(_uiState.value.centerMixLevelDb)
+                    updateAudioControlAvailability()
+                }
             ).setExtensionRendererMode(playerSettings.decoderPriority)
-                .setMapDV7ToHevc(playerSettings.mapDV7ToHevc || forceDv7ToHevc)
+                .setMapDV7ToHevc(playerSettings.mapDV7ToHevc || applyDv7FallbackOnStartup)
 
             if (showLoadingStatus) _uiState.update { it.copy(loadingMessage = context.getString(R.string.player_loading_building)) }
             val buildDefaultPlayer = {
@@ -280,10 +331,13 @@ internal fun PlayerRuntimeController.initializePlayer(
                     .setMediaSourceFactory(DefaultMediaSourceFactory(playerDataSourceFactory, extractorsFactory))
                     .setRenderersFactory(renderersFactory)
                     .setLoadControl(loadControl)
-                    .setReleaseTimeoutMs(3000)
+                    .setReleaseTimeoutMs(PLAYER_RELEASE_TIMEOUT_MS)
                     .setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
                     .build()
             }
+
+            disposeExoPlayerBeforeRebuild()
+            delay(PLAYER_REBUILD_SETTLE_DELAY_MS)
 
             _exoPlayer = if (useLibass) {
                 val playerDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, headers)
@@ -291,7 +345,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     .setLoadControl(loadControl)
                     .setTrackSelector(trackSelector!!)
                     .setMediaSourceFactory(DefaultMediaSourceFactory(playerDataSourceFactory, extractorsFactory))
-                    .setReleaseTimeoutMs(3000)
+                    .setReleaseTimeoutMs(PLAYER_RELEASE_TIMEOUT_MS)
                     .setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
                     .buildWithAssSupportCompat(
                         context = context,
@@ -314,7 +368,16 @@ internal fun PlayerRuntimeController.initializePlayer(
                     .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                     .build()
                 setAudioAttributes(audioAttributes, true)
-                setPlaybackSpeed(_uiState.value.playbackSpeed)
+                val startupSpeed = if ((applyPcmFallbackOnStartup || hasTriedAudioPcmFallback) && _uiState.value.playbackSpeed == 1f) {
+                    1.00001f
+                } else {
+                    _uiState.value.playbackSpeed
+                }
+                setPlaybackSpeed(startupSpeed)
+                if (applyPcmFallbackOnStartup) {
+                    pendingAudioPcmFallbackRebuild = false
+                    hasTriedAudioPcmFallback = true
+                }
 
                 
                 if (playerSettings.skipSilence) {
@@ -336,6 +399,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                 }
 
                 applyAudioAmplification(_uiState.value.audioAmplificationDb)
+                applyCenterMixLevel(_uiState.value.centerMixLevelDb)
 
                 
                 notifyAudioSessionUpdate(true)
@@ -359,11 +423,21 @@ internal fun PlayerRuntimeController.initializePlayer(
                     )
                 )
                 if (showLoadingStatus) _uiState.update { it.copy(loadingMessage = context.getString(R.string.player_loading_starting)) }
-                playWhenReady = !startPaused
+                val isTunneledPlayback = playerSettings.tunnelingEnabled
+                // Always start paused — playback begins in onRenderedFirstFrame()
+                // so audio and video start in perfect sync. Without this, the
+                // audio renderer races ahead by 1-2s while the video decoder
+                // is still decoding the first I-frame.
+                //
+                // Exception: tunneled playback bypasses the normal video
+                // rendering pipeline so onRenderedFirstFrame() never fires.
+                // In that case we fall back to starting on STATE_READY.
+                playWhenReady = false
                 prepare()
 
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (isReleasingPlayer) return
                         val playerDuration = duration
                         if (playerDuration > lastKnownDuration) {
                             lastKnownDuration = playerDuration
@@ -376,6 +450,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                                 playbackEnded = playbackState == Player.STATE_ENDED
                             )
                         }
+                        updateAudioControlAvailability()
 
                         if (playbackState == Player.STATE_BUFFERING && !hasRenderedFirstFrame) {
                             _uiState.update { state ->
@@ -389,14 +464,37 @@ internal fun PlayerRuntimeController.initializePlayer(
                     
                         
                         if (playbackState == Player.STATE_READY) {
+
+                            
+                            // Don't auto-play on the initial STATE_READY — wait
+                            // for onRenderedFirstFrame() to ensure A/V sync.
+                            // After the first frame is visible, rebuffer events
+                            // can resume playback normally.
+                            //
+                            // Exception: tunneled playback never fires
+                            // onRenderedFirstFrame(), so we must start here.
                             if (shouldEnforceAutoplayOnFirstReady) {
                                 shouldEnforceAutoplayOnFirstReady = false
-                                if (!userPausedManually && !isPlaying) {
-                                    if (!playWhenReady) {
+                                if (isTunneledPlayback) {
+                                    // Tunneled mode — onRenderedFirstFrame() won't
+                                    // fire; treat STATE_READY as the sync point.
+                                    hasRenderedFirstFrame = true
+                                    if (!startPaused && !userPausedManually) {
                                         playWhenReady = true
+                                        play()
                                     }
-                                    play()
+                                    _uiState.update {
+                                        it.copy(
+                                            showLoadingOverlay = false,
+                                            loadingMessage = null,
+                                            loadingProgress = if (it.loadingProgress != null) 1f else null,
+                                            showPlayerEngineSwitchInfo = false
+                                        )
+                                    }
                                 }
+                                // Non-tunneled: playback will start in onRenderedFirstFrame().
+                            } else if (!userPausedManually && hasRenderedFirstFrame) {
+                                play()
                             }
                             tryApplyPendingResumeProgress(this@apply)
                             _uiState.value.pendingSeekPosition?.let { position ->
@@ -413,7 +511,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                         if (playbackState == Player.STATE_ENDED) {
                             emitCompletionScrobbleStop(progressPercent = 99.5f)
                             saveWatchProgress()
-                            resetNextEpisodeCardState(clearEpisode = false)
+                            resetPostPlayStateAfterPlaybackEnded()
                         }
                     }
 
@@ -449,8 +547,15 @@ internal fun PlayerRuntimeController.initializePlayer(
 
                     override fun onRenderedFirstFrame() {
                         hasRenderedFirstFrame = true
+                        updateAudioControlAvailability()
+                        // Start playback now that the first video frame is
+                        // visible: audio and video begin in sync.
+                        if (!startPaused && !userPausedManually) {
+                            playWhenReady = true
+                            play()
+                        }
                         resetErrorRetryState()
-                        // Restore speed after PCM fallback — audio sink is already
+                        // Restore speed after PCM fallback: audio sink is already
                         // configured in PCM mode and won't revert to passthrough.
                         if (hasTriedAudioPcmFallback) {
                             _exoPlayer?.playbackParameters = PlaybackParameters(1f)
@@ -472,7 +577,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                         if (isReleasingPlayer && error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT) {
                             return
                         }
-                        val detailedError = error.toDisplayMessage()
+                        val detailedError = error.toDisplayMessage(context)
 
                         // If the codec crashed while the app is in the background (e.g. another
                         // app reclaimed the hardware decoder), don't run the retry chain — each
@@ -530,7 +635,7 @@ internal fun PlayerRuntimeController.initializePlayer(
         } catch (e: Exception) {
             if (
                 maybeAutoSwitchInternalPlayerOnStartupError(
-                    detailedError = e.message ?: "Failed to initialize player",
+                    detailedError = e.message ?: context.getString(com.nuvio.tv.R.string.player_error_initialize_failed),
                     allowEngineFailover = allowEngineFailover
                 )
             ) {
@@ -538,7 +643,7 @@ internal fun PlayerRuntimeController.initializePlayer(
             }
             _uiState.update {
                 it.copy(
-                    error = e.toDisplayMessage("Failed to initialize player"),
+                    error = e.toDisplayMessage(context, context.getString(com.nuvio.tv.R.string.player_error_initialize_failed)),
                     showLoadingOverlay = false
                 )
             }
@@ -565,7 +670,6 @@ internal fun PlayerRuntimeController.resolveAutoInternalPlayerEngine(): Internal
                 currentVideoId?.startsWith("mal:") == true ||
                 currentVideoId?.startsWith("anilist:") == true
 
-        // AIOMetadata usually matches hasAnimeGenre or hasAnimeId, Cinemeta usually matches isAnimationFromJapan
         val isAnime = hasAnimeGenre || hasAnimeId || isAnimationFromJapan
 
         if (isAnime) InternalPlayerEngine.MVP_PLAYER else InternalPlayerEngine.EXOPLAYER
@@ -821,8 +925,12 @@ private class SubtitleOffsetRenderersFactory(
     private val audioDelayUsProvider: () -> Long,
     private val shouldNormalizeCuePositionProvider: () -> Boolean,
     private val gainAudioProcessor: GainAudioProcessor,
+    private val downmixEnabled: Boolean,
+    private val audioOutputChannels: com.nuvio.tv.data.local.AudioOutputChannels,
+    private val downmixNormalizationEnabled: Boolean,
     private val playbackSpeedProvider: () -> Float,
-    private val onPlaybackSpeedAwareAudioSinkCreated: (PlaybackSpeedAwareAudioSink) -> Unit
+    private val onPlaybackSpeedAwareAudioSinkCreated: (PlaybackSpeedAwareAudioSink) -> Unit,
+    private val onFfmpegAudioRendererChanged: (FfmpegAudioRenderer?) -> Unit
 ) : DefaultRenderersFactory(context) {
 
     override fun buildAudioSink(
@@ -852,19 +960,6 @@ private class SubtitleOffsetRenderersFactory(
         out: ArrayList<Renderer>
     ) {
         val playbackAwareSink = audioSink as? PlaybackSpeedAwareAudioSink
-        if (playbackAwareSink == null) {
-            super.buildAudioRenderers(
-                context,
-                extensionRendererMode,
-                mediaCodecSelector,
-                enableDecoderFallback,
-                audioSink,
-                eventHandler,
-                eventListener,
-                out
-            )
-            return
-        }
         val startIndex = out.size
         super.buildAudioRenderers(
             context,
@@ -876,7 +971,7 @@ private class SubtitleOffsetRenderersFactory(
             eventListener,
             out
         )
-        if (out.size > startIndex) {
+        if (playbackAwareSink != null && out.size > startIndex) {
             val mediaCodecAudioRendererIndex = (startIndex until out.size)
                 .firstOrNull { index -> out[index] is MediaCodecAudioRenderer }
                 ?: startIndex
@@ -891,6 +986,7 @@ private class SubtitleOffsetRenderersFactory(
                     playbackSpeedAwareAudioSink = playbackAwareSink
                 )
         }
+        applyFfmpegRendererSettings(out)
     }
 
     override fun buildTextRenderers(
@@ -913,6 +1009,34 @@ private class SubtitleOffsetRenderersFactory(
                 audioDelayUsProvider = audioDelayUsProvider
             )
         }
+    }
+
+    private fun applyFfmpegRendererSettings(out: ArrayList<Renderer>) {
+        val ffmpegRenderers = out.filterIsInstance<FfmpegAudioRenderer>()
+        ffmpegRenderers.forEach { renderer ->
+            renderer.applyDownmixSettings(
+                downmixEnabled = downmixEnabled,
+                audioOutputChannels = audioOutputChannels,
+                downmixNormalizationEnabled = downmixNormalizationEnabled
+            )
+        }
+        onFfmpegAudioRendererChanged(ffmpegRenderers.firstOrNull())
+    }
+}
+private fun FfmpegAudioRenderer.applyDownmixSettings(
+    downmixEnabled: Boolean,
+    audioOutputChannels: com.nuvio.tv.data.local.AudioOutputChannels,
+    downmixNormalizationEnabled: Boolean
+) {
+    if (downmixEnabled) {
+        setAudioOutputChannels(
+            audioOutputChannels.ffmpegLayoutName,
+            audioOutputChannels.channelCount
+        )
+        setDownmixNormalizationEnabled(downmixNormalizationEnabled)
+    } else {
+        setAudioOutputChannels(null, 0)
+        setDownmixNormalizationEnabled(false)
     }
 }
 
@@ -1002,4 +1126,3 @@ private class SubtitleOffsetRenderer(
         super.render(adjustedPositionUs, elapsedRealtimeUs)
     }
 }
-

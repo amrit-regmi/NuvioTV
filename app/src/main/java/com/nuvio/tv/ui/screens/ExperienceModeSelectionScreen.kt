@@ -23,8 +23,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.nuvio.tv.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.tv.material3.Border
@@ -89,13 +91,13 @@ fun ExperienceModeSelectionScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Choose your Nuvio experience",
+                text = stringResource(R.string.experience_mode_choose_title),
                 style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                 color = NuvioColors.TextPrimary
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "Start simple or unlock every customization. You can switch anytime.",
+                text = stringResource(R.string.experience_mode_choose_subtitle),
                 style = MaterialTheme.typography.bodyLarge,
                 color = NuvioColors.TextSecondary
             )
@@ -105,8 +107,8 @@ fun ExperienceModeSelectionScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 ExperienceModeCard(
-                    title = "Essential",
-                    subtitle = "Focused setup, add-ons, playback basics, Trakt, and account settings.",
+                    title = stringResource(R.string.experience_mode_essential),
+                    subtitle = stringResource(R.string.experience_mode_essential_card_subtitle),
                     icon = Icons.Default.VideoSettings,
                     onClick = { choose(ExperienceMode.ESSENTIAL) },
                     modifier = Modifier
@@ -114,8 +116,8 @@ fun ExperienceModeSelectionScreen(
                         .focusRequester(essentialFocusRequester)
                 )
                 ExperienceModeCard(
-                    title = "Advanced",
-                    subtitle = "Full settings, layout controls, catalog order, collections, plug-ins, and diagnostics.",
+                    title = stringResource(R.string.experience_mode_advanced),
+                    subtitle = stringResource(R.string.experience_mode_advanced_card_subtitle),
                     icon = Icons.Default.Tune,
                     onClick = { choose(ExperienceMode.ADVANCED) },
                     modifier = Modifier.weight(1f)

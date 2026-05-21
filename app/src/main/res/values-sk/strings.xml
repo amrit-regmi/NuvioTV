@@ -115,6 +115,14 @@
     <string name="cw_min_left">Zostáva %1$dm</string>
     <string name="cw_almost_done">Takmer hotovo</string>
     <string name="cw_airs_date">Vysiela sa %1$s</string>
+    <string name="cw_airs_today">Vysiela sa dnes</string>
+    <string name="cw_airs_tomorrow">Vysiela sa zajtra</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">Vysiela sa za %d deň</item>
+        <item quantity="few">Vysiela sa za %d dni</item>
+        <item quantity="many">Vysiela sa za %d dní</item>
+        <item quantity="other">Vysiela sa za %d dní</item>
+    </plurals>
     <string name="cw_action_go_to_details">Prejsť na detaily</string>
     <string name="cw_action_start_from_beginning">Začať od začiatku</string>
     <string name="cw_action_remove">Odobrať</string>
@@ -436,6 +444,8 @@
     <string name="sub_forced_lang">Vynútené</string>
     <string name="sub_preferred_lang">Preferovaný jazyk</string>
     <string name="sub_secondary_lang">Sekundárny preferovaný jazyk</string>
+    <string name="sub_use_forced_subtitles">Použiť vynútené titulky</string>
+    <string name="sub_use_forced_subtitles_desc">Uprednostniť vynútené titulky, keď sa zvuk zhoduje s jazykom titulkov; ak nie sú dostupné, nevybrať nič</string>
     <string name="sub_show_only_preferred_languages">Zobraziť iba preferované jazyky</string>
     <string name="sub_show_only_preferred_languages_desc">Skryť všetky ostatné jazyky titulkov zo zoznamu výberu</string>
     <string name="sub_organization">Usporiadanie titulkov</string>
@@ -1059,7 +1069,7 @@
     <string name="pause_back_to_details">Späť na detaily</string>
     <string name="pause_as_character">ako %1$s</string>
 
-    <!-- NextEpisodeCardOverlay -->
+    <!-- PostPlayOverlay -->
     <string name="next_episode_label">Ďalšia epizóda</string>
     <string name="next_episode_finding_source">Hľadá sa zdroj…</string>
     <string name="next_episode_playing_via">Prehráva sa cez %1$s za %2$ds</string>

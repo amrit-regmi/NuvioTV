@@ -51,7 +51,7 @@ internal fun PlayerRuntimeController.attachMpvView(view: NuvioMpvSurfaceView?) {
         scheduleHideControls()
         emitScrobbleStart()
     }.onFailure {
-        val detailedError = it.message ?: "Failed to initialize libmpv surface"
+        val detailedError = it.message ?: context.getString(com.nuvio.tv.R.string.player_error_mpv_surface_failed)
         if (
             maybeAutoSwitchInternalPlayerOnStartupError(
                 detailedError = detailedError,
@@ -136,7 +136,7 @@ internal fun PlayerRuntimeController.initializeMpvPlayer(
         emitScrobbleStart()
     }.onFailure { error ->
         Log.e(PlayerRuntimeController.TAG, "libmpv initialize failed: ${error.message}", error)
-        val detailedError = error.message ?: "Failed to initialize libmpv playback"
+        val detailedError = error.message ?: context.getString(com.nuvio.tv.R.string.player_error_mpv_playback_failed)
         if (
             maybeAutoSwitchInternalPlayerOnStartupError(
                 detailedError = detailedError,
@@ -475,6 +475,15 @@ internal fun PlayerRuntimeController.setPlaybackPaused(paused: Boolean) {
         _exoPlayer?.let { player ->
             if (paused) player.pause() else player.play()
         }
+    }
+}
+
+internal fun PlayerRuntimeController.pauseForStillWatchingPrompt() {
+    setPlaybackPaused(true)
+    if (isUsingMpvEngine()) {
+        stopProgressUpdates()
+        stopWatchProgressSaving()
+        emitStopScrobbleForCurrentProgress()
     }
 }
 

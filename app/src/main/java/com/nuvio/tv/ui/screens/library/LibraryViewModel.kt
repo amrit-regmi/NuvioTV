@@ -182,12 +182,12 @@ class LibraryViewModel @Inject constructor(
     fun onRefresh() {
         if (_uiState.value.isSyncing) return
         viewModelScope.launch {
-            setTransientMessage("Syncing Trakt library...")
+            setTransientMessage(context.getString(R.string.library_syncing))
             runCatching {
                 libraryRepository.refreshNow()
-                setTransientMessage("Library synced")
+                setTransientMessage(context.getString(R.string.library_synced))
             }.onFailure { error ->
-                setError(error.message ?: "Failed to refresh library")
+                setError(error.message ?: context.getString(R.string.library_error_refresh_failed))
             }
         }
     }
@@ -288,25 +288,25 @@ class LibraryViewModel @Inject constructor(
                             description = editor.description.trim().ifBlank { null },
                             privacy = editor.privacy
                         )
-                        setTransientMessage("List created")
+                        setTransientMessage(context.getString(R.string.library_list_created))
                     }
                     LibraryListEditorState.Mode.EDIT -> {
                         val listId = editor.listId
-                            ?: throw IllegalStateException("Invalid list")
+                            ?: throw IllegalStateException(context.getString(R.string.library_error_invalid_list))
                         libraryRepository.updatePersonalList(
                             listId = listId,
                             name = name,
                             description = editor.description.trim().ifBlank { null },
                             privacy = editor.privacy
                         )
-                        setTransientMessage("List updated")
+                        setTransientMessage(context.getString(R.string.library_list_updated))
                     }
                 }
             }.onSuccess {
                 _uiState.update { it.copy(listEditorState = null, pendingOperation = false) }
             }.onFailure { error ->
                 _uiState.update { it.copy(pendingOperation = false) }
-                setError(error.message ?: "Failed to save list")
+                setError(error.message ?: context.getString(R.string.library_error_save_list_failed))
             }
         }
     }
@@ -320,12 +320,12 @@ class LibraryViewModel @Inject constructor(
             _uiState.update { it.copy(pendingOperation = true, errorMessage = null) }
             runCatching {
                 libraryRepository.deletePersonalList(listId)
-                setTransientMessage("List deleted")
+                setTransientMessage(context.getString(R.string.library_list_deleted))
             }.onSuccess {
                 _uiState.update { it.copy(pendingOperation = false) }
             }.onFailure { error ->
                 _uiState.update { it.copy(pendingOperation = false) }
-                setError(error.message ?: "Failed to delete list")
+                setError(error.message ?: context.getString(R.string.library_error_delete_list_failed))
             }
         }
     }
@@ -485,12 +485,12 @@ class LibraryViewModel @Inject constructor(
             _uiState.update { it.copy(pendingOperation = true, errorMessage = null) }
             runCatching {
                 libraryRepository.reorderPersonalLists(orderedIds)
-                setTransientMessage("List order updated")
+                setTransientMessage(context.getString(R.string.library_list_order_updated))
             }.onSuccess {
                 _uiState.update { it.copy(pendingOperation = false) }
             }.onFailure { error ->
                 _uiState.update { it.copy(pendingOperation = false) }
-                setError(error.message ?: "Failed to reorder lists")
+                setError(error.message ?: context.getString(R.string.library_error_reorder_lists_failed))
             }
         }
     }
@@ -530,7 +530,7 @@ class LibraryViewModel @Inject constructor(
                     if (ch.isLowerCase()) ch.titlecase(Locale.ROOT) else ch.toString()
                 }
             }
-            .ifBlank { "Unknown" }
+            .ifBlank { context.getString(R.string.type_unknown) }
     }
 
     private val yearRegex = Regex("""\b(19|20)\d{2}\b""")

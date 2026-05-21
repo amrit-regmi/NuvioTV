@@ -7,6 +7,7 @@ import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.data.remote.api.AniSkipApi
 import com.nuvio.tv.data.remote.api.AnimeSkipApi
 import com.nuvio.tv.data.remote.api.ArmApi
+import com.nuvio.tv.data.remote.api.DirectDebridStreamApi
 import com.nuvio.tv.data.remote.api.DonationsApi
 import com.nuvio.tv.data.remote.api.GitHubReleaseApi
 import com.nuvio.tv.data.remote.api.TraktApi
@@ -15,10 +16,13 @@ import com.nuvio.tv.data.remote.api.IntroDbApi
 import com.nuvio.tv.data.remote.api.ImdbTapframeApi
 import com.nuvio.tv.data.remote.api.MDBListApi
 import com.nuvio.tv.data.remote.api.ParentalGuideApi
+import com.nuvio.tv.data.remote.api.RealDebridApi
 import com.nuvio.tv.data.remote.api.SeriesGraphApi
 import com.nuvio.tv.data.remote.api.SponsorsApi
 import com.nuvio.tv.data.remote.api.TmdbApi
+import com.nuvio.tv.data.remote.api.TorboxApi
 import com.nuvio.tv.data.remote.api.UniqueContributionsApi
+import com.nuvio.tv.LocaleCache
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
@@ -54,6 +58,28 @@ private fun normalizedBaseUrl(rawUrl: String, fallback: String): String {
     return if (trimmed.endsWith('/')) trimmed else "$trimmed/"
 }
 
+/**
+ * Builds the value sent in the `Accept-Language` request header so addons can
+ * serve localized payloads (catalog names, descriptions, etc.). Falls back to
+ * the system locale when the user has not overridden the app language. The
+ * primary tag is given the highest q-weight; English is appended at q=0.7 as
+ * a sensible fallback for addons that don't support the requested locale.
+ */
+private fun buildAcceptLanguageHeader(): String {
+    val explicit = LocaleCache.localeTag
+        .takeIf { it.isNotBlank() && it != LocaleCache.UNSET }
+    val primaryTag = (explicit ?: java.util.Locale.getDefault().toLanguageTag())
+        .takeIf { it.isNotBlank() && it != "und" }
+        ?: "en"
+    return if (primaryTag.equals("en", ignoreCase = true) ||
+        primaryTag.startsWith("en-", ignoreCase = true)
+    ) {
+        primaryTag
+    } else {
+        "$primaryTag,en;q=0.7"
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
@@ -86,6 +112,7 @@ object NetworkModule {
                 val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
                 val request = chain.request().newBuilder()
                     .header("User-Agent", "Nuvio/$version")
+                    .header("Accept-Language", buildAcceptLanguageHeader())
                     .build()
                 chain.proceed(request)
             }
@@ -106,6 +133,24 @@ object NetworkModule {
             })
             .build()
     }
+
+    @Provides
+    @Singleton
+    @Named("directDebrid")
+    fun provideDirectDebridOkHttpClient(): OkHttpClient =
+        OkHttpClient.Builder()
+            .dns(IPv4FirstDns())
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
+                val request = chain.request().newBuilder()
+                    .header("User-Agent", "Nuvio/$version")
+                    .header("Accept-Language", buildAcceptLanguageHeader())
+                    .build()
+                chain.proceed(request)
+            }
+            .build()
 
     @Provides
     @Singleton
@@ -179,6 +224,19 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("directDebrid")
+    fun provideDirectDebridRetrofit(
+        @Named("directDebrid") okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://placeholder.nuvio.tv/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
     @Named("tmdb")
     fun provideTmdbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
@@ -207,6 +265,47 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideDirectDebridStreamApi(@Named("directDebrid") retrofit: Retrofit): DirectDebridStreamApi =
+        retrofit.create(DirectDebridStreamApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("torbox")
+    fun provideTorboxRetrofit(
+        @Named("directDebrid") okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://api.torbox.app/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideTorboxApi(@Named("torbox") retrofit: Retrofit): TorboxApi =
+        retrofit.create(TorboxApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("realdebrid")
+    fun provideRealDebridRetrofit(
+        @Named("directDebrid") okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://api.real-debrid.com/rest/1.0/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideRealDebridApi(@Named("realdebrid") retrofit: Retrofit): RealDebridApi =
+        retrofit.create(RealDebridApi::class.java)
+
+    @Provides
+    @Singleton
     fun provideTmdbApi(@Named("tmdb") retrofit: Retrofit): TmdbApi =
         retrofit.create(TmdbApi::class.java)
 
@@ -220,7 +319,7 @@ object NetworkModule {
     @Named("parentalGuide")
     fun provideParentalGuideRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
-            .baseUrl(BuildConfig.PARENTAL_GUIDE_API_URL.ifEmpty { "https://localhost/" })
+            .baseUrl("https://api.imdbapi.dev/")
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()

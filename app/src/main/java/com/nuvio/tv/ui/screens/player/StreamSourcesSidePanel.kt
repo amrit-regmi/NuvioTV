@@ -57,14 +57,13 @@ internal fun StreamSourcesSidePanel(
     onStreamSelected: (Stream) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Only request focus when loading finishes (not on addon filter changes)
-    LaunchedEffect(uiState.isLoadingSourceStreams) {
+    // Request focus when loading finishes OR when the list content updates
+    // (ensures higher-priority addons get focus if they load later)
+    LaunchedEffect(uiState.isLoadingSourceStreams, uiState.sourceFilteredStreams.size) {
         if (!uiState.isLoadingSourceStreams && uiState.sourceFilteredStreams.isNotEmpty()) {
             try {
                 streamsFocusRequester.requestFocus()
-            } catch (_: Exception) {
-                // Focus requester may not be ready yet
-            }
+            } catch (_: Exception) {}
         }
     }
 

@@ -431,7 +431,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
                     audioTracks += MpvTrack(
                         id = id,
                         type = type,
-                        name = title ?: language ?: "Audio $id",
+                        name = title ?: language ?: context.getString(com.nuvio.tv.R.string.player_track_audio_fallback, id),
                         language = language,
                         codec = codec,
                         channelCount = channelCount,
@@ -445,7 +445,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
                     subtitleTracks += MpvTrack(
                         id = id,
                         type = type,
-                        name = title ?: language ?: "Subtitle $id",
+                        name = title ?: language ?: context.getString(com.nuvio.tv.R.string.player_track_subtitle_fallback, id),
                         language = language,
                         codec = codec,
                         channelCount = null,

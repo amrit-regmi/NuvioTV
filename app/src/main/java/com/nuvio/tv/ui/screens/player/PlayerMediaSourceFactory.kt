@@ -84,6 +84,7 @@ internal class PlayerMediaSourceFactory {
 
         val mediaItemBuilder = MediaItem.Builder().setUri(url)
         resolvedMimeType?.let(mediaItemBuilder::setMimeType)
+        filename?.takeIf { it.isNotBlank() }?.let(mediaItemBuilder::setMediaId)
         mediaMetadata?.let(mediaItemBuilder::setMediaMetadata)
 
         if (subtitleConfigurations.isNotEmpty()) {

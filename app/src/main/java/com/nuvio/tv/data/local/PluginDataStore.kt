@@ -52,6 +52,7 @@ class PluginDataStore @Inject constructor(
     private val repositoriesKey = stringPreferencesKey("repositories")
     private val scrapersKey = stringPreferencesKey("scrapers")
     private val pluginsEnabledKey = booleanPreferencesKey("plugins_enabled")
+    private val groupStreamsByRepositoryKey = booleanPreferencesKey("group_streams_by_repository")
     private val scraperSettingsKey = stringPreferencesKey("scraper_settings")
 
     private val repoListType = Types.newParameterizedType(List::class.java, PluginRepository::class.java)
@@ -171,6 +172,20 @@ class PluginDataStore @Inject constructor(
             if (active != null && !active.isPrimary && active.usesPrimaryPlugins) return
         store().edit { prefs ->
             prefs[pluginsEnabledKey] = enabled
+        }
+    }
+
+    val groupStreamsByRepository: Flow<Boolean> = effectiveProfileIdFlow.flatMapLatest { pid ->
+        factory.get(pid, FEATURE).data.map { prefs ->
+            prefs[groupStreamsByRepositoryKey] ?: false
+        }
+    }
+
+    suspend fun setGroupStreamsByRepository(enabled: Boolean) {
+            val active = profileManager.activeProfile
+            if (active != null && !active.isPrimary && active.usesPrimaryPlugins) return
+        store().edit { prefs ->
+            prefs[groupStreamsByRepositoryKey] = enabled
         }
     }
 

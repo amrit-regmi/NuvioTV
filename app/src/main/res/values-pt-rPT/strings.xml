@@ -115,6 +115,13 @@
     <string name="cw_min_left">faltam %1$dm</string>
     <string name="cw_almost_done">Quase a terminar</string>
     <string name="cw_airs_date">Sairá a %1$s</string>
+    <string name="cw_airs_today">Sairá hoje</string>
+    <string name="cw_airs_tomorrow">Sairá amanhã</string>
+    <plurals name="cw_airs_in_days">
+        <item quantity="one">Sairá dentro de %d dia</item>
+        <item quantity="many">Sairá dentro de %d dias</item>
+        <item quantity="other">Sairá dentro de %d dias</item>
+    </plurals>
     <string name="cw_action_go_to_details">Ir para detalhes</string>
     <string name="cw_action_start_from_beginning">Ver do início</string>
     <string name="cw_action_remove">Remover</string>
@@ -468,6 +475,8 @@
     <string name="sub_forced_lang">Forçadas</string>
     <string name="sub_preferred_lang">Idioma Preferido</string>
     <string name="sub_secondary_lang">Segundo Idioma Preferido</string>
+    <string name="sub_use_forced_subtitles">Usar legendas forçadas</string>
+    <string name="sub_use_forced_subtitles_desc">Preferir legendas forçadas quando o áudio corresponder ao idioma das legendas; se indisponíveis, não selecionar nada</string>
     <string name="sub_show_only_preferred_languages">Mostrar apenas idiomas preferidos</string>
     <string name="sub_show_only_preferred_languages_desc">Ocultar todos os outros idiomas de legendas da lista de seleção</string>
     <string name="sub_organization">Organização de Legendas</string>
@@ -1097,7 +1106,7 @@
     <string name="pause_back_to_details">Voltar aos detalhes</string>
     <string name="pause_as_character">como %1$s</string>
 
-    <!-- NextEpisodeCardOverlay -->
+    <!-- PostPlayOverlay -->
     <string name="next_episode_label">Próximo Episódio</string>
     <string name="next_episode_finding_source">A procurar fonte…</string>
     <string name="next_episode_playing_via">A reproduzir via %1$s em %2$ds</string>

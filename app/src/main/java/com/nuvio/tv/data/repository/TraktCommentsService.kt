@@ -43,6 +43,7 @@ data class TraktCommentsPage(
 
 @Singleton
 class TraktCommentsService @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService
 ) {
@@ -137,7 +138,7 @@ class TraktCommentsService @Inject constructor(
                     limit = COMMENTS_LIMIT
                 )
             }
-        } ?: throw IllegalStateException("Trakt comments request failed")
+        } ?: throw IllegalStateException(appContext.getString(com.nuvio.tv.R.string.trakt_comments_error_request_failed))
 
         val comments = when {
             response.code() == 404 -> emptyList()
@@ -147,7 +148,7 @@ class TraktCommentsService @Inject constructor(
 
         val pageCount = response.headers()["X-Pagination-Page-Count"]?.toIntOrNull() ?: page
         val itemCount = response.headers()["X-Pagination-Item-Count"]?.toIntOrNull() ?: comments.size
-        val selected = filterDisplayableComments(comments).map(::toReviewModel)
+        val selected = filterDisplayableComments(comments).map { toReviewModel(it, appContext) }
 
         cacheMutex.withLock {
             val cached = cache[cacheKey]
@@ -308,12 +309,12 @@ internal fun TraktIdsDto?.toBestCommentsPathId(): String? {
     }
 }
 
-private fun toReviewModel(dto: TraktCommentDto): TraktCommentReview {
+private fun toReviewModel(dto: TraktCommentDto, appContext: android.content.Context): TraktCommentReview {
     val authorDisplayName = dto.user?.name
         ?.takeIf { it.isNotBlank() }
         ?: dto.user?.username
             ?.takeIf { it.isNotBlank() }
-        ?: "Trakt user"
+        ?: appContext.getString(com.nuvio.tv.R.string.trakt_user_fallback)
 
     return TraktCommentReview(
         id = dto.id,
