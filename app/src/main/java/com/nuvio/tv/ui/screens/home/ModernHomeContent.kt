@@ -768,7 +768,8 @@ fun ModernHomeContent(
                     when {
                         isScrolling && stableHasPreview -> stable
                         isScrolling && !stableHasPreview && liveHasPreview -> currentLive
-                        isRapidNav -> currentLive.copy(preview = null, enrichmentActive = false)
+                        isRapidNav -> stable?.copy(preview = null, enrichmentActive = false)
+                            ?: currentLive.copy(preview = null, enrichmentActive = false)
                         else -> currentLive
                     }
                 }.collect { currentStable ->
