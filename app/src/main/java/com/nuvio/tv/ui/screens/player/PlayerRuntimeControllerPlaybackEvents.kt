@@ -400,7 +400,7 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
         // Wait for the episode mapping to finish (with its own timeout) so that
         // the scrobble start is sent with the correct season/episode number.
         traktMappingJob?.join()
-        refreshScrobbleItem()
+        currentScrobbleItem = buildScrobbleItem()
         val item = currentScrobbleItem ?: return@launch
         if (requestGeneration != scrobbleStartRequestGeneration || !hasRequestedScrobbleStartForCurrentItem) return@launch
         val progressPercent = currentPlaybackProgressPercent()
