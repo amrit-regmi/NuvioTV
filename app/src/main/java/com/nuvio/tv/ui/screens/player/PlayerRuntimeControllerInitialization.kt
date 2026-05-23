@@ -623,6 +623,33 @@ internal fun PlayerRuntimeController.initializePlayer(
                         if (hasRenderedFirstFrame && attemptAutoRetry(error, detailedError)) {
                             return
                         }
+                        // Auto-advance to next stream when launched from the details page
+                        // and the current stream fails. Only fires for auto-play (not user-selected streams).
+                        if (isAutoPlay) {
+                            val nextStream = playerPreWarmer.getNextStream(
+                                type = contentType ?: "",
+                                videoId = currentVideoId ?: "",
+                                currentUrl = currentStreamUrl
+                            )
+                            val nextUrl = nextStream?.getStreamUrl()
+                            if (nextStream != null && !nextUrl.isNullOrBlank()) {
+                                val nextHeaders = nextStream.behaviorHints?.proxyHeaders?.request.orEmpty()
+                                val (cleanUrl, mergedHeaders) = PlayerMediaSourceFactory.extractUserInfoAuth(nextUrl, nextHeaders)
+                                currentStreamUrl = cleanUrl
+                                currentHeaders = mergedHeaders
+                                currentFilename = nextStream.behaviorHints?.filename ?: navigationArgs.filename
+                                currentStreamResponseHeaders = nextStream.behaviorHints?.proxyHeaders?.response.orEmpty()
+                                currentStreamMimeType = null
+                                errorRetryJob?.cancel()
+                                errorRetryCount = 0
+                                startupRetryCount = 0
+                                hasRetriedCurrentStreamAfter416 = false
+                                Log.d(PlayerRuntimeController.TAG, "Auto-advance to next stream: ${nextStream.name ?: nextStream.addonName}")
+                                _uiState.update { it.copy(error = null, currentStreamName = nextStream.name ?: nextStream.addonName, currentStreamUrl = cleanUrl) }
+                                initializePlayer(cleanUrl, mergedHeaders)
+                                return
+                            }
+                        }
                         _uiState.update {
                             it.copy(
                                 error = detailedError,

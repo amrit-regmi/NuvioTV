@@ -42,11 +42,6 @@ class UpdateViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UpdateUiState())
     val uiState: StateFlow<UpdateUiState> = _uiState.asStateFlow()
 
-    init {
-        // Lightweight check on app start.
-        checkForUpdates(force = false, showNoUpdateFeedback = false)
-    }
-
     fun checkForUpdates(force: Boolean, showNoUpdateFeedback: Boolean) {
         viewModelScope.launch {
             _uiState.update { it.copy(isChecking = true, errorMessage = null, showNoUpdateToastHint = false) }

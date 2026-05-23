@@ -56,29 +56,39 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
     val probeHeaders = headers.filterKeys { !it.equals("Range", ignoreCase = true) }
 
     try {
-        val nextLibDetection = withTimeoutOrNull(AFR_PREFLIGHT_NEXTLIB_TIMEOUT_MS) {
-            withContext(Dispatchers.IO) {
-                FrameRateUtils.detectFrameRateFromNextLib(
-                    context = context,
-                    sourceUrl = url,
-                    headers = probeHeaders
-                )
-            }
-        }
-        val detection = if (nextLibDetection != null) {
-            nextLibDetection
+        // Use frame rate pre-detected during stream warming — avoids a blocking HTTP probe
+        val cachedFps = playerPreWarmer.getSession(
+            type = contentType ?: "",
+            videoId = currentVideoId ?: ""
+        )?.detectedFps
+
+        val detection = if (cachedFps != null) {
+            Log.d(PlayerRuntimeController.TAG, "AFR: using pre-detected fps=${cachedFps.raw}")
+            cachedFps
         } else {
-            Log.w(
-                PlayerRuntimeController.TAG,
-                "AFR preflight NextLib probe failed/timed out after ${AFR_PREFLIGHT_NEXTLIB_TIMEOUT_MS}ms; trying extractor fallback"
+            // Await the fps detection already running in StreamWarmer rather than launching
+            // a duplicate nextlib probe. Falls through to extractor if warming isn't in progress.
+            val warmedFps = playerPreWarmer.awaitFps(
+                type = contentType ?: "",
+                videoId = currentVideoId ?: "",
+                timeoutMs = AFR_PREFLIGHT_NEXTLIB_TIMEOUT_MS
             )
-            withTimeoutOrNull(AFR_PREFLIGHT_FALLBACK_TIMEOUT_MS) {
-                withContext(Dispatchers.IO) {
-                    FrameRateUtils.detectFrameRateFromExtractor(
-                        context = context,
-                        sourceUrl = url,
-                        headers = probeHeaders
-                    )
+            if (warmedFps != null) {
+                Log.d(PlayerRuntimeController.TAG, "AFR: using warm-awaited fps=${warmedFps.raw}")
+                warmedFps
+            } else {
+                Log.w(
+                    PlayerRuntimeController.TAG,
+                    "AFR warm fps unavailable; trying extractor fallback"
+                )
+                withTimeoutOrNull(AFR_PREFLIGHT_FALLBACK_TIMEOUT_MS) {
+                    withContext(Dispatchers.IO) {
+                        FrameRateUtils.detectFrameRateFromExtractor(
+                            context = context,
+                            sourceUrl = url,
+                            headers = probeHeaders
+                        )
+                    }
                 }
             }
         }

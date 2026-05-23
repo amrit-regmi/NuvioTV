@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
 import com.nuvio.tv.core.debrid.DirectDebridResolver
 import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
+import com.nuvio.tv.core.player.PlayerPreWarmer
 import com.nuvio.tv.core.subtitle.SubtitleWarmer
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.torrent.TorrentService
@@ -61,6 +62,7 @@ class PlayerViewModel @Inject constructor(
     private val directDebridResolver: DirectDebridResolver,
     private val directDebridStreamPreparer: DirectDebridStreamPreparer,
     private val subtitleWarmer: SubtitleWarmer,
+    private val playerPreWarmer: PlayerPreWarmer,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -98,6 +100,7 @@ class PlayerViewModel @Inject constructor(
         directDebridResolver = directDebridResolver,
         directDebridStreamPreparer = directDebridStreamPreparer,
         subtitleWarmer = subtitleWarmer,
+        playerPreWarmer = playerPreWarmer,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )
