@@ -62,6 +62,7 @@ import android.net.Uri
 import com.nuvio.tv.LocaleCache
 import com.nuvio.tv.R
 import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.core.stream.StreamWarmer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Locale
 import javax.inject.Inject
@@ -90,6 +91,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
+    private val streamWarmer: StreamWarmer,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -278,6 +280,15 @@ class MetaDetailsViewModel @Inject constructor(
                 state.copy(nextToWatch = nextToWatch)
             }
         }
+    }
+
+    private fun warmStreams(meta: Meta?, nextToWatch: NextToWatch) {
+        val targetMeta = meta ?: return
+        val type = targetMeta.apiType.takeIf { it.isNotBlank() } ?: return
+        val isSeries = type.equals("series", ignoreCase = true) || type.equals("tv", ignoreCase = true)
+        val videoId = (if (isSeries) nextToWatch.nextVideoId else targetMeta.id)
+            ?.takeIf { it.isNotBlank() } ?: return
+        streamWarmer.warm(type, videoId)
     }
 
     private fun observeTrailerAutoplaySettings() {
@@ -822,6 +833,7 @@ class MetaDetailsViewModel @Inject constructor(
             .first()
         val precomputedNextToWatch = computeNextToWatch(enriched, progressMap, watchedEpisodes)
         updateNextToWatch(precomputedNextToWatch)
+        warmStreams(enriched, precomputedNextToWatch)
 
         applyMeta(enriched)
         // Episode ratings and MDBList are independent — launch both without waiting.
@@ -1571,6 +1583,7 @@ class MetaDetailsViewModel @Inject constructor(
         nextToWatchJob = viewModelScope.launch {
             val nextToWatch = computeNextToWatch(meta, progressMap, watchedEpisodes)
             updateNextToWatch(nextToWatch)
+            warmStreams(meta, nextToWatch)
         }
     }
 

@@ -11,6 +11,7 @@ import com.nuvio.tv.core.debrid.DirectDebridResolver
 import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.subtitle.SubtitleWarmer
 import com.nuvio.tv.core.torrent.TorrentSettings
 import com.nuvio.tv.core.player.StreamAutoPlayPolicy
 import com.nuvio.tv.core.player.StreamAutoPlaySelector
@@ -63,6 +64,7 @@ class StreamScreenViewModel @Inject constructor(
     private val torrentSettings: TorrentSettings,
     private val directDebridResolver: DirectDebridResolver,
     private val directDebridStreamPreparer: DirectDebridStreamPreparer,
+    private val subtitleWarmer: SubtitleWarmer,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -411,6 +413,12 @@ class StreamScreenViewModel @Inject constructor(
                         playerSettings = playerSettings,
                         installedAddonNames = installedAddonOrder.toSet()
                     ) { original, prepared ->
+                        subtitleWarmer.warm(
+                            type = contentType,
+                            videoId = videoId,
+                            filename = prepared.behaviorHints?.filename,
+                            videoSize = prepared.behaviorHints?.videoSize
+                        )
                         updateUiStateIfChanged { state ->
                             val updatedGroups = directDebridStreamPreparer.replacePreparedStream(
                                 groups = state.addonStreams,

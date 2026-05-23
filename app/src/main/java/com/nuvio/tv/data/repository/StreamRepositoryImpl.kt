@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.nuvio.tv.R
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.stream.StreamWarmer
 import com.nuvio.tv.core.network.safeApiCall
 import com.nuvio.tv.core.debrid.DebridStreamPresentation
 import com.nuvio.tv.core.debrid.LocalDebridAvailabilityService
@@ -43,7 +44,8 @@ class StreamRepositoryImpl @Inject constructor(
     private val pluginManager: PluginManager,
     private val tmdbService: TmdbService,
     private val debridStreamPresentation: DebridStreamPresentation,
-    private val localDebridAvailabilityService: LocalDebridAvailabilityService
+    private val localDebridAvailabilityService: LocalDebridAvailabilityService,
+    private val streamWarmer: StreamWarmer
 ) : StreamRepository {
     private enum class StreamFailureKind {
         MISSING,
@@ -404,10 +406,15 @@ class StreamRepositoryImpl @Inject constructor(
             else -> null
         }
 
+        streamWarmer.awaitWarm(baseUrl, type, videoId)?.let { cached ->
+            Log.d(TAG, "Stream warm hit addon=$addonName count=${cached.size} type=$type videoId=$videoId")
+            return NetworkResult.Success(cached)
+        }
+
         return when (val result = safeApiCall { api.getStreams(streamUrl) }) {
             is NetworkResult.Success -> {
-                val streams = result.data.streams?.map { 
-                    it.toDomain(addonName, addonLogo) 
+                val streams = result.data.streams?.map {
+                    it.toDomain(addonName, addonLogo)
                 } ?: emptyList()
                 Log.d(TAG, "Streams success addon=$addonName count=${streams.size} url=$streamUrl")
                 NetworkResult.Success(streams)

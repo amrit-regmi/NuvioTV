@@ -207,6 +207,12 @@ private fun PlayerRuntimeController.launchSourceDebridPreparationIfNeeded(
             playerSettings = playerSettings,
             installedAddonNames = installedAddonNames
         ) { original, prepared ->
+            subtitleWarmer.warm(
+                type = contentType ?: return@prepare,
+                videoId = currentVideoId ?: contentId ?: return@prepare,
+                filename = prepared.behaviorHints?.filename,
+                videoSize = prepared.behaviorHints?.videoSize
+            )
             replacePreparedSourceStream(original, prepared)
         }
     }
@@ -904,6 +910,12 @@ private fun PlayerRuntimeController.launchEpisodeDebridPreparationIfNeeded(
             playerSettings = playerSettings,
             installedAddonNames = installedAddonNames
         ) { original, prepared ->
+            subtitleWarmer.warm(
+                type = contentType ?: return@prepare,
+                videoId = currentVideoId ?: contentId ?: return@prepare,
+                filename = prepared.behaviorHints?.filename,
+                videoSize = prepared.behaviorHints?.videoSize
+            )
             replacePreparedEpisodeStream(original, prepared)
         }
     }
