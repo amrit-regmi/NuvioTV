@@ -8,6 +8,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import com.nuvio.tv.core.player.PlayerPreWarmerEntryPoint
+import com.nuvio.tv.core.stream.StreamWarmerEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -54,6 +59,20 @@ fun NuvioNavHost(
     startDestination: String = Screen.Home.route,
     hideBuiltInHeaders: Boolean = false
 ) {
+    val context = LocalContext.current
+    val playerPreWarmer = remember {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            PlayerPreWarmerEntryPoint::class.java
+        ).playerPreWarmer()
+    }
+    val streamWarmer = remember {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            StreamWarmerEntryPoint::class.java
+        ).streamWarmer()
+    }
+
     fun isStreamToPlayer(from: String, to: String): Boolean {
         return from.startsWith("stream/") && to.startsWith("player/")
     }
@@ -306,26 +325,75 @@ fun NuvioNavHost(
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
                 onPlayClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, contentLanguage ->
-                    navController.navigate(
-                        Screen.Stream.createRoute(
-                            videoId = videoId,
-                            contentType = contentType,
-                            title = title,
-                            poster = poster,
-                            backdrop = backdrop,
-                            logo = logo,
-                            season = season,
-                            episode = episode,
-                            episodeName = episodeName,
-                            genres = genres,
-                            year = year,
-                            contentId = contentId,
-                            contentName = title,
-                            runtime = runtime,
-                            returnToDetailOnBack = contentType.equals("series", ignoreCase = true),
-                            contentLanguage = contentLanguage
+                    // Fast path: use any warm session whose top stream is not a known stub.
+                    // isProbed=true means the URL was confirmed live by probing.
+                    // isProbed=false means probing is still in flight — we still use it unless
+                    // the URL is already identified as a stub, minimising the StreamScreen hop.
+                    val warmSession = playerPreWarmer.getSession(contentType, videoId)
+                        ?.takeIf { session ->
+                            val topUrl = session.streams.firstOrNull()
+                                ?.takeIf { !it.isExternal() && !it.isTorrent() }
+                                ?.getStreamUrl()
+                            !streamWarmer.isKnownStub(topUrl)
+                        }
+                    val topStream = warmSession?.streams?.firstOrNull()
+                    val warmUrl = topStream
+                        ?.takeIf { !it.isExternal() && !it.isTorrent() }
+                        ?.getStreamUrl()
+
+                    if (warmUrl != null) {
+                        navController.navigate(
+                            Screen.Player.createRoute(
+                                streamUrl = warmUrl,
+                                title = title,
+                                streamName = topStream.name ?: topStream.addonName,
+                                year = year,
+                                headers = topStream.behaviorHints?.proxyHeaders?.request,
+                                contentId = contentId,
+                                contentType = contentType,
+                                contentName = title,
+                                poster = poster,
+                                backdrop = backdrop,
+                                logo = logo,
+                                videoId = videoId,
+                                season = season,
+                                episode = episode,
+                                episodeTitle = episodeName,
+                                bingeGroup = topStream.behaviorHints?.bingeGroup,
+                                autoPlayNav = true,
+                                returnToDetailOnBack = contentType.equals("series", ignoreCase = true),
+                                filename = topStream.behaviorHints?.filename,
+                                videoHash = topStream.behaviorHints?.videoHash,
+                                videoSize = topStream.behaviorHints?.videoSize,
+                                addonName = topStream.addonName,
+                                addonLogo = topStream.addonLogo,
+                                streamDescription = topStream.description,
+                                sources = topStream.sources,
+                                contentLanguage = contentLanguage
+                            )
                         )
-                    )
+                    } else {
+                        navController.navigate(
+                            Screen.Stream.createRoute(
+                                videoId = videoId,
+                                contentType = contentType,
+                                title = title,
+                                poster = poster,
+                                backdrop = backdrop,
+                                logo = logo,
+                                season = season,
+                                episode = episode,
+                                episodeName = episodeName,
+                                genres = genres,
+                                year = year,
+                                contentId = contentId,
+                                contentName = title,
+                                runtime = runtime,
+                                returnToDetailOnBack = contentType.equals("series", ignoreCase = true),
+                                contentLanguage = contentLanguage
+                            )
+                        )
+                    }
                 },
                 onPlayManuallyClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime, contentLanguage ->
                     navController.navigate(

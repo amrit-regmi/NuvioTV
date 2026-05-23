@@ -33,9 +33,9 @@ import javax.inject.Singleton
 
 private const val TAG = "StreamWarmer"
 private const val MAX_CACHE_SIZE = 50
-private const val CACHE_TTL_MS = 5 * 60 * 1000L
-private const val PROBE_TIMEOUT_MS = 5_000L
-private const val DEFAULT_PROBE_COUNT = 3
+private const val CACHE_TTL_MS = 15 * 60 * 1000L
+private const val PROBE_TIMEOUT_MS = 2_000L
+private const val DEFAULT_PROBE_COUNT = 10
 // Stub/error videos served by Comet and similar proxies for uncached content are tiny (< 1 MB).
 // Real video files are always larger. Any Content-Range total below this threshold is a stub.
 private const val MIN_REAL_VIDEO_BYTES = 1L * 1024 * 1024
@@ -74,16 +74,20 @@ class StreamWarmer @Inject constructor(
     // URLs confirmed to be proxy stub/error videos (too small to be real content)
     private val stubUrls = Collections.synchronizedSet(mutableSetOf<String>())
 
-    // Called from DirectDebridStreamSource.preloadStreams() — fire and forget
+    // Called from DirectDebridStreamSource.preloadStreams() — fire and forget.
+    // Warms all stream addons in parallel so the best available source (TorBox or RealDebrid)
+    // populates PlayerPreWarmer before the user taps Play.
     fun warm(type: String, videoId: String) {
-        scope.async {
-            val addon = findFirstStreamAddon() ?: return@async
-            val key = cacheKey(addon.baseUrl, type, videoId)
-            synchronized(lock) {
-                if (isCached(key) || inFlight.containsKey(key)) return@async
-                val deferred = scope.async { fetch(addon.baseUrl, addon.displayName, addon.logo, type, videoId, key) }
-                inFlight[key] = deferred
-                deferred.invokeOnCompletion { synchronized(lock) { inFlight.remove(key) } }
+        scope.launch {
+            val addons = findAllStreamAddons()
+            for (addon in addons) {
+                val key = cacheKey(addon.baseUrl, type, videoId)
+                synchronized(lock) {
+                    if (isCached(key) || inFlight.containsKey(key)) return@synchronized
+                    val deferred = scope.async { fetch(addon.baseUrl, addon.displayName, addon.logo, type, videoId, key) }
+                    inFlight[key] = deferred
+                    deferred.invokeOnCompletion { synchronized(lock) { inFlight.remove(key) } }
+                }
             }
         }
     }
@@ -160,7 +164,7 @@ class StreamWarmer @Inject constructor(
     }
 
     // Probes URLs sequentially up to maxProbe, stops at first valid.
-    // Promotes first valid to front if needed. Then:
+    // AIOStreams pre-sorts by preference so stream #0 is the best match.
     //   - Updates PlayerPreWarmer session for auto-advance fallback
     //   - Pre-connects via the player's own HTTP client to warm its connection pool
     private suspend fun probeAndReorder(
@@ -183,46 +187,56 @@ class StreamWarmer @Inject constructor(
             }.also { playerPreWarmer.setFpsJob(type, videoId, it) }
         }
 
-        var firstValidIndex = -1
-        for (index in 0 until minOf(maxProbe, streams.size)) {
-            val stream = streams[index]
-            val url = stream.getStreamUrl() ?: continue
-            val ok = try {
-                withContext(Dispatchers.IO) {
-                    // Use GET with Range: bytes=0-0 instead of HEAD — many streaming
-                    // proxies (e.g. TorBox via Comet) return 405 on HEAD but serve
-                    // range requests correctly. A 206 or 200 confirms the stream is live.
+        // Launch all probes in parallel — total time = slowest probe, not sum of all.
+        // Await results in AIOStreams-sort order; cancel survivors the moment first valid found.
+        val count = minOf(maxProbe, streams.size)
+        val probeJobs = (0 until count).map { index ->
+            val url = streams[index].getStreamUrl()
+            scope.async(Dispatchers.IO) {
+                if (url == null) return@async index to false
+                val ok = try {
                     val request = Request.Builder()
                         .url(url)
-                        .addHeader("Range", "bytes=0-0")
+                        .addHeader("Range", "bytes=0-65535")
                         .get()
                         .build()
-                    val response = probeClient.newCall(request).execute()
-                    response.use { resp ->
-                        if (!resp.isSuccessful) return@withContext false
-                        // Detect Comet/proxy stub videos served for uncached content.
-                        // Real streams are always > 1 MB. A Content-Range total below
-                        // the threshold means it's an error stub (e.g. "Not Ready (TB)").
-                        val contentRange = resp.header("Content-Range") // e.g. "bytes 0-0/421667"
-                        val totalBytes = contentRange?.substringAfterLast('/')?.trim()?.toLongOrNull()
-                        if (totalBytes != null && totalBytes < MIN_REAL_VIDEO_BYTES) {
-                            Log.w(TAG, "Probe: stub content index=$index total=${totalBytes}B (<1MB) url=$url")
-                            stubUrls.add(url)
-                            return@withContext false
+                    probeClient.newCall(request).execute().use { resp ->
+                        if (!resp.isSuccessful) {
+                            false
+                        } else {
+                            // Detect Comet/proxy stub videos (<1 MB) served for uncached content.
+                            val contentRange = resp.header("Content-Range")
+                            val totalBytes = contentRange?.substringAfterLast('/')?.trim()?.toLongOrNull()
+                            if (totalBytes != null && totalBytes < MIN_REAL_VIDEO_BYTES) {
+                                Log.w(TAG, "Probe: stub content index=$index total=${totalBytes}B (<1MB) url=$url")
+                                stubUrls.add(url)
+                                false
+                            } else {
+                                // Consume the body so we verify TorBox can actually deliver
+                                // the bytes — not just that the first byte exists.
+                                // A partially-cached file will timeout or deliver < 64KB.
+                                val bytesRead = resp.body?.bytes()?.size ?: 0
+                                bytesRead >= 1024
+                            }
                         }
-                        true
                     }
+                } catch (_: Exception) {
+                    false
                 }
-            } catch (e: Exception) {
-                false
+                val elapsedMs = System.currentTimeMillis() - startMs
+                if (ok) Log.d(TAG, "Probe valid at index=$index in ${elapsedMs}ms")
+                else Log.d(TAG, "Probe failed at index=$index in ${elapsedMs}ms url=$url")
+                index to ok
             }
-            val elapsedMs = System.currentTimeMillis() - startMs
+        }
+
+        var firstValidIndex = -1
+        for (job in probeJobs) {
+            val (index, ok) = job.await()
             if (ok) {
-                Log.d(TAG, "Probe valid at index=$index in ${elapsedMs}ms")
                 firstValidIndex = index
+                probeJobs.forEach { it.cancel() }
                 break
-            } else {
-                Log.d(TAG, "Probe failed at index=$index in ${elapsedMs}ms url=$url")
             }
         }
 
@@ -239,7 +253,17 @@ class StreamWarmer @Inject constructor(
             val existing = cache[cacheKey]
             if (existing != null) cache[cacheKey] = existing.copy(streams = reordered)
 
-            // Await pre-detected frame rate (likely already done since it ran concurrently)
+            // Open the fast-play gate immediately — stream[0] is confirmed live.
+            // FPS detection runs concurrently and will update the session once ready.
+            playerPreWarmer.update(type, videoId, reordered, null, isProbed = true)
+
+            // If the top stream changed after reordering, re-warm subtitles for the new winner.
+            if (firstValidIndex > 0) {
+                val newTop = reordered.firstOrNull()
+                subtitleWarmer.warm(type, videoId, newTop?.behaviorHints?.filename, newTop?.behaviorHints?.videoSize)
+            }
+
+            // Await FPS in the background — AFR preflight will pick it up via awaitFps().
             val detectedFps = try {
                 fpsJob?.await()
             } catch (e: CancellationException) {
@@ -249,10 +273,9 @@ class StreamWarmer @Inject constructor(
             }
             if (detectedFps != null) {
                 Log.d(TAG, "Pre-detected frame rate: ${detectedFps.raw}fps")
+                // Update session with FPS now that it's available.
+                playerPreWarmer.update(type, videoId, reordered, detectedFps, isProbed = true)
             }
-
-            // Update PlayerPreWarmer so the error handler can auto-advance and AFR can skip live probe
-            playerPreWarmer.update(type, videoId, reordered, detectedFps)
 
             // Pre-connect via the player's own HTTP client to warm its TCP/TLS connection pool
             val topUrl = reordered.firstOrNull()?.getStreamUrl()
@@ -273,15 +296,15 @@ class StreamWarmer @Inject constructor(
             // player doesn't auto-advance into a stub URL. awaitWarm() will filter them
             // out via stubUrls and return null, causing a fresh live fetch.
             Log.w(TAG, "All ${ minOf(maxProbe, streams.size) } probed streams invalid for type=$type videoId=$videoId — clearing warm session")
-            playerPreWarmer.clear()
+            playerPreWarmer.clearSession(type, videoId)
         }
 
         return reordered
     }
 
-    private suspend fun findFirstStreamAddon() =
+    private suspend fun findAllStreamAddons() =
         addonRepository.getInstalledAddons().first()
-            .firstOrNull { addon -> addon.resources.any { it.name.equals("stream", ignoreCase = true) } }
+            .filter { addon -> addon.resources.any { it.name.equals("stream", ignoreCase = true) } }
 
     private fun buildStreamUrl(baseUrl: String, type: String, videoId: String): String {
         val clean = baseUrl.trim().trimEnd('/')
@@ -299,4 +322,14 @@ class StreamWarmer @Inject constructor(
         val basePath = if (q >= 0) clean.substring(0, q).trimEnd('/') else clean
         return "$basePath|$type|$videoId"
     }
+
+    // Returns true if this URL was confirmed to serve a stub/error video during probing.
+    // Used by NuvioNavHost to guard the two-phase fast-path against known-bad streams.
+    fun isKnownStub(url: String?) = url != null && stubUrls.contains(url)
+}
+
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface StreamWarmerEntryPoint {
+    fun streamWarmer(): StreamWarmer
 }

@@ -9,11 +9,13 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "PlayerPreWarmer"
-private const val TTL_MS = 5 * 60 * 1000L
+private const val TTL_MS = 15 * 60 * 1000L
+private const val MAX_SESSIONS = 5
 
 @Singleton
 class PlayerPreWarmer @Inject constructor() {
@@ -23,16 +25,27 @@ class PlayerPreWarmer @Inject constructor() {
         val videoId: String,
         val streams: List<Stream>,
         val detectedFps: FrameRateUtils.FrameRateDetection? = null,
-        val createdAtMs: Long = System.currentTimeMillis()
+        val createdAtMs: Long = System.currentTimeMillis(),
+        // true only after probeAndReorder confirms stream[0] is a live, non-stub URL
+        val isProbed: Boolean = false
     )
 
-    @Volatile private var session: WarmSession? = null
+    // LRU cache — up to 5 sessions so browsing multiple detail screens doesn't
+    // evict the one the user is most likely to play next.
+    private val sessions: MutableMap<String, WarmSession> = Collections.synchronizedMap(
+        object : LinkedHashMap<String, WarmSession>(8, 0.75f, true) {
+            override fun removeEldestEntry(eldest: Map.Entry<String, WarmSession>) = size > MAX_SESSIONS
+        }
+    )
+
     @Volatile private var fpsJob: Deferred<FrameRateUtils.FrameRateDetection?>? = null
     @Volatile private var fpsJobKey: String? = null
 
+    private fun key(type: String, videoId: String) = "$type|$videoId"
+
     // Called by StreamWarmer the moment fps detection starts, so AFR preflight can await it.
     fun setFpsJob(type: String, videoId: String, job: Deferred<FrameRateUtils.FrameRateDetection?>) {
-        fpsJobKey = "$type|$videoId"
+        fpsJobKey = key(type, videoId)
         fpsJob = job
     }
 
@@ -40,7 +53,7 @@ class PlayerPreWarmer @Inject constructor() {
     // Awaits the in-flight warm fps detection if one is running for this video.
     suspend fun awaitFps(type: String, videoId: String, timeoutMs: Long): FrameRateUtils.FrameRateDetection? {
         getSession(type, videoId)?.detectedFps?.let { return it }
-        if (fpsJobKey != "$type|$videoId") return null
+        if (fpsJobKey != key(type, videoId)) return null
         val job = fpsJob ?: return null
         return try {
             withTimeoutOrNull(timeoutMs) { job.await() }
@@ -55,19 +68,23 @@ class PlayerPreWarmer @Inject constructor() {
         type: String,
         videoId: String,
         streams: List<Stream>,
-        detectedFps: FrameRateUtils.FrameRateDetection? = null
+        detectedFps: FrameRateUtils.FrameRateDetection? = null,
+        isProbed: Boolean = false
     ) {
         if (streams.isEmpty()) return
-        session = WarmSession(type, videoId, streams, detectedFps)
-        Log.d(TAG, "Session updated type=$type videoId=$videoId streams=${streams.size} fps=${detectedFps?.raw}")
+        sessions[key(type, videoId)] = WarmSession(type, videoId, streams, detectedFps, isProbed = isProbed)
+        Log.d(TAG, "Session updated type=$type videoId=$videoId streams=${streams.size} fps=${detectedFps?.raw} probed=$isProbed")
     }
 
-    fun getSession(type: String, videoId: String): WarmSession? =
-        session?.takeIf {
-            it.type == type &&
-            it.videoId == videoId &&
-            System.currentTimeMillis() - it.createdAtMs <= TTL_MS
+    fun getSession(type: String, videoId: String): WarmSession? {
+        val k = key(type, videoId)
+        val s = sessions[k] ?: return null
+        if (System.currentTimeMillis() - s.createdAtMs > TTL_MS) {
+            sessions.remove(k)
+            return null
         }
+        return s
+    }
 
     // Returns the next stream to try after currentUrl fails.
     // Only valid when isAutoPlay=true (user did not explicitly choose a stream).
@@ -79,10 +96,13 @@ class PlayerPreWarmer @Inject constructor() {
         return next
     }
 
-    fun clear() {
-        session = null
-        fpsJob = null
-        fpsJobKey = null
+    // Clears the session for a specific item — called when all probes are invalid.
+    fun clearSession(type: String, videoId: String) {
+        sessions.remove(key(type, videoId))
+        if (fpsJobKey == key(type, videoId)) {
+            fpsJob = null
+            fpsJobKey = null
+        }
     }
 }
 
