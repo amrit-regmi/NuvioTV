@@ -218,19 +218,28 @@ class StreamWarmer @Inject constructor(
                             false
                         } else {
                             rawContentType = resp.header("Content-Type")
-                            // Detect Comet/proxy stub videos (<1 MB) served for uncached content.
-                            val contentRange = resp.header("Content-Range")
-                            val totalBytes = contentRange?.substringAfterLast('/')?.trim()?.toLongOrNull()
-                            if (totalBytes != null && totalBytes < MIN_REAL_VIDEO_BYTES) {
-                                Log.w(TAG, "Probe: stub content index=$index total=${totalBytes}B (<1MB) url=$url")
-                                stubUrls.add(url)
+                            // Reject HTML responses — Comet/proxy returns an error/login page
+                            // for uncached content, which can pass the byte-count check below.
+                            val ct = rawContentType?.substringBefore(';')?.trim()?.lowercase()
+                            if (ct != null && (ct == "text/html" || ct == "text/plain" || ct.startsWith("application/json"))) {
+                                Log.w(TAG, "Probe: non-video content type index=$index ct=$rawContentType url=$url")
+                                rawContentType = null
                                 false
                             } else {
-                                // Consume the body so we verify TorBox can actually deliver
-                                // the bytes — not just that the first byte exists.
-                                // A partially-cached file will timeout or deliver < 64KB.
-                                val bytesRead = resp.body?.bytes()?.size ?: 0
-                                bytesRead >= 1024
+                                // Detect Comet/proxy stub videos (<1 MB) served for uncached content.
+                                val contentRange = resp.header("Content-Range")
+                                val totalBytes = contentRange?.substringAfterLast('/')?.trim()?.toLongOrNull()
+                                if (totalBytes != null && totalBytes < MIN_REAL_VIDEO_BYTES) {
+                                    Log.w(TAG, "Probe: stub content index=$index total=${totalBytes}B (<1MB) url=$url")
+                                    stubUrls.add(url)
+                                    false
+                                } else {
+                                    // Consume the body so we verify TorBox can actually deliver
+                                    // the bytes — not just that the first byte exists.
+                                    // A partially-cached file will timeout or deliver < 64KB.
+                                    val bytesRead = resp.body?.bytes()?.size ?: 0
+                                    bytesRead >= 1024
+                                }
                             }
                         }
                     }
