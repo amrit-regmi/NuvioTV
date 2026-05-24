@@ -87,14 +87,14 @@ class StreamWarmer @Inject constructor(
     // Called from DirectDebridStreamSource.preloadStreams() — fire and forget.
     // Warms all stream addons in parallel so the best available source (TorBox or RealDebrid)
     // populates PlayerPreWarmer before the user taps Play.
-    fun warm(type: String, videoId: String) {
+    fun warm(type: String, videoId: String, resumePositionMs: Long? = null, durationMs: Long? = null) {
         scope.launch {
             val addons = findAllStreamAddons()
             for (addon in addons) {
                 val key = cacheKey(addon.baseUrl, type, videoId)
                 synchronized(lock) {
                     if (isCached(key) || inFlight.containsKey(key)) return@synchronized
-                    val deferred = scope.async { fetch(addon.baseUrl, addon.displayName, addon.logo, type, videoId, key) }
+                    val deferred = scope.async { fetch(addon.baseUrl, addon.displayName, addon.logo, type, videoId, key, resumePositionMs, durationMs) }
                     inFlight[key] = deferred
                     deferred.invokeOnCompletion { synchronized(lock) { inFlight.remove(key) } }
                 }
@@ -133,7 +133,9 @@ class StreamWarmer @Inject constructor(
         addonLogo: String?,
         type: String,
         videoId: String,
-        key: String
+        key: String,
+        resumePositionMs: Long? = null,
+        durationMs: Long? = null
     ): List<Stream>? {
         return try {
             val url = buildStreamUrl(baseUrl, type, videoId)
@@ -161,7 +163,7 @@ class StreamWarmer @Inject constructor(
                     }
 
                     // Probe in background — does not block awaitWarm(); updates cache + session when done
-                    scope.launch { probeAndReorder(streams, key, type, videoId) }
+                    scope.launch { probeAndReorder(streams, key, type, videoId, resumePositionMs, durationMs) }
 
                     streams
                 }
@@ -183,7 +185,9 @@ class StreamWarmer @Inject constructor(
         streams: List<Stream>,
         cacheKey: String,
         type: String,
-        videoId: String
+        videoId: String,
+        resumePositionMs: Long? = null,
+        durationMs: Long? = null
     ): List<Stream> {
         if (streams.isEmpty()) return streams
         val settings = debridSettingsDataStore.settings.first()
@@ -199,24 +203,38 @@ class StreamWarmer @Inject constructor(
             }.also { playerPreWarmer.setFpsJob(type, videoId, it) }
         }
 
-        // Launch all probes in parallel — total time = slowest probe, not sum of all.
-        // Await results in AIOStreams-sort order; cancel survivors the moment first valid found.
+        // Probe sequentially — stop at the first valid stream or on 429 (rate limit).
+        // AIOStreams pre-sorts by quality so stream[0] is almost always valid for cached content.
+        // Sequential probing eliminates the burst of parallel Range requests that triggers
+        // TorBox/Comet rate limits when multiple CW items warm concurrently on startup.
+        var firstValidIndex = -1
+        var firstValidContentType: String? = null
+        var firstValidTotalBytes: Long? = null
         val count = minOf(maxProbe, streams.size)
-        val probeJobs = (0 until count).map { index ->
+        for (index in 0 until count) {
             val url = streams[index].getStreamUrl()
-            scope.async(Dispatchers.IO) {
-                if (url == null) return@async Triple(index, false, null as String?)
-                var rawContentType: String? = null
-                val ok = try {
-                    val request = Request.Builder()
-                        .url(url)
-                        .addHeader("Range", "bytes=0-65535")
-                        .get()
-                        .build()
-                    probeClient.newCall(request).execute().use { resp ->
-                        if (!resp.isSuccessful) {
+            if (url == null) {
+                Log.d(TAG, "Probe skipped at index=$index (no URL)")
+                continue
+            }
+            var rawContentType: String? = null
+            var capturedTotalBytes: Long? = null
+            var rateLimited = false
+            val ok = try {
+                val request = Request.Builder()
+                    .url(url)
+                    .addHeader("Range", "bytes=0-65535")
+                    .get()
+                    .build()
+                probeClient.newCall(request).execute().use { resp ->
+                    when {
+                        resp.code == 429 -> {
+                            Log.w(TAG, "Probe: rate-limited (429) at index=$index — stopping probe for type=$type videoId=$videoId")
+                            rateLimited = true
                             false
-                        } else {
+                        }
+                        !resp.isSuccessful -> false
+                        else -> {
                             rawContentType = resp.header("Content-Type")
                             // Reject HTML responses — Comet/proxy returns an error/login page
                             // for uncached content, which can pass the byte-count check below.
@@ -234,6 +252,7 @@ class StreamWarmer @Inject constructor(
                                     stubUrls.add(url)
                                     false
                                 } else {
+                                    capturedTotalBytes = totalBytes
                                     // Consume the body so we verify TorBox can actually deliver
                                     // the bytes — not just that the first byte exists.
                                     // A partially-cached file will timeout or deliver < 64KB.
@@ -243,25 +262,20 @@ class StreamWarmer @Inject constructor(
                             }
                         }
                     }
-                } catch (_: Exception) {
-                    false
                 }
-                val elapsedMs = System.currentTimeMillis() - startMs
-                if (ok) Log.d(TAG, "Probe valid at index=$index in ${elapsedMs}ms contentType=$rawContentType")
-                else Log.d(TAG, "Probe failed at index=$index in ${elapsedMs}ms url=$url")
-                Triple(index, ok, if (ok) rawContentType else null)
+            } catch (_: Exception) {
+                false
             }
-        }
-
-        var firstValidIndex = -1
-        var firstValidContentType: String? = null
-        for (job in probeJobs) {
-            val (index, ok, contentType) = job.await()
+            val elapsedMs = System.currentTimeMillis() - startMs
             if (ok) {
+                Log.d(TAG, "Probe valid at index=$index in ${elapsedMs}ms contentType=$rawContentType")
                 firstValidIndex = index
-                firstValidContentType = contentType
-                probeJobs.forEach { it.cancel() }
+                firstValidContentType = rawContentType
+                firstValidTotalBytes = capturedTotalBytes
                 break
+            } else {
+                Log.d(TAG, "Probe failed at index=$index in ${elapsedMs}ms url=$url")
+                if (rateLimited) break
             }
         }
 
@@ -322,13 +336,40 @@ class StreamWarmer @Inject constructor(
                     // Non-critical — player will establish its own connection
                 }
             }
+
+            // For InProgress CW items: fire a Range request at the resume byte offset to prime
+            // TorBox's CDN cache at that position, eliminating the seek stall on resume.
+            // Byte offset = (position - 5s) / duration * fileSize — approximation is sufficient.
+            val fileSize = firstValidTotalBytes
+            if (resumePositionMs != null && durationMs != null && durationMs > 0
+                && fileSize != null && fileSize > 0 && topUrl != null) {
+                val safePositionMs = (resumePositionMs - 5_000L).coerceAtLeast(0L)
+                val byteOffset = (safePositionMs.toDouble() / durationMs * fileSize).toLong()
+                val rangeEnd = (byteOffset + 65535L).coerceAtMost(fileSize - 1)
+                if (byteOffset in 0 until fileSize) {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            val resumeRequest = Request.Builder()
+                                .url(topUrl)
+                                .addHeader("Range", "bytes=$byteOffset-$rangeEnd")
+                                .get()
+                                .build()
+                            probeClient.newCall(resumeRequest).execute().close()
+                        }
+                        Log.d(TAG, "Resume pre-fetch: offset=${byteOffset}B positionMs=${safePositionMs} durationMs=$durationMs fileSize=${fileSize}B")
+                    } catch (_: Exception) {
+                        // Non-critical — player will seek normally
+                    }
+                }
+            }
         } else {
             fpsJob?.cancel()
-            // All probed streams are stubs or unreachable. Clear the warm session so the
-            // player doesn't auto-advance into a stub URL. awaitWarm() will filter them
-            // out via stubUrls and return null, causing a fresh live fetch.
-            Log.w(TAG, "All ${ minOf(maxProbe, streams.size) } probed streams invalid for type=$type videoId=$videoId — clearing warm session")
+            // All probed streams are stubs or unreachable. Evict both caches so the next
+            // awaitWarm() triggers a fresh AIOStreams fetch rather than looping on the same
+            // dead URLs. Without this, the player retries and gets the same stale stream list.
+            Log.w(TAG, "All ${ minOf(maxProbe, streams.size) } probed streams invalid for type=$type videoId=$videoId — clearing warm session and cache")
             playerPreWarmer.clearSession(type, videoId)
+            cache.remove(cacheKey)
         }
 
         return reordered

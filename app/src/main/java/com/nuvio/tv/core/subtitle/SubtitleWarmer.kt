@@ -60,17 +60,37 @@ class SubtitleWarmer @Inject constructor(
     // Called by SubtitleRepository instead of doing its own fetch.
     // Returns cached list, awaits in-flight warm, or null (caller fetches normally).
     suspend fun awaitWarm(filename: String, videoSize: Long?): List<Subtitle>? {
+        // Exact match
         val key = cacheKey(filename, videoSize)
         getCached(filename, videoSize)?.let { return it }
-        val deferred = synchronized(lock) { inFlight[key] } ?: return null
-        Log.d(TAG, "Awaiting in-flight subtitle warm key=$key")
-        return try {
-            deferred.await()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null
+        val deferred = synchronized(lock) { inFlight[key] }
+        if (deferred != null) {
+            Log.d(TAG, "Awaiting in-flight subtitle warm key=$key")
+            return try {
+                deferred.await()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
         }
+        // Fallback: warm fired before videoSize was known (behaviorHints.videoSize was null),
+        // but OpenSubtitlesHasher later computed the actual file size. Try the null-videoSize entry.
+        if (videoSize != null) {
+            getCached(filename, null)?.let { return it }
+            val nullDeferred = synchronized(lock) { inFlight[cacheKey(filename, null)] }
+            if (nullDeferred != null) {
+                Log.d(TAG, "Awaiting in-flight subtitle warm (null-videoSize fallback) filename=$filename")
+                return try {
+                    nullDeferred.await()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+        return null
     }
 
     fun getCached(filename: String, videoSize: Long?): List<Subtitle>? {

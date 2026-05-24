@@ -315,19 +315,34 @@ class HomeViewModel @Inject constructor(
             viewModelScope.launch {
                 _uiState
                     .map { state ->
-                        state.continueWatchingItems.take(3).map { item ->
+                        state.continueWatchingItems.take(3).mapNotNull { item ->
                             when (item) {
-                                is ContinueWatchingItem.NextUp ->
-                                    item.info.contentType to item.info.videoId
-                                is ContinueWatchingItem.InProgress ->
-                                    item.progress.contentType to item.progress.videoId
+                                is ContinueWatchingItem.NextUp -> item.info.contentType to item.info.videoId
+                                is ContinueWatchingItem.InProgress -> item.progress.contentType to item.progress.videoId
                                 else -> null
                             }
-                        }.filterNotNull()
+                        }
                     }
                     .distinctUntilChanged()
-                    .collect { topItems ->
-                        topItems.forEach { (type, videoId) -> streamWarmer.warm(type, videoId) }
+                    .collect { _ ->
+                        // Re-read items from current state to get position/duration for InProgress.
+                        val items = _uiState.value.continueWatchingItems.take(3)
+                        // Stagger warms by 2s to avoid bursting TorBox with concurrent Range probes.
+                        items.forEachIndexed { index, item ->
+                            if (index > 0) delay(2_000L)
+                            when (item) {
+                                is ContinueWatchingItem.NextUp ->
+                                    streamWarmer.warm(item.info.contentType, item.info.videoId)
+                                is ContinueWatchingItem.InProgress ->
+                                    streamWarmer.warm(
+                                        item.progress.contentType,
+                                        item.progress.videoId,
+                                        resumePositionMs = item.progress.position,
+                                        durationMs = item.progress.duration
+                                    )
+                                else -> {}
+                            }
+                        }
                     }
             }
 
