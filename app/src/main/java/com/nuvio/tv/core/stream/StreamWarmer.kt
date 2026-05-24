@@ -205,7 +205,8 @@ class StreamWarmer @Inject constructor(
         val probeJobs = (0 until count).map { index ->
             val url = streams[index].getStreamUrl()
             scope.async(Dispatchers.IO) {
-                if (url == null) return@async index to false
+                if (url == null) return@async Triple(index, false, null as String?)
+                var rawContentType: String? = null
                 val ok = try {
                     val request = Request.Builder()
                         .url(url)
@@ -216,6 +217,7 @@ class StreamWarmer @Inject constructor(
                         if (!resp.isSuccessful) {
                             false
                         } else {
+                            rawContentType = resp.header("Content-Type")
                             // Detect Comet/proxy stub videos (<1 MB) served for uncached content.
                             val contentRange = resp.header("Content-Range")
                             val totalBytes = contentRange?.substringAfterLast('/')?.trim()?.toLongOrNull()
@@ -236,17 +238,19 @@ class StreamWarmer @Inject constructor(
                     false
                 }
                 val elapsedMs = System.currentTimeMillis() - startMs
-                if (ok) Log.d(TAG, "Probe valid at index=$index in ${elapsedMs}ms")
+                if (ok) Log.d(TAG, "Probe valid at index=$index in ${elapsedMs}ms contentType=$rawContentType")
                 else Log.d(TAG, "Probe failed at index=$index in ${elapsedMs}ms url=$url")
-                index to ok
+                Triple(index, ok, if (ok) rawContentType else null)
             }
         }
 
         var firstValidIndex = -1
+        var firstValidContentType: String? = null
         for (job in probeJobs) {
-            val (index, ok) = job.await()
+            val (index, ok, contentType) = job.await()
             if (ok) {
                 firstValidIndex = index
+                firstValidContentType = contentType
                 probeJobs.forEach { it.cancel() }
                 break
             }
@@ -265,9 +269,15 @@ class StreamWarmer @Inject constructor(
             val existing = cache[cacheKey]
             if (existing != null) cache[cacheKey] = existing.copy(streams = reordered)
 
+            // Resolve MIME type from probe Content-Type header, falling back to filename.
+            // Stored in WarmSession so the player's init block can skip its own probe.
+            val detectedMimeType = normalizeMimeType(firstValidContentType)
+                ?: normalizeMimeType(reordered.firstOrNull()?.behaviorHints?.filename
+                    ?.substringAfterLast('.'))
+
             // Open the fast-play gate immediately — stream[0] is confirmed live.
             // FPS detection runs concurrently and will update the session once ready.
-            playerPreWarmer.update(type, videoId, reordered, null, isProbed = true)
+            playerPreWarmer.update(type, videoId, reordered, null, isProbed = true, detectedMimeType = detectedMimeType)
 
             // If the list reordered, warm subtitles for the new top 3 — cache deduplicates.
             if (firstValidIndex > 0) {
@@ -286,8 +296,8 @@ class StreamWarmer @Inject constructor(
             }
             if (detectedFps != null) {
                 Log.d(TAG, "Pre-detected frame rate: ${detectedFps.raw}fps")
-                // Update session with FPS now that it's available.
-                playerPreWarmer.update(type, videoId, reordered, detectedFps, isProbed = true)
+                // Update session with FPS — preserve the detectedMimeType from probing.
+                playerPreWarmer.update(type, videoId, reordered, detectedFps, isProbed = true, detectedMimeType = detectedMimeType)
             }
 
             // Pre-connect via the player's own HTTP client to warm its TCP/TLS connection pool
@@ -339,6 +349,24 @@ class StreamWarmer @Inject constructor(
     // Returns true if this URL was confirmed to serve a stub/error video during probing.
     // Used by NuvioNavHost to guard the two-phase fast-path against known-bad streams.
     fun isKnownStub(url: String?) = url != null && stubUrls.contains(url)
+
+    // Maps a raw Content-Type header value or file extension to a canonical MIME string.
+    // Covers the formats TorBox and AIOStreams actually serve — not exhaustive.
+    private fun normalizeMimeType(raw: String?): String? {
+        val s = raw?.trim()?.lowercase()?.substringBefore(';')?.trim() ?: return null
+        return when {
+            s == "video/x-matroska" || s == "mkv" -> "video/x-matroska"
+            s == "video/mp4" || s == "mp4" || s == "m4v" -> "video/mp4"
+            s == "video/webm" || s == "webm" -> "video/webm"
+            s == "video/mp2t" || s == "video/mpeg" || s == "ts" || s == "m2ts" -> "video/mp2t"
+            s == "video/avi" || s == "avi" -> "video/avi"
+            s == "application/x-mpegurl" || s == "application/vnd.apple.mpegurl" || s == "m3u8" ->
+                "application/x-mpegURL"
+            s == "application/dash+xml" || s == "mpd" -> "application/dash+xml"
+            s.startsWith("video/") -> s
+            else -> null
+        }
+    }
 }
 
 @dagger.hilt.EntryPoint

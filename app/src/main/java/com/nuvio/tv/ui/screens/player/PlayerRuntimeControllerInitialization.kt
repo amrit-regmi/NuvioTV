@@ -50,7 +50,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 20_000L
+// SubtitleWarmer fires ~20s before play tap (on detail screen open), so 4s is ample headroom.
+private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 4_000L
 private const val MPV_AFR_SETTLE_DELAY_MS = 2_000L
 private const val AUDIO_DELAY_REFRESH_DEBOUNCE_MS = 120L
 private const val PLAYER_RELEASE_TIMEOUT_MS = 3000L

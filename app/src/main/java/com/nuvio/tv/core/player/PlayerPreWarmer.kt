@@ -27,7 +27,10 @@ class PlayerPreWarmer @Inject constructor() {
         val detectedFps: FrameRateUtils.FrameRateDetection? = null,
         val createdAtMs: Long = System.currentTimeMillis(),
         // true only after probeAndReorder confirms stream[0] is a live, non-stub URL
-        val isProbed: Boolean = false
+        val isProbed: Boolean = false,
+        // MIME type captured from the probe response Content-Type header (e.g. "video/x-matroska").
+        // Set in PlayerRuntimeController.init so the player skips its own MIME network probe.
+        val detectedMimeType: String? = null
     )
 
     // LRU cache — up to 5 sessions so browsing multiple detail screens doesn't
@@ -69,11 +72,12 @@ class PlayerPreWarmer @Inject constructor() {
         videoId: String,
         streams: List<Stream>,
         detectedFps: FrameRateUtils.FrameRateDetection? = null,
-        isProbed: Boolean = false
+        isProbed: Boolean = false,
+        detectedMimeType: String? = null
     ) {
         if (streams.isEmpty()) return
-        sessions[key(type, videoId)] = WarmSession(type, videoId, streams, detectedFps, isProbed = isProbed)
-        Log.d(TAG, "Session updated type=$type videoId=$videoId streams=${streams.size} fps=${detectedFps?.raw} probed=$isProbed")
+        sessions[key(type, videoId)] = WarmSession(type, videoId, streams, detectedFps, isProbed = isProbed, detectedMimeType = detectedMimeType)
+        Log.d(TAG, "Session updated type=$type videoId=$videoId streams=${streams.size} fps=${detectedFps?.raw} probed=$isProbed mime=$detectedMimeType")
     }
 
     fun getSession(type: String, videoId: String): WarmSession? {

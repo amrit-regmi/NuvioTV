@@ -179,11 +179,17 @@ class PlayerRuntimeController(
             PlayerMediaSourceFactory.sanitizeHeaders(PlayerMediaSourceFactory.parseHeaders(headersJson))
         )
         currentStreamUrl = cleanInitialUrl
+        // URL/filename inference is free; fall back to the warm session's probe-captured MIME
+        // type if inference returns null (opaque CDN URLs with no recognizable extension).
         currentStreamMimeType = PlayerMediaSourceFactory.inferMimeType(
             url = cleanInitialUrl,
             filename = currentFilename,
             responseHeaders = currentStreamResponseHeaders
-        )
+        ) ?: run {
+            val t = contentType ?: return@run null
+            val v = videoId ?: return@run null
+            playerPreWarmer.getSession(t, v)?.detectedMimeType
+        }
         currentHeaders = mergedInitialHeaders
     }
 
