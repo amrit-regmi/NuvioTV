@@ -79,6 +79,7 @@ class PlayerRuntimeController(
     internal val directDebridStreamPreparer: DirectDebridStreamPreparer,
     internal val subtitleWarmer: SubtitleWarmer,
     internal val playerPreWarmer: PlayerPreWarmer,
+    internal val streamWarmer: com.nuvio.tv.core.stream.StreamWarmer,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {

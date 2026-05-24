@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.LocaleCache
 import com.nuvio.tv.core.player.StreamAutoPlayPolicy
 import com.nuvio.tv.core.recommendations.TvRecommendationManager
+import com.nuvio.tv.core.stream.StreamWarmer
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.AuthSessionNoticeDataStore
@@ -79,7 +80,8 @@ class HomeViewModel @Inject constructor(
     internal val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     internal val cwEnrichmentCache: ContinueWatchingEnrichmentCache,
     private val profileManager: com.nuvio.tv.core.profile.ProfileManager,
-    internal val tvRecommendationManager: TvRecommendationManager
+    internal val tvRecommendationManager: TvRecommendationManager,
+    private val streamWarmer: StreamWarmer
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -304,6 +306,28 @@ class HomeViewModel @Inject constructor(
                     .distinctUntilChanged()
                     .collect { items ->
                         runCatching { tvRecommendationManager.updateWatchNextFromCwItems(items) }
+                    }
+            }
+
+            // Pre-warm streams for the top 3 CW items whenever the list updates.
+            // NextUp items are series "next episodes" — most valuable to warm.
+            // InProgress items may be mid-episode resume — also worth warming.
+            viewModelScope.launch {
+                _uiState
+                    .map { state ->
+                        state.continueWatchingItems.take(3).map { item ->
+                            when (item) {
+                                is ContinueWatchingItem.NextUp ->
+                                    item.info.contentType to item.info.videoId
+                                is ContinueWatchingItem.InProgress ->
+                                    item.progress.contentType to item.progress.videoId
+                                else -> null
+                            }
+                        }.filterNotNull()
+                    }
+                    .distinctUntilChanged()
+                    .collect { topItems ->
+                        topItems.forEach { (type, videoId) -> streamWarmer.warm(type, videoId) }
                     }
             }
 

@@ -15,7 +15,7 @@ import javax.inject.Singleton
 
 private const val TAG = "PlayerPreWarmer"
 private const val TTL_MS = 15 * 60 * 1000L
-private const val MAX_SESSIONS = 5
+private const val MAX_SESSIONS = 10
 
 @Singleton
 class PlayerPreWarmer @Inject constructor() {

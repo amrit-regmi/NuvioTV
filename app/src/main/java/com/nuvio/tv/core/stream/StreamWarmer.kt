@@ -71,8 +71,18 @@ class StreamWarmer @Inject constructor(
 
     private val lock = Any()
     private val inFlight = mutableMapOf<String, Deferred<List<Stream>?>>()
-    // URLs confirmed to be proxy stub/error videos (too small to be real content)
-    private val stubUrls = Collections.synchronizedSet(mutableSetOf<String>())
+
+    // URLs confirmed to be proxy stub/error videos (too small to be real content).
+    // Capped at 500 entries via LRU eviction — stubs are a temporary state (content gets cached
+    // in TorBox eventually) so we don't want to blacklist a URL indefinitely across app restarts.
+    // The set is synchronizedMap-backed so concurrent probe threads don't corrupt it.
+    private val stubUrls: MutableSet<String> = Collections.newSetFromMap(
+        Collections.synchronizedMap(
+            object : LinkedHashMap<String, Boolean>(16, 0.75f, true) {
+                override fun removeEldestEntry(eldest: Map.Entry<String, Boolean>) = size > 500
+            }
+        )
+    )
 
     // Called from DirectDebridStreamSource.preloadStreams() — fire and forget.
     // Warms all stream addons in parallel so the best available source (TorBox or RealDebrid)
@@ -139,14 +149,16 @@ class StreamWarmer @Inject constructor(
                     // with the reordered list + detectedFps once it completes.
                     playerPreWarmer.update(type, videoId, streams, null)
 
-                    // Trigger subtitle warm for top stream immediately
-                    val top = streams.firstOrNull()
-                    subtitleWarmer.warm(
-                        type = type,
-                        videoId = videoId,
-                        filename = top?.behaviorHints?.filename,
-                        videoSize = top?.behaviorHints?.videoSize
-                    )
+                    // Warm subtitles for top 3 streams — user may pick stream 2 or 3.
+                    // SubtitleWarmer deduplicates by filename+videoSize so redundant calls are free.
+                    streams.take(3).forEach { s ->
+                        subtitleWarmer.warm(
+                            type = type,
+                            videoId = videoId,
+                            filename = s.behaviorHints?.filename,
+                            videoSize = s.behaviorHints?.videoSize
+                        )
+                    }
 
                     // Probe in background — does not block awaitWarm(); updates cache + session when done
                     scope.launch { probeAndReorder(streams, key, type, videoId) }
@@ -257,10 +269,11 @@ class StreamWarmer @Inject constructor(
             // FPS detection runs concurrently and will update the session once ready.
             playerPreWarmer.update(type, videoId, reordered, null, isProbed = true)
 
-            // If the top stream changed after reordering, re-warm subtitles for the new winner.
+            // If the list reordered, warm subtitles for the new top 3 — cache deduplicates.
             if (firstValidIndex > 0) {
-                val newTop = reordered.firstOrNull()
-                subtitleWarmer.warm(type, videoId, newTop?.behaviorHints?.filename, newTop?.behaviorHints?.videoSize)
+                reordered.take(3).forEach { s ->
+                    subtitleWarmer.warm(type, videoId, s.behaviorHints?.filename, s.behaviorHints?.videoSize)
+                }
             }
 
             // Await FPS in the background — AFR preflight will pick it up via awaitFps().
