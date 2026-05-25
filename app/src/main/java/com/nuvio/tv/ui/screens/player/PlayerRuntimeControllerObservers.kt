@@ -6,10 +6,12 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.nuvio.tv.data.local.FrameRateMatchingMode
 import com.nuvio.tv.domain.model.Subtitle
+import com.nuvio.tv.domain.model.enabledAddons
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 internal data class SubtitleFetchRequest(
@@ -33,6 +35,7 @@ internal suspend fun PlayerRuntimeController.fetchAddonSubtitlesNow(
 ): List<Subtitle> {
     val request = buildSubtitleFetchRequest() ?: return emptyList()
     val installedAddonOrder = addonRepository.getInstalledAddons().firstOrNull()
+        ?.enabledAddons()
         ?.map { it.displayName }
         .orEmpty()
     _uiState.update { it.copy(installedSubtitleAddonOrder = installedAddonOrder) }
@@ -250,7 +253,18 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                 settings.persistAudioAmplification -> settings.audioAmplificationDb
                 else -> currentState.audioAmplificationDb
             }
-
+            val resolvedCenterMixLevelDb = when {
+                !hasInitializedCenterMixForSession -> {
+                    hasInitializedCenterMixForSession = true
+                    if (settings.persistAudioAmplification) {
+                        settings.centerMixLevelDb
+                    } else {
+                        0
+                    }
+                }
+                settings.persistAudioAmplification -> settings.centerMixLevelDb
+                else -> currentState.centerMixLevelDb
+            }
 
             _uiState.update { state ->
                 val shouldShowOverlay = if (settings.loadingOverlayEnabled && !hasRenderedFirstFrame) {
@@ -271,12 +285,16 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                     frameRateMatchingMode = settings.frameRateMatchingMode,
                     tunnelingEnabled = settings.tunnelingEnabled,
                     persistAudioAmplification = settings.persistAudioAmplification,
-                    audioAmplificationDb = resolvedAudioAmplificationDb
+                    audioAmplificationDb = resolvedAudioAmplificationDb,
+                    centerMixLevelDb = resolvedCenterMixLevelDb
                 )
             }
 
             if (resolvedAudioAmplificationDb != currentState.audioAmplificationDb) {
                 applyAudioAmplification(resolvedAudioAmplificationDb)
+            }
+            if (resolvedCenterMixLevelDb != currentState.centerMixLevelDb) {
+                applyCenterMixLevel(resolvedCenterMixLevelDb)
             }
 
             if (settings.rememberAudioDelayPerDevice && !wasRememberingAudioDelayPerDevice) {
@@ -381,6 +399,13 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             parentalGuideEnabled = settings.parentalGuideEnabled
             autoSkipSegmentTypes = settings.autoSkipSegmentTypes
             playerSettingsInitialized = true
+
+            // Fetch parental guide on first settings emission (after we know
+            // whether the feature is enabled). Subsequent emissions skip this.
+            if (settings.parentalGuideEnabled && _uiState.value.parentalWarnings.isEmpty()) {
+                fetchParentalGuide(contentId, contentType, currentSeason, currentEpisode)
+            }
+
             if (!skipIntroEnabled) {
                 if (skipIntervals.isNotEmpty() || _uiState.value.activeSkipInterval != null) {
                     skipIntervals = emptyList()
@@ -478,7 +503,9 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
         if (skipIntroFetchedKey == key) return
         skipIntroFetchedKey = key
         scope.launch {
-            skipIntervals = skipIntroRepository.getSkipIntervalsForMal(malId, malEpisode)
+            skipIntervals = withTimeoutOrNull(15_000L) {
+                skipIntroRepository.getSkipIntervalsForMal(malId, malEpisode)
+            } ?: emptyList()
         }
         return
     }
@@ -492,7 +519,9 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
         if (skipIntroFetchedKey == key) return
         skipIntroFetchedKey = key
         scope.launch {
-            skipIntervals = skipIntroRepository.getSkipIntervalsForKitsu(kitsuId, kitsuEpisode)
+            skipIntervals = withTimeoutOrNull(15_000L) {
+                skipIntroRepository.getSkipIntervalsForKitsu(kitsuId, kitsuEpisode)
+            } ?: emptyList()
         }
         return
     }
@@ -505,8 +534,9 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
     skipIntroFetchedKey = key
 
     scope.launch {
-        val intervals = skipIntroRepository.getSkipIntervals(imdbId, season, episode)
-        skipIntervals = intervals
+        skipIntervals = withTimeoutOrNull(15_000L) {
+            skipIntroRepository.getSkipIntervals(imdbId, season, episode)
+        } ?: emptyList()
     }
 }
 

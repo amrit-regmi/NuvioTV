@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -96,6 +97,12 @@ class HomeViewModel @Inject constructor(
 
     internal val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    internal val _movieWatchedStatus = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val movieWatchedStatus: StateFlow<Map<String, Boolean>> = _movieWatchedStatus.asStateFlow()
+
+    // Pending batch of watched status updates — debounced before emission.
+    internal val _pendingWatchedBatch = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     /** True once the CW pipeline has completed its first emission (items or empty). */
     internal val _initialCwResolved = MutableStateFlow(false)
     val initialCwResolved: StateFlow<Boolean> = _initialCwResolved.asStateFlow()
@@ -254,6 +261,22 @@ class HomeViewModel @Inject constructor(
         get() = trailerPreviewAudioUrlsState
 
     init {
+        // Accumulates individual watched status changes and flushes them as a single
+        // update after 150ms of inactivity, preventing N separate recompositions.
+        viewModelScope.launch {
+            _pendingWatchedBatch
+                .debounce(150L)
+                .collect { batch ->
+                    if (batch.isNotEmpty()) {
+                        val snapshot = _pendingWatchedBatch.value
+                        _pendingWatchedBatch.value = emptyMap()
+                        if (snapshot.isNotEmpty()) {
+                            _movieWatchedStatus.update { current -> current + snapshot }
+                        }
+                    }
+                }
+        }
+
         observeStartupAuthNotice()
         viewModelScope.launch {
             profileManager.activeProfileReady.first { it }
@@ -271,7 +294,6 @@ class HomeViewModel @Inject constructor(
             observeTmdbSettings()
             observeMdbListSettings()
             observeBlurUnwatchedEpisodes()
-            observeMemoryOnlyVerticalScroll()
             observeProgressSourceChanges()
             observeCollections()
             observeInstalledAddons()
@@ -317,6 +339,8 @@ class HomeViewModel @Inject constructor(
                     loadContinueWatching()
                     // Clear watched badges so they don't leak between profiles.
                     watchedSeriesStateHolder.update(emptySet())
+                    _movieWatchedStatus.value = emptyMap()
+                    _pendingWatchedBatch.value = emptyMap()
                     _uiState.update { it.copy(movieWatchedStatus = emptyMap()) }
                 }
             }
@@ -418,16 +442,6 @@ class HomeViewModel @Inject constructor(
                         return@collect
                     }
                     clearAllCwInMemoryCaches()
-                }
-        }
-    }
-
-    private fun observeMemoryOnlyVerticalScroll() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.memoryOnlyVerticalScroll
-                .distinctUntilChanged()
-                .collect { enabled ->
-                    _uiState.update { it.copy(memoryOnlyVerticalScroll = enabled) }
                 }
         }
     }
@@ -654,16 +668,18 @@ class HomeViewModel @Inject constructor(
         catalogUpdateJob?.cancel()
         catalogUpdateJob = viewModelScope.launch {
             val debounceMs = when {
-                // First render: use minimal debounce to show content ASAP while still
-                // batching near-simultaneous arrivals.
+                // First render: use a moderate debounce so near-simultaneous
+                // catalog arrivals are batched into a single heavy update pass.
                 !hasRenderedFirstCatalog && hasAnyCatalogRows() -> {
                     hasRenderedFirstCatalog = true
-                    50L
+                    150L
                 }
-                pendingCatalogLoads > 8 -> 200L
-                pendingCatalogLoads > 3 -> 150L
-                pendingCatalogLoads > 0 -> 100L
-                else -> 50L
+                // During bulk loading, batch aggressively — placeholders are
+                // already visible so the user won't notice the delay.
+                pendingCatalogLoads > 8 -> 300L
+                pendingCatalogLoads > 3 -> 250L
+                pendingCatalogLoads > 0 -> 200L
+                else -> 80L
             }
             delay(debounceMs)
             updateCatalogRows()

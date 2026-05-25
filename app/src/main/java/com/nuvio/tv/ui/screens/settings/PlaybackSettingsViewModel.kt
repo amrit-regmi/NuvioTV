@@ -12,6 +12,7 @@ import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.data.local.AddonSubtitleStartupMode
+import com.nuvio.tv.data.local.AudioOutputChannels
 import com.nuvio.tv.data.local.AutoSkipSegmentType
 import com.nuvio.tv.data.local.MpvHardwareDecodeMode
 import com.nuvio.tv.data.local.SubtitleOrganizationMode
@@ -19,6 +20,7 @@ import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.core.torrent.TorrentSettings
 import com.nuvio.tv.core.torrent.TorrentSettingsData
+import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
@@ -43,6 +45,7 @@ class PlaybackSettingsViewModel @Inject constructor(
     fun setHideTorrentStats(enabled: Boolean) = torrentSettings.setHideTorrentStats(enabled)
     val installedAddonNames: Flow<List<String>> = addonRepository.getInstalledAddons().map { addons ->
         addons
+            .enabledAddons()
             .filter { addon ->
                 addon.resources.any { resource ->
                     resource.name.equals("stream", ignoreCase = true)
@@ -87,6 +90,18 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setDecoderPriority(priority: Int) {
         playerSettingsDataStore.setDecoderPriority(priority)
+    }
+
+    suspend fun setDownmixEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setDownmixEnabled(enabled)
+    }
+
+    suspend fun setAudioOutputChannels(channels: AudioOutputChannels) {
+        playerSettingsDataStore.setAudioOutputChannels(channels)
+    }
+
+    suspend fun setMaintainOriginalAudioOnDownmix(enabled: Boolean) {
+        playerSettingsDataStore.setMaintainOriginalAudioOnDownmix(enabled)
     }
 
     suspend fun setTunnelingEnabled(enabled: Boolean) {
@@ -286,6 +301,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled: Boolean) {
         playerSettingsDataStore.setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled)
+    }
+
+    suspend fun setStreamAutoPlayReuseBingeGroup(enabled: Boolean) {
+        playerSettingsDataStore.setStreamAutoPlayReuseBingeGroup(enabled)
     }
 
     suspend fun setStreamAutoPlayTimeoutSeconds(seconds: Int) {

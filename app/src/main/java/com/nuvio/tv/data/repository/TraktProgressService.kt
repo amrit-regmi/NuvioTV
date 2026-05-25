@@ -393,6 +393,35 @@ class TraktProgressService @Inject constructor(
         requestFastSync()
     }
 
+    /**
+     * Updates the optimistic progress state WITHOUT triggering a fast sync.
+     * Use this for periodic in-playback saves where we only need the local
+     * UI (Continue Watching) to reflect the current position, but don't need
+     * to force a full remote refresh cycle.
+     */
+    fun updateOptimisticProgressQuietly(progress: WatchProgress) {
+        val now = System.currentTimeMillis()
+        val derivedPercent = when {
+            progress.progressPercent != null -> progress.progressPercent
+            progress.duration > 0L -> ((progress.position.toFloat() / progress.duration.toFloat()) * 100f)
+            else -> null
+        }?.coerceIn(0f, 100f)
+
+        val optimistic = progress.copy(
+            progressPercent = derivedPercent,
+            source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+        )
+
+        optimisticProgress.update { current ->
+            current.toMutableMap().apply {
+                this[progressKey(optimistic)] = OptimisticProgressEntry(
+                    progress = optimistic,
+                    expiresAtMs = now + optimisticTtlMs
+                )
+            }
+        }
+    }
+
     fun applyOptimisticRemoval(contentId: String, season: Int?, episode: Int?) {
         val contentKeyPrefix = contentId.trim()
         optimisticProgress.update { current ->
