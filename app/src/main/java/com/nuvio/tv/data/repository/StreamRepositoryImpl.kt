@@ -92,7 +92,7 @@ class StreamRepositoryImpl @Inject constructor(
                 // Track number of pending jobs
                 val totalJobs = streamAddons.size +
                     (if (tmdbId != null) 1 else 0)
-                var completedJobs = 0
+                val completedJobs = java.util.concurrent.atomic.AtomicInteger(0)
 
                 // Launch addon jobs
                 streamAddons.forEach { addon ->
@@ -145,8 +145,7 @@ class StreamRepositoryImpl @Inject constructor(
                                 detail = e.message ?: context.getString(com.nuvio.tv.R.string.stream_error_detail_addon_request_failed)
                             )
                         } finally {
-                            completedJobs++
-                            if (completedJobs >= totalJobs) {
+                            if (completedJobs.incrementAndGet() >= totalJobs) {
                                 resultChannel.close()
                             }
                         }
@@ -159,16 +158,14 @@ class StreamRepositoryImpl @Inject constructor(
                         try {
                             // Stream plugins individually
                             streamLocalPlugins(tmdbId, type, season, episode, resultChannel) {
-                                completedJobs++
-                                if (completedJobs >= totalJobs) {
+                                if (completedJobs.incrementAndGet() >= totalJobs) {
                                     resultChannel.close()
                                 }
                             }
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
                             Log.e(TAG, "Plugin execution failed: ${e.message}")
-                            completedJobs++
-                            if (completedJobs >= totalJobs) {
+                            if (completedJobs.incrementAndGet() >= totalJobs) {
                                 resultChannel.close()
                             }
                         }

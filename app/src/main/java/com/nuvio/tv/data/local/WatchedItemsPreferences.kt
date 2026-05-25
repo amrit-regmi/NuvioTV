@@ -49,7 +49,7 @@ class WatchedItemsPreferences @Inject constructor(
             raw.mapNotNull { json ->
                 runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
             }
-        }.flowOn(Dispatchers.IO) 
+        }.flowOn(Dispatchers.Default)
     }
 
     fun isWatched(contentId: String, season: Int? = null, episode: Int? = null): Flow<Boolean> {

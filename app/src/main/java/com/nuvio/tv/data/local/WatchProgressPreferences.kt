@@ -90,7 +90,7 @@ class WatchProgressPreferences @Inject constructor(
             cachedProgressJson = json
             cachedProgressResult = result
             result
-        }.flowOn(Dispatchers.IO)
+        }.flowOn(Dispatchers.Default)
     }
 
     @Volatile private var cachedRawProgressJson: String? = null
@@ -112,7 +112,7 @@ class WatchProgressPreferences @Inject constructor(
             cachedRawProgressJson = json
             cachedRawProgressResult = result
             result
-        }.flowOn(Dispatchers.IO)
+        }.flowOn(Dispatchers.Default)
     }
 
     /**
