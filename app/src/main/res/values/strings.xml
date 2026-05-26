@@ -2477,4 +2477,26 @@
     <string name="trakt_comments_error_request_failed">Trakt comments request failed</string>
     <string name="trakt_library_error_fetch_list_items">Failed to fetch list items</string>
 
+    <!-- Trakt rating -->
+    <string name="trakt_rating_label_1">Weak sauce!</string>
+    <string name="trakt_rating_label_2">Terrible</string>
+    <string name="trakt_rating_label_3">Bad</string>
+    <string name="trakt_rating_label_4">Poor</string>
+    <string name="trakt_rating_label_5">Meh</string>
+    <string name="trakt_rating_label_6">Fair</string>
+    <string name="trakt_rating_label_7">Good</string>
+    <string name="trakt_rating_label_8">Great</string>
+    <string name="trakt_rating_label_9">Superb</string>
+    <string name="trakt_rating_label_10">Totally Ninja!</string>
+    <string name="trakt_rating_scale_label">%d / 10</string>
+    <string name="trakt_rating_dislike">Dislike</string>
+    <string name="trakt_rating_like">Like</string>
+    <string name="trakt_rating_love">Love</string>
+    <string name="trakt_rating_rate">Rate</string>
+    <string name="trakt_rating_submit">Submit Rating</string>
+    <string name="trakt_rating_skip">Skip</string>
+    <string name="trakt_rating_saving">Saving…</string>
+    <string name="trakt_rating_error">Couldn\'t save rating</string>
+    <string name="trakt_rating_post_play_title">How was it?</string>
+
 </resources>

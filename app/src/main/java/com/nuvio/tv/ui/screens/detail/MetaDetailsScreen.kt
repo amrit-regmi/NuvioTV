@@ -669,7 +669,17 @@ fun MetaDetailsScreen(
                     onNavigateToCastDetail = onNavigateToCastDetail,
                     onNavigateToTmdbEntityBrowse = onNavigateToTmdbEntityBrowse,
                     onNavigateToDetail = onNavigateToDetail,
-                    onPosterLongPress = { item -> viewModel.posterOptions.show(item, null) }
+                    onPosterLongPress = { item -> viewModel.posterOptions.show(item, null) },
+                    traktAuthenticated = uiState.isTraktAuthenticated,
+                    isRatingLoaded = uiState.isRatingLoaded,
+                    userRating = uiState.userRating,
+                    showRatingPicker = uiState.showRatingPicker,
+                    ratingPickerDefault = uiState.ratingPickerDefault,
+                    isRatingPending = uiState.isRatingPending,
+                    onReactionSelected = { viewModel.onEvent(MetaDetailsEvent.OnReactionSelected(it)) },
+                    onRatingSelected = { viewModel.onEvent(MetaDetailsEvent.OnRatingSelected(it)) },
+                    onDismissRatingPicker = { viewModel.onEvent(MetaDetailsEvent.OnDismissRatingPicker) },
+                    onSubmitRating = { viewModel.onEvent(MetaDetailsEvent.OnSubmitRating) }
                 )
             }
         }
@@ -844,7 +854,17 @@ private fun MetaDetailsContent(
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToTmdbEntityBrowse: (entityKind: String, entityId: Int, entityName: String, sourceType: String) -> Unit = { _, _, _, _ -> },
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
-    onPosterLongPress: (MetaPreview) -> Unit = {}
+    onPosterLongPress: (MetaPreview) -> Unit = {},
+    traktAuthenticated: Boolean = false,
+    isRatingLoaded: Boolean = false,
+    userRating: Int? = null,
+    showRatingPicker: Boolean = false,
+    ratingPickerDefault: Int = 6,
+    isRatingPending: Boolean = false,
+    onReactionSelected: (TraktReaction) -> Unit = {},
+    onRatingSelected: (Int) -> Unit = {},
+    onDismissRatingPicker: () -> Unit = {},
+    onSubmitRating: () -> Unit = {}
 ) {
     val canLoadMoreComments = commentsCurrentPage in 1 until commentsPageCount
     val selectedCommentIndex = remember(comments, selectedComment?.id) {
@@ -1582,7 +1602,17 @@ private fun MetaDetailsContent(
                             onPlayButtonFocused()
                             initialHeroFocusRequested = true
                             clearPendingRestore()
-                        }
+                        },
+                        traktAuthenticated = traktAuthenticated,
+                        isRatingLoaded = isRatingLoaded,
+                        userRating = userRating,
+                        showRatingPicker = showRatingPicker,
+                        ratingPickerDefault = ratingPickerDefault,
+                        isRatingPending = isRatingPending,
+                        onReactionSelected = onReactionSelected,
+                        onRatingSelected = onRatingSelected,
+                        onDismissRatingPicker = onDismissRatingPicker,
+                        onSubmitRating = onSubmitRating
                     )
                 }
             }
