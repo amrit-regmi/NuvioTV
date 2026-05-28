@@ -1066,6 +1066,9 @@ private fun TraktRatingArea(
     var isExpanded by remember { mutableStateOf(false) }
     var expandBlocked by remember { mutableStateOf(false) }
     var pickerWasOpen by remember { mutableStateOf(false) }
+    var isRotating by remember { mutableStateOf(false) }
+    var isCelebrating by remember { mutableStateOf(false) }
+    var ratingWasChanged by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val collapseJob = remember { arrayOf<Job?>(null) }
 
@@ -1087,10 +1090,24 @@ private fun TraktRatingArea(
         } else if (pickerWasOpen) {
             expandBlocked = true
             isExpanded = false
-            delay(50)
-            try { collapsedFR.requestFocus() } catch (_: Exception) {}
-            delay(700)
+            delay(50)                // let state 0 compose
+            if (ratingWasChanged) {
+                isRotating = true
+                isCelebrating = true
+                try { collapsedFR.requestFocus() } catch (_: Exception) {}
+                delay(500)           // wobble
+                isRotating = false   // spring back
+                delay(500)           // color lingers
+                isCelebrating = false
+                delay(50)
+                try { collapsedFR.requestFocus() } catch (_: Exception) {}
+                delay(100)
+            } else {
+                try { collapsedFR.requestFocus() } catch (_: Exception) {}
+                delay(100)
+            }
             expandBlocked = false
+            ratingWasChanged = false
         }
         pickerWasOpen = showRatingPicker
     }
@@ -1143,29 +1160,68 @@ private fun TraktRatingArea(
         ) { state ->
             when (state) {
                 0 -> {
+                    val isDislike = userRating != null && userRating <= 4
+                    val isLike    = userRating != null && userRating in 5..7
+                    val isLove    = userRating != null && userRating >= 8
                     val (icon, selectedColor) = when {
-                        userRating != null && userRating <= 4 -> Icons.Default.ThumbDown to Color(0xFFE53935)
-                        userRating != null && userRating in 5..7 -> Icons.Default.ThumbUp to Color(0xFF43A047)
-                        userRating != null && userRating >= 8 -> Icons.Default.Favorite to Color(0xFFE91E63)
-                        else -> Icons.Default.Star to NuvioColors.Secondary
+                        isDislike -> Icons.Default.ThumbDown to Color(0xFFE53935)
+                        isLike    -> Icons.Default.ThumbUp   to Color(0xFF43A047)
+                        isLove    -> Icons.Default.Favorite  to Color(0xFFE91E63)
+                        else      -> Icons.Default.Star      to NuvioColors.Secondary
                     }
-                    ActionIconButton(
-                        icon = icon,
-                        contentDescription = if (userRating != null) "$userRating/10 on Trakt" else "Rate on Trakt",
-                        onClick = { if (!expandBlocked) isExpanded = true },
-                        selected = userRating != null,
-                        selectedContainerColor = selectedColor,
-                        selectedContentColor = Color.White,
-                        focusRequester = collapsedFR,
-                        onFocused = { onHeroActionFocused() }
+                    val targetRot = when {
+                        !isRotating -> 0f
+                        isDislike   -> 15f
+                        isLike      -> -15f
+                        else        -> 0f
+                    }
+                    val celebRot by animateFloatAsState(
+                        targetValue = targetRot,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "celebRot"
                     )
+                    val celebScale by animateFloatAsState(
+                        targetValue = if (isRotating && isLove) 1.4f else 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "celebScale"
+                    )
+                    Box(modifier = Modifier.rotate(celebRot)) {
+                        ActionIconButton(
+                            icon = icon,
+                            contentDescription = if (userRating != null) "$userRating/10 on Trakt" else "Rate on Trakt",
+                            onClick = { if (!expandBlocked) { ratingWasChanged = false; isExpanded = true } },
+                            selected = userRating != null,
+                            selectedContainerColor = selectedColor,
+                            selectedContentColor = Color.White,
+                            focusedContainerColor = if (isCelebrating && userRating != null) selectedColor else NuvioColors.Secondary,
+                            focusedContentColor = if (isCelebrating && userRating != null) Color.White else NuvioColors.OnSecondary,
+                            iconScale = celebScale,
+                            focusRequester = collapsedFR,
+                            onFocused = { onHeroActionFocused() }
+                        )
+                    }
                 }
                 1 -> {
+                    val currentReaction = when {
+                        userRating == null -> null
+                        userRating <= 4    -> TraktReaction.DISLIKE
+                        userRating in 5..7 -> TraktReaction.LIKE
+                        else               -> TraktReaction.LOVE
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         ActionIconButton(
                             icon = Icons.Default.ThumbDown,
                             contentDescription = stringResource(R.string.trakt_rating_dislike),
-                            onClick = { onReactionSelected(TraktReaction.DISLIKE) },
+                            onClick = {
+                                if (currentReaction != TraktReaction.DISLIKE) ratingWasChanged = true
+                                onReactionSelected(TraktReaction.DISLIKE)
+                            },
                             selected = userRating != null && userRating <= 4,
                             selectedContainerColor = Color(0xFFE53935),
                             selectedContentColor = Color.White,
@@ -1175,7 +1231,10 @@ private fun TraktRatingArea(
                         ActionIconButton(
                             icon = Icons.Default.ThumbUp,
                             contentDescription = stringResource(R.string.trakt_rating_like),
-                            onClick = { onReactionSelected(TraktReaction.LIKE) },
+                            onClick = {
+                                if (currentReaction != TraktReaction.LIKE) ratingWasChanged = true
+                                onReactionSelected(TraktReaction.LIKE)
+                            },
                             selected = userRating != null && userRating in 5..7,
                             selectedContainerColor = Color(0xFF43A047),
                             selectedContentColor = Color.White,
@@ -1185,7 +1244,10 @@ private fun TraktRatingArea(
                         ActionIconButton(
                             icon = Icons.Default.Favorite,
                             contentDescription = stringResource(R.string.trakt_rating_love),
-                            onClick = { onReactionSelected(TraktReaction.LOVE) },
+                            onClick = {
+                                if (currentReaction != TraktReaction.LOVE) ratingWasChanged = true
+                                onReactionSelected(TraktReaction.LOVE)
+                            },
                             selected = userRating != null && userRating >= 8,
                             selectedContainerColor = Color(0xFFE91E63),
                             selectedContentColor = Color.White,
@@ -1198,7 +1260,7 @@ private fun TraktRatingArea(
                     InlineStarPicker(
                         rating = ratingPickerDefault,
                         isSubmitting = isRatingPending,
-                        onRatingSelected = onRatingSelected,
+                        onRatingSelected = { r -> ratingWasChanged = true; onRatingSelected(r) },
                         onAutoSubmit = onSubmitRating,
                         focusRequester = pickerFR
                     )
