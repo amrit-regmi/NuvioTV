@@ -34,9 +34,11 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -563,7 +565,8 @@ internal fun PlaybackSettingsSections(
                             focusRequester = afrHeaderFocus,
                             onFocused = { focusedSection = PlaybackSection.AUDIO_TRAILER },
                             enabled = !generalUi.isExternalPlayer,
-                            showWarningIcon = showAfrWarning
+                            showWarningIcon = showAfrWarning,
+                            icon = Icons.Default.Speed
                         )
                     }
 
@@ -742,7 +745,8 @@ private fun PlaybackSectionHeader(
     focusRequester: FocusRequester,
     onFocused: () -> Unit,
     enabled: Boolean = true,
-    showWarningIcon: Boolean = false
+    showWarningIcon: Boolean = false,
+    icon: ImageVector? = null
 ) {
     SettingsActionRow(
         title = title,
@@ -756,7 +760,8 @@ private fun PlaybackSectionHeader(
         enabled = enabled,
         trailingIcon = if (expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
         titleTrailingIcon = if (showWarningIcon) Icons.Default.Warning else null,
-        titleTrailingIconTint = Color(0xFFFFB74D)
+        titleTrailingIconTint = Color(0xFFFFB74D),
+        leadingIcon = icon
     )
 }
 

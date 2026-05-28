@@ -200,7 +200,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                     frameRateMatchingMode = playerSettings.frameRateMatchingMode,
                     resizeMode = playerSettings.resizeMode,
                     aspectMode = deviceAspectMode,
-                    tunnelingEnabled = playerSettings.tunnelingEnabled,
+                    tunnelingEnabled = playerSettings.tunnelingEnabled &&
+                            effectiveInternalPlayerEngine != InternalPlayerEngine.MVP_PLAYER,
                     loadingMessage = if (showLoadingStatus) context.getString(R.string.player_loading_detecting_format) else null
                 )
             }
