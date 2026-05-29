@@ -90,6 +90,7 @@ import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
 import com.nuvio.tv.ui.components.SourceStatusFilterChip
 import com.nuvio.tv.ui.components.P2pConsentDialog
+import com.nuvio.tv.ui.components.StreamBadgeChips
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.components.StreamsSkeletonList
 import com.nuvio.tv.ui.screens.player.LoadingOverlay
@@ -1115,6 +1116,10 @@ private fun StreamCard(
                     }
                 }
 
+                StreamBadgeChips(
+                    badges = stream.badges,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
             }
 
             Column(

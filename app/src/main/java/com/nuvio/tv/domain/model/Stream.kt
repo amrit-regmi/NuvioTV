@@ -23,7 +23,8 @@ data class Stream(
     val quality: String? = null,
     val qualityValue: Int = -1,
     val clientResolve: StreamClientResolve? = null,
-    val debridCacheStatus: StreamDebridCacheStatus? = null
+    val debridCacheStatus: StreamDebridCacheStatus? = null,
+    val badges: List<StreamBadge> = emptyList()
 ) {
     /**
      * Returns the primary stream source URL
@@ -98,6 +99,16 @@ data class Stream(
         }
     }
 }
+
+@Immutable
+data class StreamBadge(
+    val name: String,
+    val imageURL: String = "",
+    val tagColor: String = "",
+    val tagStyle: String = "",
+    val textColor: String = "",
+    val borderColor: String = ""
+)
 
 @Immutable
 data class StreamDebridCacheStatus(

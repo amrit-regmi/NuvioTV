@@ -7,6 +7,10 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.google.gson.Gson
 import com.nuvio.tv.core.debrid.DebridProviders
 import com.nuvio.tv.core.debrid.DebridStreamFormatterDefaults
+import com.nuvio.tv.core.debrid.StreamBadgeFilter
+import com.nuvio.tv.core.debrid.StreamBadgeGroup
+import com.nuvio.tv.core.debrid.StreamBadgeImport
+import com.nuvio.tv.core.debrid.StreamBadgeRules
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.domain.model.DebridSettings
 import com.nuvio.tv.domain.model.DebridStreamCodecFilter
@@ -25,6 +29,12 @@ import com.nuvio.tv.domain.model.normalizeDebridStreamMaxResults
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,6 +44,11 @@ class DebridSettingsDataStore @Inject constructor(
     private val profileManager: ProfileManager
 ) {
     private val gson = Gson()
+    @OptIn(ExperimentalSerializationApi::class)
+    private val json = Json {
+        ignoreUnknownKeys = true
+        explicitNulls = false
+    }
 
     companion object {
         private const val FEATURE = "debrid_settings"
@@ -58,6 +73,7 @@ class DebridSettingsDataStore @Inject constructor(
     private val streamPreferencesKey = stringPreferencesKey("stream_preferences")
     private val streamNameTemplateKey = stringPreferencesKey("debrid_stream_name_template")
     private val streamDescriptionTemplateKey = stringPreferencesKey("debrid_stream_description_template")
+    private val streamBadgeRulesKey = stringPreferencesKey("debrid_stream_badge_rules")
 
     val settings: Flow<DebridSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
@@ -112,7 +128,8 @@ class DebridSettingsDataStore @Inject constructor(
                 streamNameTemplate = prefs[streamNameTemplateKey]
                     ?: DebridStreamFormatterDefaults.NAME_TEMPLATE,
                 streamDescriptionTemplate = prefs[streamDescriptionTemplateKey]
-                    ?: DebridStreamFormatterDefaults.DESCRIPTION_TEMPLATE
+                    ?: DebridStreamFormatterDefaults.DESCRIPTION_TEMPLATE,
+                streamBadgeRules = parseStreamBadgeRules(prefs[streamBadgeRulesKey]) ?: StreamBadgeRules()
             )
         }
     }
@@ -271,6 +288,17 @@ class DebridSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setStreamBadgeRules(rules: StreamBadgeRules) {
+        store().edit {
+            val normalized = rules.normalized()
+            if (normalized.hasImport) {
+                it[streamBadgeRulesKey] = json.encodeToString(normalized)
+            } else {
+                it.remove(streamBadgeRulesKey)
+            }
+        }
+    }
+
     suspend fun resetStreamTemplates() {
         setStreamTemplates(
             nameTemplate = DebridStreamFormatterDefaults.NAME_TEMPLATE,
@@ -322,6 +350,29 @@ class DebridSettingsDataStore @Inject constructor(
         return runCatching {
             gson.fromJson(value, DebridStreamPreferences::class.java)?.normalized()
         }.getOrNull()
+    }
+
+    private fun parseStreamBadgeRules(value: String?): StreamBadgeRules? {
+        if (value.isNullOrBlank()) return null
+        val decodedRules = try {
+            json.decodeFromString<StreamBadgeRules>(value).normalized()
+        } catch (_: SerializationException) {
+            null
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+        if (decodedRules?.hasImport == true) return decodedRules
+
+        val legacyRules = try {
+            json.decodeFromString<LegacyStreamBadgeRules>(value)
+                .toBadgeRules()
+                .normalized()
+        } catch (_: SerializationException) {
+            null
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+        return legacyRules?.takeIf { it.hasImport } ?: decodedRules
     }
 
     private fun currentStreamPreferences(value: String?): DebridStreamPreferences {
@@ -448,4 +499,22 @@ class DebridSettingsDataStore @Inject constructor(
             sortCriteria = sortCriteriaValue ?: DebridStreamSortCriterion.originalOrder
         )
     }
+}
+
+@Serializable
+private data class LegacyStreamBadgeRules(
+    val sourceUrl: String = "",
+    val filters: List<StreamBadgeFilter> = emptyList(),
+    val groups: List<StreamBadgeGroup> = emptyList()
+) {
+    fun toBadgeRules(): StreamBadgeRules =
+        StreamBadgeRules(
+            imports = listOf(
+                StreamBadgeImport(
+                    sourceUrl = sourceUrl.ifBlank { "Local badge rules" },
+                    filters = filters,
+                    groups = groups
+                )
+            )
+        )
 }

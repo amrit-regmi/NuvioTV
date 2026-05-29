@@ -55,6 +55,7 @@ import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
 import com.nuvio.tv.ui.components.SourceStatusFilterChip
+import com.nuvio.tv.ui.components.StreamBadgeChips
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.ui.res.stringResource
@@ -147,6 +148,10 @@ internal fun StreamItem(
                     }
                 }
 
+                StreamBadgeChips(
+                    badges = stream.badges,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
             }
 
             Column(

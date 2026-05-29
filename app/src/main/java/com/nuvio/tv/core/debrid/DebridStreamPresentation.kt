@@ -27,8 +27,9 @@ class DebridStreamPresentation @Inject constructor(
             val debridStreams = visibleStreams.filter { stream -> stream.isManagedDebridStream() }
             if (debridStreams.isEmpty()) return@map group.copy(streams = visibleStreams)
 
+            val compiledBadgeFilters = StreamBadgeMatcher.compile(settings.streamBadgeRules)
             val presentedDebridStreams = DirectDebridStreamFilter.applyPreferences(debridStreams, settings)
-                .map { stream -> formatter.format(stream, settings) }
+                .map { stream -> formatter.format(stream, settings, compiledBadgeFilters) }
             val passthroughStreams = visibleStreams.filterNot { stream -> stream.isManagedDebridStream() }
 
             group.copy(streams = presentedDebridStreams + passthroughStreams)
