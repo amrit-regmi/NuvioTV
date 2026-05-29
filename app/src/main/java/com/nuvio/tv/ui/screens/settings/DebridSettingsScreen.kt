@@ -791,7 +791,8 @@ private fun DebridSortModeDialog(
     onDismiss: () -> Unit
 ) {
     val options = listOf(
-        DebridSortProfile.DEFAULT,
+        DebridSortProfile.ORIGINAL,
+        DebridSortProfile.BEST_QUALITY,
         DebridSortProfile.LARGEST,
         DebridSortProfile.SMALLEST,
         DebridSortProfile.AUDIO,
@@ -807,7 +808,7 @@ private fun DebridSortModeDialog(
         onOptionSelected = onSelected,
         onDismiss = onDismiss,
         width = 460.dp,
-        maxHeight = 360.dp
+        maxHeight = 420.dp
     )
 }
 
@@ -947,13 +948,15 @@ private fun streamMaxResultsLabel(value: Int): String {
     }
 }
 
+@Composable
 private fun sortProfileLabel(value: DebridSortProfile): String {
     return when (value) {
-        DebridSortProfile.DEFAULT -> "Default"
-        DebridSortProfile.LARGEST -> "Largest first"
-        DebridSortProfile.SMALLEST -> "Smallest first"
-        DebridSortProfile.AUDIO -> "Best audio first"
-        DebridSortProfile.LANGUAGE -> "Language first"
+        DebridSortProfile.ORIGINAL -> stringResource(R.string.debrid_stream_sort_original)
+        DebridSortProfile.BEST_QUALITY -> stringResource(R.string.debrid_stream_sort_best_quality)
+        DebridSortProfile.LARGEST -> stringResource(R.string.debrid_stream_sort_largest)
+        DebridSortProfile.SMALLEST -> stringResource(R.string.debrid_stream_sort_smallest)
+        DebridSortProfile.AUDIO -> stringResource(R.string.debrid_stream_sort_best_audio)
+        DebridSortProfile.LANGUAGE -> stringResource(R.string.debrid_stream_sort_language)
     }
 }
 
@@ -1005,7 +1008,15 @@ private fun sizeRangeLabel(minGb: Int, maxGb: Int): String {
 
 private fun sortProfileFor(criteria: List<DebridStreamSortCriterion>): DebridSortProfile {
     val normalized = criteria.map { it.key to it.direction }
+    val bestQuality = DebridStreamSortCriterion.defaultOrder.map { it.key to it.direction }
+    val legacyQuality = listOf(
+        DebridStreamSortKey.RESOLUTION to DebridStreamSortDirection.DESC,
+        DebridStreamSortKey.QUALITY to DebridStreamSortDirection.DESC,
+        DebridStreamSortKey.SIZE to DebridStreamSortDirection.DESC
+    )
     return when {
+        normalized.isEmpty() -> DebridSortProfile.ORIGINAL
+        normalized == bestQuality || normalized == legacyQuality -> DebridSortProfile.BEST_QUALITY
         normalized == listOf(DebridStreamSortKey.SIZE to DebridStreamSortDirection.DESC) -> DebridSortProfile.LARGEST
         normalized == listOf(DebridStreamSortKey.SIZE to DebridStreamSortDirection.ASC) -> DebridSortProfile.SMALLEST
         normalized.take(2) == listOf(
@@ -1013,17 +1024,19 @@ private fun sortProfileFor(criteria: List<DebridStreamSortCriterion>): DebridSor
             DebridStreamSortKey.AUDIO_CHANNEL to DebridStreamSortDirection.DESC
         ) -> DebridSortProfile.AUDIO
         normalized.firstOrNull() == DebridStreamSortKey.LANGUAGE to DebridStreamSortDirection.DESC -> DebridSortProfile.LANGUAGE
-        else -> DebridSortProfile.DEFAULT
+        else -> DebridSortProfile.BEST_QUALITY
     }
 }
 
+@Composable
 private fun sortProfileLabel(criteria: List<DebridStreamSortCriterion>): String {
     return sortProfileLabel(sortProfileFor(criteria))
 }
 
 private fun sortCriteriaForProfile(profile: DebridSortProfile): List<DebridStreamSortCriterion> {
     return when (profile) {
-        DebridSortProfile.DEFAULT -> DebridStreamSortCriterion.defaultOrder
+        DebridSortProfile.ORIGINAL -> DebridStreamSortCriterion.originalOrder
+        DebridSortProfile.BEST_QUALITY -> DebridStreamSortCriterion.defaultOrder
         DebridSortProfile.LARGEST -> listOf(DebridStreamSortCriterion(DebridStreamSortKey.SIZE, DebridStreamSortDirection.DESC))
         DebridSortProfile.SMALLEST -> listOf(DebridStreamSortCriterion(DebridStreamSortKey.SIZE, DebridStreamSortDirection.ASC))
         DebridSortProfile.AUDIO -> listOf(
@@ -1043,7 +1056,8 @@ private fun sortCriteriaForProfile(profile: DebridSortProfile): List<DebridStrea
 }
 
 private enum class DebridSortProfile {
-    DEFAULT,
+    ORIGINAL,
+    BEST_QUALITY,
     LARGEST,
     SMALLEST,
     AUDIO,

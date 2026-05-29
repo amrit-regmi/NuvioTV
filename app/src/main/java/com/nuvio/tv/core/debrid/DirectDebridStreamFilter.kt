@@ -57,10 +57,18 @@ object DirectDebridStreamFilter {
 
     fun applyPreferences(streams: List<Stream>, settings: DebridSettings): List<Stream> {
         val preferences = effectivePreferences(settings)
-        return streams.map { it to streamFacts(it, preferences) }
+        val matchedStreams = streams.map { it to streamFacts(it, preferences) }
             .filter { (_, facts) -> facts.matchesFilters(preferences) }
-            .sortedWith { left, right -> compareFacts(left.second, right.second, preferences.sortCriteria) }
-            .let { sorted -> applyLimits(sorted, preferences) }
+
+        val orderedStreams = if (preferences.sortCriteria.isEmpty()) {
+            matchedStreams
+        } else {
+            matchedStreams.sortedWith { left, right ->
+                compareFacts(left.second, right.second, preferences.sortCriteria)
+            }
+        }
+
+        return applyLimits(orderedStreams, preferences)
             .map { it.first }
     }
 
@@ -165,7 +173,7 @@ object DirectDebridStreamFilter {
         right: StreamFacts,
         criteria: List<DebridStreamSortCriterion>
     ): Int {
-        for (criterion in criteria.ifEmpty { DebridStreamSortCriterion.defaultOrder }) {
+        for (criterion in criteria) {
             val comparison = compareKey(left, right, criterion)
             if (comparison != 0) return comparison
         }

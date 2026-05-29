@@ -61,6 +61,20 @@ class DebridSettingsDataStore @Inject constructor(
 
     val settings: Flow<DebridSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
+            val storedStreamSortMode = enumValueOrDefault(
+                prefs[streamSortModeKey],
+                DebridStreamSortMode.DEFAULT
+            )
+            val streamPreferences = parseStreamPreferences(prefs[streamPreferencesKey])
+                ?: legacyStreamPreferences(
+                    maxResults = prefs[streamMaxResultsKey] ?: 0,
+                    sortMode = storedStreamSortMode,
+                    minimumQuality = enumValueOrDefault(prefs[streamMinimumQualityKey], DebridStreamMinimumQuality.ANY),
+                    dolbyVisionFilter = enumValueOrDefault(prefs[streamDolbyVisionFilterKey], DebridStreamFeatureFilter.ANY),
+                    hdrFilter = enumValueOrDefault(prefs[streamHdrFilterKey], DebridStreamFeatureFilter.ANY),
+                    codecFilter = enumValueOrDefault(prefs[streamCodecFilterKey], DebridStreamCodecFilter.ANY)
+                )
+            val streamSortMode = legacyModeForSortCriteria(streamPreferences.sortCriteria)
             DebridSettings(
                 enabled = prefs[enabledKey] ?: false,
                 cloudLibraryEnabled = prefs[cloudLibraryEnabledKey] ?: true,
@@ -77,10 +91,7 @@ class DebridSettingsDataStore @Inject constructor(
                     prefs[instantPlaybackPreparationLimitKey] ?: 0
                 ),
                 streamMaxResults = normalizeDebridStreamMaxResults(prefs[streamMaxResultsKey] ?: 0),
-                streamSortMode = enumValueOrDefault(
-                    prefs[streamSortModeKey],
-                    DebridStreamSortMode.DEFAULT
-                ),
+                streamSortMode = streamSortMode,
                 streamMinimumQuality = enumValueOrDefault(
                     prefs[streamMinimumQualityKey],
                     DebridStreamMinimumQuality.ANY
@@ -97,15 +108,7 @@ class DebridSettingsDataStore @Inject constructor(
                     prefs[streamCodecFilterKey],
                     DebridStreamCodecFilter.ANY
                 ),
-                streamPreferences = parseStreamPreferences(prefs[streamPreferencesKey])
-                    ?: legacyStreamPreferences(
-                        maxResults = prefs[streamMaxResultsKey] ?: 0,
-                        sortMode = enumValueOrDefault(prefs[streamSortModeKey], DebridStreamSortMode.DEFAULT),
-                        minimumQuality = enumValueOrDefault(prefs[streamMinimumQualityKey], DebridStreamMinimumQuality.ANY),
-                        dolbyVisionFilter = enumValueOrDefault(prefs[streamDolbyVisionFilterKey], DebridStreamFeatureFilter.ANY),
-                        hdrFilter = enumValueOrDefault(prefs[streamHdrFilterKey], DebridStreamFeatureFilter.ANY),
-                        codecFilter = enumValueOrDefault(prefs[streamCodecFilterKey], DebridStreamCodecFilter.ANY)
-                    ),
+                streamPreferences = streamPreferences,
                 streamNameTemplate = prefs[streamNameTemplateKey]
                     ?: DebridStreamFormatterDefaults.NAME_TEMPLATE,
                 streamDescriptionTemplate = prefs[streamDescriptionTemplateKey]
@@ -254,8 +257,10 @@ class DebridSettingsDataStore @Inject constructor(
 
     suspend fun setStreamPreferences(preferences: DebridStreamPreferences) {
         store().edit {
-            it[streamPreferencesKey] = gson.toJson(preferences.normalized())
-            it[streamMaxResultsKey] = normalizeDebridStreamMaxResults(preferences.maxResults)
+            val normalized = preferences.normalized()
+            it[streamPreferencesKey] = gson.toJson(normalized)
+            it[streamMaxResultsKey] = normalizeDebridStreamMaxResults(normalized.maxResults)
+            it[streamSortModeKey] = legacyModeForSortCriteria(normalized.sortCriteria).name
         }
     }
 
@@ -361,7 +366,7 @@ class DebridSettingsDataStore @Inject constructor(
 
     private fun sortCriteriaForLegacyMode(mode: DebridStreamSortMode): List<DebridStreamSortCriterion> {
         return when (mode) {
-            DebridStreamSortMode.DEFAULT -> DebridStreamSortCriterion.defaultOrder
+            DebridStreamSortMode.DEFAULT -> DebridStreamSortCriterion.originalOrder
             DebridStreamSortMode.QUALITY_DESC -> listOf(
                 DebridStreamSortCriterion(DebridStreamSortKey.RESOLUTION, DebridStreamSortDirection.DESC),
                 DebridStreamSortCriterion(DebridStreamSortKey.QUALITY, DebridStreamSortDirection.DESC),
@@ -369,6 +374,20 @@ class DebridSettingsDataStore @Inject constructor(
             )
             DebridStreamSortMode.SIZE_DESC -> listOf(DebridStreamSortCriterion(DebridStreamSortKey.SIZE, DebridStreamSortDirection.DESC))
             DebridStreamSortMode.SIZE_ASC -> listOf(DebridStreamSortCriterion(DebridStreamSortKey.SIZE, DebridStreamSortDirection.ASC))
+        }
+    }
+
+    private fun legacyModeForSortCriteria(criteria: List<DebridStreamSortCriterion>): DebridStreamSortMode {
+        val normalized = criteria.map { it.key to it.direction }
+        val bestQuality = DebridStreamSortCriterion.defaultOrder.map { it.key to it.direction }
+        fun legacySignature(mode: DebridStreamSortMode) = sortCriteriaForLegacyMode(mode).map { it.key to it.direction }
+        return when {
+            normalized.isEmpty() -> DebridStreamSortMode.DEFAULT
+            normalized == bestQuality -> DebridStreamSortMode.QUALITY_DESC
+            normalized == legacySignature(DebridStreamSortMode.QUALITY_DESC) -> DebridStreamSortMode.QUALITY_DESC
+            normalized == legacySignature(DebridStreamSortMode.SIZE_DESC) -> DebridStreamSortMode.SIZE_DESC
+            normalized == legacySignature(DebridStreamSortMode.SIZE_ASC) -> DebridStreamSortMode.SIZE_ASC
+            else -> DebridStreamSortMode.DEFAULT
         }
     }
 
@@ -426,7 +445,7 @@ class DebridSettingsDataStore @Inject constructor(
             excludedLanguages = excludedLanguagesValue.orEmpty(),
             requiredReleaseGroups = requiredReleaseGroupsValue.orEmpty().map { it.trim() }.filter { it.isNotBlank() }.distinct(),
             excludedReleaseGroups = excludedReleaseGroupsValue.orEmpty().map { it.trim() }.filter { it.isNotBlank() }.distinct(),
-            sortCriteria = sortCriteriaValue?.ifEmpty { DebridStreamSortCriterion.defaultOrder } ?: DebridStreamSortCriterion.defaultOrder
+            sortCriteria = sortCriteriaValue ?: DebridStreamSortCriterion.originalOrder
         )
     }
 }

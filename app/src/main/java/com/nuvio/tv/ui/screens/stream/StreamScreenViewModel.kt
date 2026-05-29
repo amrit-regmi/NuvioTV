@@ -326,7 +326,7 @@ class StreamScreenViewModel @Inject constructor(
                 )
                 
                 val allStreams = orderedAddonStreams.flatMap { addonStreams ->
-                    addonStreams.streams.sortedByDescending { it.qualityValue }
+                    addonStreams.streams
                 }
                 val availableAddons = orderedAddonStreams.map { it.addonName }
                 // Auto-select only after all addons have responded or the
@@ -440,7 +440,7 @@ class StreamScreenViewModel @Inject constructor(
                                 state
                             } else {
                                 val updatedAllStreams = updatedGroups.flatMap { addonStreams ->
-                                    addonStreams.streams.sortedByDescending { it.qualityValue }
+                                    addonStreams.streams
                                 }
                                 val currentFilter = state.selectedAddonFilter
                                 val filteredStreams = if (currentFilter == null) {
@@ -511,7 +511,7 @@ class StreamScreenViewModel @Inject constructor(
                                 val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(
                                     result.data, installedAddonOrder
                                 )
-                                val allStreams = orderedStreams.flatMap { it.streams.sortedByDescending { s -> s.qualityValue } }
+                                val allStreams = orderedStreams.flatMap { it.streams }
                                 val earlyMatch = StreamAutoPlaySelector.selectAutoPlayStream(
                                     streams = allStreams,
                                     mode = playerSettings.streamAutoPlayMode,
