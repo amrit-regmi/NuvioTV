@@ -90,6 +90,7 @@ import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
 import com.nuvio.tv.ui.components.SourceStatusFilterChip
 import com.nuvio.tv.ui.components.P2pConsentDialog
+import com.nuvio.tv.ui.components.StreamBadgeChips
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.components.StreamsSkeletonList
 import com.nuvio.tv.ui.screens.player.LoadingOverlay
@@ -1102,7 +1103,9 @@ private fun StreamCard(
                 Text(
                     text = streamName,
                     style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary
+                    color = NuvioColors.TextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 streamDescription?.let { description ->
@@ -1110,11 +1113,19 @@ private fun StreamCard(
                         Text(
                             text = description,
                             style = MaterialTheme.typography.bodySmall,
-                            color = NuvioTheme.extendedColors.textSecondary
+                            color = NuvioTheme.extendedColors.textSecondary,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
+                if (stream.badges.isNotEmpty()) {
+                    StreamBadgeChips(
+                        badges = stream.badges,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
             }
 
             Column(
