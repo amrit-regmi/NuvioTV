@@ -193,8 +193,8 @@
     <string name="playback_player_internal">Wbudowany</string>
     <string name="playback_player_external">Zewnętrzny</string>
     <string name="playback_player_ask">Pytaj za każdym razem</string>
-    <string name="playback_section_audio">Audio i zwiastun</string>
-    <string name="playback_section_audio_desc">Zachowanie zwiastuna i kontrolki audio.</string>
+    <string name="playback_section_audio">Audio i wideo</string>
+    <string name="playback_section_audio_desc">Kontrolki audio i kompatybilność wideo.</string>
     <string name="playback_section_subtitles">Napisy</string>
     <string name="playback_section_subtitles_desc">Język, styl i tryb renderowania.</string>
     <string name="playback_afr_open">Otwarte</string>
