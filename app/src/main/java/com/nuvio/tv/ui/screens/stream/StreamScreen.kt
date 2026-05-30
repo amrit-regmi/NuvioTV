@@ -1110,9 +1110,7 @@ private fun StreamCard(
                 Text(
                     text = streamName,
                     style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    color = NuvioColors.TextPrimary
                 )
 
                 streamDescription?.let { description ->
@@ -1120,9 +1118,7 @@ private fun StreamCard(
                         Text(
                             text = description,
                             style = MaterialTheme.typography.bodySmall,
-                            color = NuvioTheme.extendedColors.textSecondary,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
+                            color = NuvioTheme.extendedColors.textSecondary
                         )
                     }
                 }
