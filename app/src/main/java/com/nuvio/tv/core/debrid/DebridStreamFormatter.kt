@@ -5,6 +5,7 @@ import com.nuvio.tv.domain.model.DebridStreamEncode
 import com.nuvio.tv.domain.model.DebridStreamQuality
 import com.nuvio.tv.domain.model.DebridStreamResolution
 import com.nuvio.tv.domain.model.Stream
+import com.nuvio.tv.domain.model.StreamBadge
 import com.nuvio.tv.domain.model.StreamClientResolve
 import com.nuvio.tv.domain.model.StreamClientResolveParsed
 import com.nuvio.tv.domain.model.StreamDebridCacheState
@@ -15,9 +16,14 @@ import javax.inject.Singleton
 class DebridStreamFormatter @Inject constructor(
     private val engine: DebridStreamTemplateEngine
 ) {
-    fun format(stream: Stream, settings: DebridSettings): Stream {
+    fun format(
+        stream: Stream,
+        settings: DebridSettings,
+        compiledBadgeFilters: List<CompiledStreamBadgeFilter> = StreamBadgeMatcher.compile(settings.streamBadgeRules)
+    ): Stream {
         if (!stream.isManagedDebridForFormatting()) return stream
-        val values = buildValues(stream, settings)
+        val matchedBadges = StreamBadgeMatcher.matchedBadges(stream, compiledBadgeFilters)
+        val values = buildValues(stream, settings, matchedBadges)
         val formattedName = engine.render(settings.streamNameTemplate, values)
             .lineSequence()
             .joinToString(" ") { it.trim() }
@@ -32,11 +38,16 @@ class DebridStreamFormatter @Inject constructor(
 
         return stream.copy(
             name = formattedName.ifBlank { stream.name ?: DebridProviders.instantName(stream.clientResolve?.service) },
-            description = formattedDescription.ifBlank { stream.description ?: stream.title }
+            description = formattedDescription.ifBlank { stream.description ?: stream.title },
+            badges = matchedBadges
         )
     }
 
-    private fun buildValues(stream: Stream, settings: DebridSettings): Map<String, Any?> {
+    private fun buildValues(
+        stream: Stream,
+        settings: DebridSettings,
+        matchedBadges: List<StreamBadge>
+    ): Map<String, Any?> {
         val resolve = stream.clientResolve
         val raw = resolve?.stream?.raw
         val parsed = raw?.parsed
@@ -53,6 +64,7 @@ class DebridStreamFormatter @Inject constructor(
         val audioChannels = parsed?.channels.orEmpty().ifEmpty { facts.audioChannels.labelsExcludingUnknown { it.label } }
         val languages = parsed?.languages.orEmpty().ifEmpty { facts.languages.map { it.code }.filterNot { it == "unknown" } }
         val edition = parsed?.edition ?: buildEdition(parsed)
+        val matchedBadgeNames = matchedBadges.map { it.name }
 
         return linkedMapOf(
             "stream.title" to (parsed?.parsedTitle ?: resolve?.title ?: stream.title),
@@ -81,12 +93,13 @@ class DebridStreamFormatter @Inject constructor(
             "stream.duration" to parsed?.duration,
             "stream.edition" to edition,
             "stream.filename" to (raw?.filename ?: resolve?.filename ?: stream.behaviorHints?.filename ?: stream.debridCacheStatus?.cachedName),
-            "stream.regexMatched" to null,
+            "stream.regexMatched" to matchedBadgeNames,
+            "stream.rseMatched" to matchedBadgeNames,
             "stream.type" to streamType(stream, resolve),
             "service.cached" to serviceCached(stream, resolve),
             "service.shortName" to serviceShortName(stream, resolve),
             "service.name" to serviceName(stream, resolve),
-            "addon.name" to "Nuvio Direct Debrid"
+            "addon.name" to stream.addonName
         )
     }
 

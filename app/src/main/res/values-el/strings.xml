@@ -577,8 +577,8 @@
     <string name="playback_engine_mvplayer">Libmpv (Beta)</string>
     <string name="playback_auto_switch_internal_player_on_error">Αυτόματη εναλλαγή μηχανής σε σφάλμα εκκίνησης</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Αν αποτύχει η εκκίνηση ροής, γίνεται αυτόματη εναλλαγή μεταξύ ExoPlayer και libmpv.</string>
-    <string name="playback_section_audio">Ήχος &amp; Τρέιλερ</string>
-    <string name="playback_section_audio_desc">Συμπεριφορά τρέιλερ και χειριστήρια ήχου.</string>
+    <string name="playback_section_audio">Ήχος &amp; Βίντεο</string>
+    <string name="playback_section_audio_desc">Χειριστήρια ήχου και συμβατότητα βίντεο.</string>
     <string name="playback_section_subtitles">Υπότιτλοι</string>
     <string name="playback_section_subtitles_desc">Γλώσσα, στυλ και τρόπος απόδοσης.</string>
     <string name="playback_afr_open">Ανοιχτό</string>
@@ -633,7 +633,6 @@
     <string name="audio_enable_downmix_subtitle">Χρησιμοποιεί τη διαδρομή downmix FFmpeg. Όταν είναι απενεργοποιημένο, ο ήχος ακολουθεί την προηγούμενη διαδρομή Android/συσκευής.</string>
     <string name="audio_tunneled">Αναπαραγωγή tunneled</string>
     <string name="audio_tunneled_sub">Συγχρονισμός ήχου/βίντεο σε επίπεδο υλικού. Μπορεί να βελτιώσει την αναπαραγωγή σε ορισμένες συσκευές Android TV</string>
-    <string name="audio_dv_sub">Αντιστοίχιση Dolby Vision Profile 7 σε standard HEVC για συσκευές χωρίς υποστήριξη υλικού DV</string>
     <string name="audio_mpv_hwdec_title">Αποκωδικοποίηση υλικού (μόνο MPV)</string>
     <string name="audio_mpv_hwdec_dialog_subtitle">Επιλέξτε πώς θα χρησιμοποιεί το libmpv τους αποκωδικοποιητές υλικού.</string>
     <string name="audio_mpv_hwdec_legacy_direct_copy">Παλαιό (direct -&gt; copy)</string>

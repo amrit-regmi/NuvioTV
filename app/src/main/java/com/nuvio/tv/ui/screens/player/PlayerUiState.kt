@@ -69,6 +69,7 @@ data class PlayerUiState(
     val pendingPreviewSeekPosition: Long? = null,
     val playbackSpeed: Float = 1f,
     val loadingOverlayEnabled: Boolean = true,
+    val showPlayerLoadingStatus: Boolean = true,
     val showLoadingOverlay: Boolean = true,
     val loadingMessage: String? = null,
     val loadingProgress: Float? = null,
@@ -201,7 +202,9 @@ data class PlayerUiState(
 
 data class PlaybackTimelineState(
     val currentPosition: Long = 0L,
-    val duration: Long = 0L
+    val duration: Long = 0L,
+    /** Position (ms) up to which the player has buffered ahead of the playhead. */
+    val bufferedPosition: Long = 0L
 )
 
 data class TrackInfo(

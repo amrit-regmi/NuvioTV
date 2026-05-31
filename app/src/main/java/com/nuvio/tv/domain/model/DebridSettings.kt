@@ -2,6 +2,7 @@ package com.nuvio.tv.domain.model
 
 import com.nuvio.tv.core.debrid.DebridProviders
 import com.nuvio.tv.core.debrid.DebridStreamFormatterDefaults
+import com.nuvio.tv.core.debrid.StreamBadgeRules
 import com.nuvio.tv.core.debrid.supports
 
 data class DebridSettings(
@@ -20,7 +21,8 @@ data class DebridSettings(
     val streamCodecFilter: DebridStreamCodecFilter = DebridStreamCodecFilter.ANY,
     val streamPreferences: DebridStreamPreferences = DebridStreamPreferences(),
     val streamNameTemplate: String = DebridStreamFormatterDefaults.NAME_TEMPLATE,
-    val streamDescriptionTemplate: String = DebridStreamFormatterDefaults.DESCRIPTION_TEMPLATE
+    val streamDescriptionTemplate: String = DebridStreamFormatterDefaults.DESCRIPTION_TEMPLATE,
+    val streamBadgeRules: StreamBadgeRules = StreamBadgeRules()
 ) {
     val hasAnyApiKey: Boolean
         get() = DebridProviders.configuredServices(this).isNotEmpty()
@@ -116,7 +118,7 @@ data class DebridStreamPreferences(
     val excludedLanguages: List<DebridStreamLanguage> = emptyList(),
     val requiredReleaseGroups: List<String> = emptyList(),
     val excludedReleaseGroups: List<String> = emptyList(),
-    val sortCriteria: List<DebridStreamSortCriterion> = DebridStreamSortCriterion.defaultOrder
+    val sortCriteria: List<DebridStreamSortCriterion> = DebridStreamSortCriterion.originalOrder
 )
 
 enum class DebridStreamResolution(val label: String, val value: Int) {
@@ -245,6 +247,7 @@ data class DebridStreamSortCriterion(
     val direction: DebridStreamSortDirection = DebridStreamSortDirection.DESC
 ) {
     companion object {
+        val originalOrder = emptyList<DebridStreamSortCriterion>()
         val defaultOrder = listOf(
             DebridStreamSortCriterion(DebridStreamSortKey.RESOLUTION, DebridStreamSortDirection.DESC),
             DebridStreamSortCriterion(DebridStreamSortKey.QUALITY, DebridStreamSortDirection.DESC),

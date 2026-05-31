@@ -369,8 +369,8 @@
     <string name="playback_engine_mvplayer">Libmpv (Бета)</string>
     <string name="playback_auto_switch_internal_player_on_error">Авто-переключение движка при ошибке запуска</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Если запуск потока не удался, автоматически переключаться между ExoPlayer и libmpv.</string>
-    <string name="playback_section_audio">Аудио и Трейлер</string>
-    <string name="playback_section_audio_desc">Поведение трейлеров и настройки аудио.</string>
+    <string name="playback_section_audio">Аудио и видео</string>
+    <string name="playback_section_audio_desc">Настройки аудио и совместимость видео.</string>
     <string name="playback_section_subtitles">Субтитры</string>
     <string name="playback_section_subtitles_desc">Язык, стиль и режим рендеринга.</string>
     <string name="playback_afr_open">Открыть</string>
@@ -409,7 +409,6 @@
     <string name="audio_decoder_priority">Приоритет декодеров</string>
     <string name="audio_tunneled">Туннельное воспроизведение</string>
     <string name="audio_tunneled_sub">Аппаратная синхронизация аудио/видео. Может улучшить воспроизведение на некоторых устройствах Android TV</string>
-    <string name="audio_dv_sub">Преобразование профиля Dolby Vision 7 в стандартный HEVC для устройств без аппаратной поддержки DV</string>
     <string name="audio_mpv_hwdec_title">Аппаратное декодирование (только MPV)</string>
     <string name="audio_mpv_hwdec_dialog_subtitle">Выберите, как libmpv должен использовать аппаратные декодеры.</string>
     <string name="audio_mpv_hwdec_legacy_direct_copy">Устаревшее (прямое -&gt; копирование)</string>

@@ -21,7 +21,7 @@ internal fun PlayerRuntimeController.showRecoveryOverlay() {
             error = null,
             isBuffering = true,
             showLoadingOverlay = true,
-            loadingMessage = context.getString(R.string.player_loading_buffering),
+            loadingMessage = if (state.showPlayerLoadingStatus) context.getString(R.string.player_loading_buffering) else null,
             showPauseOverlay = false
         )
     }
@@ -51,7 +51,7 @@ internal fun PlayerRuntimeController.attemptStartupRecovery(
                 error = null,
                 isBuffering = true,
                 showLoadingOverlay = it.loadingOverlayEnabled,
-                loadingMessage = context.getString(R.string.player_loading_buffering),
+                loadingMessage = if (it.showPlayerLoadingStatus) context.getString(R.string.player_loading_buffering) else null,
                 showPauseOverlay = false
             )
         }
@@ -395,4 +395,3 @@ internal fun PlayerRuntimeController.tryDv7HevcFallback(
     }
     return true
 }
-

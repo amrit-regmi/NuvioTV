@@ -14,6 +14,7 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.mkv.MatroskaExtractor
 import androidx.media3.extractor.text.SubtitleParser
+import com.nuvio.tv.core.player.dvmkv.MatroskaExtractor as DvMatroskaExtractor
 import io.github.peerless2012.ass.media.AssHandler
 import io.github.peerless2012.ass.media.extractor.AssMatroskaExtractor
 import io.github.peerless2012.ass.media.kt.withAssSupport
@@ -97,10 +98,21 @@ private fun ExtractorsFactory.withAssMkvSupportCompat(
     subtitleParserFactory: SubtitleParser.Factory,
     assHandler: AssHandler
 ): ExtractorsFactory {
+    val delegate = this
     return ExtractorsFactory {
-        val extractors = createExtractors()
+        val extractors = delegate.createExtractors()
         extractors.forEachIndexed { index, extractor ->
+            // Stock MatroskaExtractor: replace with ASS-aware variant for libass support.
             if (extractor is MatroskaExtractor) {
+                extractors[index] = AssMatroskaExtractor(subtitleParserFactory, assHandler)
+            }
+            // The DV7 factory swaps in a vendored DvMatroskaExtractor for DV conversion.
+            // AssMatroskaExtractor extends stock MatroskaExtractor and cannot handle DV7
+            // BlockAdditional RPU, but it IS required for libass ASS/SSA rendering.
+            // Replace DvMatroskaExtractor with AssMatroskaExtractor so that libass works.
+            // For actual DV content, maybeAdjustLibassPipelineForTracks will detect the DV
+            // video track and rebuild the player without libass, restoring DvMatroskaExtractor.
+            if (extractor is DvMatroskaExtractor) {
                 extractors[index] = AssMatroskaExtractor(subtitleParserFactory, assHandler)
             }
         }

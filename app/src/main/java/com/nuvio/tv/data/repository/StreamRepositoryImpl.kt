@@ -180,16 +180,10 @@ class StreamRepositoryImpl @Inject constructor(
                 // Emit results as they arrive
                 for (result in resultChannel) {
                     val checkingResult = localDebridAvailabilityService.markChecking(listOf(result)).firstOrNull() ?: result
-                    mergePresentedResult(accumulatedResults, checkingResult)
-                    emit(NetworkResult.Success(accumulatedResults.toList()))
-                    Log.d(TAG, "Emitted ${accumulatedResults.size} addon(s), latest: ${checkingResult.addonName} with ${checkingResult.streams.size} streams")
-
                     val checkedResult = localDebridAvailabilityService.annotateCachedAvailability(listOf(checkingResult)).firstOrNull() ?: checkingResult
-                    if (checkedResult != checkingResult) {
-                        mergePresentedResult(accumulatedResults, checkedResult)
-                        emit(NetworkResult.Success(accumulatedResults.toList()))
-                        Log.d(TAG, "Emitted debrid cache status for ${checkedResult.addonName} with ${checkedResult.streams.size} streams")
-                    }
+                    mergePresentedResult(accumulatedResults, checkedResult)
+                    emit(NetworkResult.Success(accumulatedResults.toList()))
+                    Log.d(TAG, "Emitted ${accumulatedResults.size} addon(s), latest: ${checkedResult.addonName} with ${checkedResult.streams.size} streams")
                 }
             }
 
@@ -408,7 +402,7 @@ class StreamRepositoryImpl @Inject constructor(
             return NetworkResult.Success(cached)
         }
 
-        return when (val result = safeApiCall { api.getStreams(streamUrl) }) {
+        return when (val result = safeApiCall(context) { api.getStreams(streamUrl) }) {
             is NetworkResult.Success -> {
                 val streams = result.data.streams?.map {
                     it.toDomain(addonName, addonLogo)
@@ -478,7 +472,7 @@ class StreamRepositoryImpl @Inject constructor(
         val metaUrl = "$basePath/meta/$encodedType/$encodedMetaId.json$baseQuery"
         Log.d(TAG, "Fetching inline streams via meta type=$type metaId=$metaId videoId=$videoId url=$metaUrl")
         return try {
-            when (val result = safeApiCall { api.getMeta(metaUrl) }) {
+            when (val result = safeApiCall(context) { api.getMeta(metaUrl) }) {
                 is NetworkResult.Success -> {
                     val metaDto = result.data.meta ?: return emptyList()
                     val matchingVideo = metaDto.videos?.firstOrNull { it.id == videoId }
