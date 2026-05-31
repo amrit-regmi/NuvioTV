@@ -1,11 +1,13 @@
 package com.nuvio.tv.core.subtitle
 
+import android.content.Context
 import android.util.Log
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.network.safeApiCall
 import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.domain.repository.AddonRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -24,6 +26,7 @@ private const val CACHE_TTL_MS = 15 * 60 * 1000L
 
 @Singleton
 class SubtitleWarmer @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val addonRepository: AddonRepository,
     private val api: AddonApi
 ) {
@@ -110,7 +113,7 @@ class SubtitleWarmer @Inject constructor(
             val addon = findSubtitleAddon() ?: return null
             val url = buildSubtitleUrl(addon.baseUrl, type, videoId, filename, videoSize)
             Log.d(TAG, "Pre-fetching subtitles: $url")
-            when (val result = safeApiCall { api.getSubtitles(url) }) {
+            when (val result = safeApiCall(context) { api.getSubtitles(url) }) {
                 is NetworkResult.Success -> {
                     val subtitles = result.data.subtitles?.map { dto ->
                         Subtitle(

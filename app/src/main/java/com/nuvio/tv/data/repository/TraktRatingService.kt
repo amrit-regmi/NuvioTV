@@ -85,9 +85,9 @@ class TraktRatingService @Inject constructor(
 
     suspend fun submitRating(item: TraktRatingItem, rating: Int): Result<Unit> {
         val normalizedRating = rating.coerceIn(1, 10)
-        if (!canPromptForRating(item)) {
-            return Result.failure(IllegalStateException("Trakt rating is unavailable"))
-        }
+        if (profileManager.activeProfileId.value != 1) return Result.failure(IllegalStateException("Trakt rating is unavailable"))
+        if (!traktAuthService.hasRequiredCredentials()) return Result.failure(IllegalStateException("Trakt rating is unavailable"))
+        if (!traktAuthService.getCurrentAuthState().isAuthenticated) return Result.failure(IllegalStateException("Trakt rating is unavailable"))
         val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
             traktApi.addRatings(
                 authorization = authHeader,

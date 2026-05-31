@@ -140,7 +140,7 @@ class StreamWarmer @Inject constructor(
         return try {
             val url = buildStreamUrl(baseUrl, type, videoId)
             Log.d(TAG, "Pre-fetching streams: $url")
-            when (val result = safeApiCall { api.getStreams(url) }) {
+            when (val result = safeApiCall(context) { api.getStreams(url) }) {
                 is NetworkResult.Success -> {
                     val streams = result.data.streams?.map { it.toDomain(addonName, addonLogo) } ?: emptyList()
                     Log.d(TAG, "Fetched ${streams.size} streams for addon=$addonName type=$type videoId=$videoId")
