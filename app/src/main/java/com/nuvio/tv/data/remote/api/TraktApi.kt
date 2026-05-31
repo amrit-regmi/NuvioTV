@@ -369,4 +369,25 @@ interface TraktApi {
         @Header("Authorization") authorization: String,
         @Body body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>
+
+    @POST("sync/ratings")
+    suspend fun addRatings(
+        @Header("Authorization") authorization: String,
+        @Body body: com.nuvio.tv.data.remote.dto.trakt.TraktRatingsAddRequestDto
+    ): Response<com.nuvio.tv.data.remote.dto.trakt.TraktRatingsAddResponseDto>
+
+    @GET("sync/ratings/movies")
+    suspend fun getRatedMovies(
+        @Header("Authorization") authorization: String
+    ): Response<List<com.nuvio.tv.data.remote.dto.trakt.TraktRatedMovieItemDto>>
+
+    @GET("sync/ratings/episodes")
+    suspend fun getRatedEpisodes(
+        @Header("Authorization") authorization: String
+    ): Response<List<com.nuvio.tv.data.remote.dto.trakt.TraktRatedEpisodeItemDto>>
+
+    @GET("sync/ratings/shows")
+    suspend fun getRatedShows(
+        @Header("Authorization") authorization: String
+    ): Response<List<com.nuvio.tv.data.remote.dto.trakt.TraktRatedShowItemDto>>
 }

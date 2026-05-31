@@ -18,6 +18,7 @@ import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.data.repository.TraktCommentsService
 import com.nuvio.tv.data.repository.TraktRelatedService
 import com.nuvio.tv.data.repository.parseContentIds
+import com.nuvio.tv.data.repository.toTraktIds
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.LibrarySourceMode
@@ -62,6 +63,7 @@ import android.net.Uri
 import com.nuvio.tv.LocaleCache
 import com.nuvio.tv.R
 import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.core.stream.StreamWarmer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Locale
 import javax.inject.Inject
@@ -90,6 +92,8 @@ class MetaDetailsViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
+    private val streamWarmer: StreamWarmer,
+    private val traktRatingService: com.nuvio.tv.data.repository.TraktRatingService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -144,6 +148,7 @@ class MetaDetailsViewModel @Inject constructor(
         posterOptions.bind(viewModelScope)
         observeMetaViewSettings()
         observeTrailerAutoplaySettings()
+        observeTraktAuthState()
         observeTraktCommentsAvailability()
         observeLibraryState()
         observeWatchProgress()
@@ -181,6 +186,16 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    private fun observeTraktAuthState() {
+        viewModelScope.launch {
+            traktAuthDataStore.isAuthenticatedState.collect { authenticated ->
+                Log.d(TAG, "Trakt auth state: $authenticated")
+                traktAuthenticated = authenticated
+                _uiState.update { it.copy(isTraktAuthenticated = authenticated) }
+            }
+        }
+    }
+
     private fun observeTraktCommentsAvailability() {
         viewModelScope.launch {
             traktSettingsDataStore.moreLikeThisSource.collectLatest { source ->
@@ -206,12 +221,17 @@ class MetaDetailsViewModel @Inject constructor(
                     }
 
                     _uiState.update { state ->
+                        val base = if (state.isTraktAuthenticated != authenticated) {
+                            state.copy(isTraktAuthenticated = authenticated)
+                        } else {
+                            state
+                        }
                         if (shouldShow) {
-                            if (state.shouldShowCommentsSection) state else state.copy(
+                            if (base.shouldShowCommentsSection) base else base.copy(
                                 shouldShowCommentsSection = true
                             )
                         } else {
-                            state.copy(
+                            base.copy(
                                 comments = emptyList(),
                                 commentsCurrentPage = 0,
                                 commentsPageCount = 0,
@@ -280,6 +300,15 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    private fun warmStreams(meta: Meta?, nextToWatch: NextToWatch) {
+        val targetMeta = meta ?: return
+        val type = targetMeta.apiType.takeIf { it.isNotBlank() } ?: return
+        val isSeries = type.equals("series", ignoreCase = true) || type.equals("tv", ignoreCase = true)
+        val videoId = (if (isSeries) nextToWatch.nextVideoId else targetMeta.id)
+            ?.takeIf { it.isNotBlank() } ?: return
+        streamWarmer.warm(type, videoId)
+    }
+
     private fun observeTrailerAutoplaySettings() {
         viewModelScope.launch {
             trailerSettingsDataStore.settings.collectLatest { settings ->
@@ -326,7 +355,66 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnPickerDismiss -> dismissListPicker()
             MetaDetailsEvent.OnClearMessage -> clearMessage()
             MetaDetailsEvent.OnLifecyclePause -> handleLifecyclePause()
+            is MetaDetailsEvent.OnReactionSelected -> handleReactionSelected(event.reaction)
+            is MetaDetailsEvent.OnRatingSelected -> _uiState.update { it.copy(ratingPickerDefault = event.rating) }
+            MetaDetailsEvent.OnDismissRatingPicker -> _uiState.update { it.copy(showRatingPicker = false) }
+            MetaDetailsEvent.OnSubmitRating -> submitRating()
         }
+    }
+
+    private fun handleReactionSelected(reaction: TraktReaction) {
+        val current = _uiState.value
+        if (current.showRatingPicker && current.ratingPickerDefault == reaction.defaultRating) {
+            _uiState.update { it.copy(showRatingPicker = false) }
+        } else {
+            // Seed from actual userRating if it's already in this reaction's range
+            val initialRating = current.userRating?.let { existing ->
+                when (reaction) {
+                    TraktReaction.DISLIKE -> if (existing <= 4) existing else reaction.defaultRating
+                    TraktReaction.LIKE -> if (existing in 5..7) existing else reaction.defaultRating
+                    TraktReaction.LOVE -> if (existing >= 8) existing else reaction.defaultRating
+                }
+            } ?: reaction.defaultRating
+            _uiState.update { it.copy(showRatingPicker = true, ratingPickerDefault = initialRating) }
+        }
+    }
+
+    private fun submitRating() {
+        val state = _uiState.value
+        val meta = state.meta ?: return
+        val rating = state.ratingPickerDefault
+        if (state.isRatingPending) return
+        if (rating == state.userRating) {
+            _uiState.update { it.copy(showRatingPicker = false) }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRatingPending = true) }
+            val ids = buildTraktIdsForMeta(meta)
+            val item = when {
+                meta.apiType.equals("movie", ignoreCase = true) ->
+                    com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
+                meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) ->
+                    com.nuvio.tv.data.repository.TraktRatingItem.Show(ids = ids, title = meta.name)
+                else -> null
+            }
+            val result = if (item != null) traktRatingService.submitRating(item, rating) else Result.failure(Exception("Unsupported type"))
+            result.fold(
+                onSuccess = {
+                    _uiState.update { it.copy(isRatingPending = false, userRating = rating, showRatingPicker = false) }
+                    showMessage("Rating saved to Trakt", isError = false)
+                },
+                onFailure = {
+                    _uiState.update { it.copy(isRatingPending = false) }
+                    showMessage("Couldn't save rating", isError = true)
+                }
+            )
+        }
+    }
+
+    private fun buildTraktIdsForMeta(meta: com.nuvio.tv.domain.model.Meta): com.nuvio.tv.data.remote.dto.trakt.TraktIdsDto {
+        val parsed = parseContentIds(meta.id)
+        return toTraktIds(parsed)
     }
 
     private fun observeLibraryState() {
@@ -805,6 +893,28 @@ class MetaDetailsViewModel @Inject constructor(
         if (traktCommentsEnabled && traktAuthenticated && supportsComments(meta)) {
             loadComments(meta)
         }
+
+        if (traktAuthenticated) {
+            loadExistingRating(meta)
+        }
+    }
+
+    private fun loadExistingRating(meta: Meta) {
+        viewModelScope.launch {
+            val ids = buildTraktIdsForMeta(meta)
+            val item = when {
+                meta.apiType.equals("movie", ignoreCase = true) ->
+                    com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
+                meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) ->
+                    com.nuvio.tv.data.repository.TraktRatingItem.Show(ids = ids, title = meta.name)
+                else -> {
+                    _uiState.update { it.copy(isRatingLoaded = true) }
+                    return@launch
+                }
+            }
+            val existing = try { traktRatingService.getExistingRating(item) } catch (_: Exception) { null }
+            _uiState.update { it.copy(userRating = existing, ratingPickerDefault = existing ?: it.ratingPickerDefault, isRatingLoaded = true) }
+        }
     }
 
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
@@ -822,6 +932,7 @@ class MetaDetailsViewModel @Inject constructor(
             .first()
         val precomputedNextToWatch = computeNextToWatch(enriched, progressMap, watchedEpisodes)
         updateNextToWatch(precomputedNextToWatch)
+        warmStreams(enriched, precomputedNextToWatch)
 
         applyMeta(enriched)
         // Episode ratings and MDBList are independent — launch both without waiting.
@@ -1571,6 +1682,7 @@ class MetaDetailsViewModel @Inject constructor(
         nextToWatchJob = viewModelScope.launch {
             val nextToWatch = computeNextToWatch(meta, progressMap, watchedEpisodes)
             updateNextToWatch(nextToWatch)
+            warmStreams(meta, nextToWatch)
         }
     }
 

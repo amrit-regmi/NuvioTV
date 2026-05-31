@@ -1,17 +1,23 @@
 package com.nuvio.tv.ui.screens.detail
 
 import android.view.KeyEvent as AndroidKeyEvent
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,7 +33,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +44,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -70,12 +80,26 @@ import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.StarHalf
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.nuvio.tv.ui.components.TraktTenStarRow
 import com.nuvio.tv.ui.util.rememberLongPressKeyTracker
 import java.util.Locale
 
@@ -104,7 +128,17 @@ fun HeroContentSection(
     playButtonFocusRequester: FocusRequester? = null,
     restorePlayFocusToken: Int = 0,
     onHeroActionFocused: () -> Unit = {},
-    onPlayFocusRestored: () -> Unit = {}
+    onPlayFocusRestored: () -> Unit = {},
+    traktAuthenticated: Boolean = false,
+    isRatingLoaded: Boolean = false,
+    userRating: Int? = null,
+    showRatingPicker: Boolean = false,
+    ratingPickerDefault: Int = 6,
+    isRatingPending: Boolean = false,
+    onReactionSelected: (TraktReaction) -> Unit = {},
+    onRatingSelected: (Int) -> Unit = {},
+    onDismissRatingPicker: () -> Unit = {},
+    onSubmitRating: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val isSeriesApi = remember(meta.apiType) {
@@ -287,6 +321,19 @@ fun HeroContentSection(
                                 contentDescription = stringResource(R.string.hero_play_trailer),
                                 onClick = onTrailerClick,
                                 onFocused = onHeroActionFocused
+                            )
+                        }
+
+                        if (traktAuthenticated && isRatingLoaded && (meta.apiType != "movie" || isMovieWatched)) {
+                            TraktRatingArea(
+                                userRating = userRating,
+                                showRatingPicker = showRatingPicker,
+                                ratingPickerDefault = ratingPickerDefault,
+                                isRatingPending = isRatingPending,
+                                onReactionSelected = onReactionSelected,
+                                onRatingSelected = onRatingSelected,
+                                onSubmitRating = onSubmitRating,
+                                onHeroActionFocused = onHeroActionFocused
                             )
                         }
                     }
@@ -493,6 +540,13 @@ private fun ActionIconButton(
     selected: Boolean = false,
     selectedContainerColor: Color = Color(0xFF7CFF9B),
     selectedContentColor: Color = Color.Black,
+    containerColorOverride: Color? = null,
+    contentColorOverride: Color? = null,
+    focusedContainerColor: Color = NuvioColors.Secondary,
+    focusedContentColor: Color = NuvioColors.OnSecondary,
+    showFocusBorder: Boolean = true,
+    iconScale: Float = 1f,
+    focusRequester: FocusRequester? = null,
     onFocused: () -> Unit = {}
 ) {
     var longPressTriggered by remember { mutableStateOf(false) }
@@ -509,6 +563,7 @@ private fun ActionIconButton(
         enabled = enabled,
         modifier = Modifier
             .size(48.dp)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { state ->
                 if (state.isFocused) onFocused()
             }
@@ -543,16 +598,16 @@ private fun ActionIconButton(
             }
             .focusProperties { up = FocusRequester.Cancel },
         colors = IconButtonDefaults.colors(
-            containerColor = if (selected) selectedContainerColor else NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.Secondary,
-            contentColor = if (selected) selectedContentColor else NuvioColors.TextPrimary,
-            focusedContentColor = NuvioColors.OnSecondary
+            containerColor = containerColorOverride ?: if (selected) selectedContainerColor else NuvioColors.BackgroundCard,
+            focusedContainerColor = focusedContainerColor,
+            contentColor = contentColorOverride ?: if (selected) selectedContentColor else NuvioColors.TextPrimary,
+            focusedContentColor = focusedContentColor
         ),
         border = IconButtonDefaults.border(
-            focusedBorder = Border(
+            focusedBorder = if (showFocusBorder) Border(
                 border = BorderStroke(2.dp, NuvioColors.FocusRing),
                 shape = CircleShape
-            )
+            ) else Border.None
         ),
         shape = IconButtonDefaults.shape(
             shape = CircleShape
@@ -562,12 +617,12 @@ private fun ActionIconButton(
             painter != null -> Icon(
                 painter = painter,
                 contentDescription = contentDescription,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(22.dp).scale(iconScale)
             )
             icon != null -> Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(24.dp).scale(iconScale)
             )
         }
     }
@@ -994,4 +1049,372 @@ private fun MetaInfoDivider() {
         style = MaterialTheme.typography.labelLarge,
         color = NuvioTheme.extendedColors.textTertiary
     )
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun TraktRatingArea(
+    userRating: Int?,
+    showRatingPicker: Boolean,
+    ratingPickerDefault: Int,
+    isRatingPending: Boolean,
+    onReactionSelected: (TraktReaction) -> Unit,
+    onRatingSelected: (Int) -> Unit,
+    onSubmitRating: () -> Unit,
+    onHeroActionFocused: () -> Unit = {}
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    var expandBlocked by remember { mutableStateOf(false) }
+    var pickerWasOpen by remember { mutableStateOf(false) }
+    var isRotating by remember { mutableStateOf(false) }
+    var isCelebrating by remember { mutableStateOf(false) }
+    var ratingWasChanged by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val collapseJob = remember { arrayOf<Job?>(null) }
+
+    val dislikeFR = remember { FocusRequester() }
+    val likeFR = remember { FocusRequester() }
+    val loveFR = remember { FocusRequester() }
+    val pickerFR = remember { FocusRequester() }
+    val collapsedFR = remember { FocusRequester() }
+
+    // Picker open/close: handles animation sequencing AND focus.
+    // Focus is requested here (not in LaunchedEffect(areaState)) because in the no-change
+    // close path there are no suspension points — LaunchedEffect(showRatingPicker) runs to
+    // completion before LaunchedEffect(areaState) gets scheduled, so any flag set here is
+    // already reset by the time a second effect reads it.
+    LaunchedEffect(showRatingPicker) {
+        if (showRatingPicker) {
+            delay(50) // let AnimatedContent compose and lay out state 2
+            try { pickerFR.requestFocus() } catch (_: Exception) {}
+        } else if (pickerWasOpen) {
+            expandBlocked = true
+            isExpanded = false
+            delay(50)                // let state 0 compose
+            if (ratingWasChanged) {
+                isRotating = true
+                isCelebrating = true
+                try { collapsedFR.requestFocus() } catch (_: Exception) {}
+                delay(500)           // wobble
+                isRotating = false   // spring back
+                delay(500)           // color lingers
+                isCelebrating = false
+                delay(50)
+                try { collapsedFR.requestFocus() } catch (_: Exception) {}
+                delay(100)
+            } else {
+                try { collapsedFR.requestFocus() } catch (_: Exception) {}
+                delay(100)
+            }
+            expandBlocked = false
+            ratingWasChanged = false
+        }
+        pickerWasOpen = showRatingPicker
+    }
+
+    // 3-button row expansion focus: fires whenever isExpanded flips to true.
+    LaunchedEffect(isExpanded) {
+        if (isExpanded) {
+            val fr = when {
+                userRating != null && userRating <= 4 -> dislikeFR
+                userRating != null && userRating >= 8 -> loveFR
+                else -> likeFR
+            }
+            try { fr.requestFocus() } catch (_: Exception) {}
+        }
+    }
+
+    // pickerWasOpen is still true for one recomposition after showRatingPicker→false;
+    // using it here prevents a 2→1→0 double-transition that causes a visible flash.
+    val areaState = when {
+        showRatingPicker -> 2
+        isExpanded && !pickerWasOpen -> 1
+        else -> 0
+    }
+
+    Box(
+        contentAlignment = Alignment.CenterStart,
+        modifier = Modifier
+            .height(56.dp)
+            .onFocusChanged { state ->
+                if (!state.hasFocus && !showRatingPicker) {
+                    collapseJob[0]?.cancel()
+                    collapseJob[0] = scope.launch {
+                        delay(400)
+                        isExpanded = false
+                    }
+                } else if (state.hasFocus) {
+                    collapseJob[0]?.cancel()
+                }
+            }
+    ) {
+        AnimatedContent(
+            targetState = areaState,
+            transitionSpec = {
+                // Content cuts instantly (no color bleed). Size animates smoothly with clip=false
+                // so content renders at its full natural size throughout — no bounding-box rectangle.
+                (fadeIn(tween(0)) togetherWith fadeOut(tween(0)))
+                    .using(SizeTransform(clip = false) { _, _ -> tween(150) })
+            },
+            label = "traktRatingArea"
+        ) { state ->
+            when (state) {
+                0 -> {
+                    val isDislike = userRating != null && userRating <= 4
+                    val isLike    = userRating != null && userRating in 5..7
+                    val isLove    = userRating != null && userRating >= 8
+                    val (icon, selectedColor) = when {
+                        isDislike -> Icons.Default.ThumbDown to Color(0xFFE53935)
+                        isLike    -> Icons.Default.ThumbUp   to Color(0xFF43A047)
+                        isLove    -> Icons.Default.Favorite  to Color(0xFFE91E63)
+                        else      -> Icons.Default.Star      to NuvioColors.Secondary
+                    }
+                    val targetRot = when {
+                        !isRotating -> 0f
+                        isDislike   -> 15f
+                        isLike      -> -15f
+                        else        -> 0f
+                    }
+                    val celebRot by animateFloatAsState(
+                        targetValue = targetRot,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "celebRot"
+                    )
+                    val celebScale by animateFloatAsState(
+                        targetValue = if (isRotating && isLove) 1.4f else 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "celebScale"
+                    )
+                    Box(modifier = Modifier.rotate(celebRot)) {
+                        ActionIconButton(
+                            icon = icon,
+                            contentDescription = if (userRating != null) "$userRating/10 on Trakt" else "Rate on Trakt",
+                            onClick = { if (!expandBlocked) { ratingWasChanged = false; isExpanded = true } },
+                            selected = userRating != null,
+                            selectedContainerColor = selectedColor,
+                            selectedContentColor = Color.White,
+                            focusedContainerColor = if (isCelebrating && userRating != null) selectedColor else NuvioColors.Secondary,
+                            focusedContentColor = if (isCelebrating && userRating != null) Color.White else NuvioColors.OnSecondary,
+                            iconScale = celebScale,
+                            focusRequester = collapsedFR,
+                            onFocused = { onHeroActionFocused() }
+                        )
+                    }
+                }
+                1 -> {
+                    val currentReaction = when {
+                        userRating == null -> null
+                        userRating <= 4    -> TraktReaction.DISLIKE
+                        userRating in 5..7 -> TraktReaction.LIKE
+                        else               -> TraktReaction.LOVE
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ActionIconButton(
+                            icon = Icons.Default.ThumbDown,
+                            contentDescription = stringResource(R.string.trakt_rating_dislike),
+                            onClick = {
+                                if (currentReaction != TraktReaction.DISLIKE) ratingWasChanged = true
+                                onReactionSelected(TraktReaction.DISLIKE)
+                            },
+                            selected = userRating != null && userRating <= 4,
+                            selectedContainerColor = Color(0xFFE53935),
+                            selectedContentColor = Color.White,
+                            focusRequester = dislikeFR,
+                            onFocused = onHeroActionFocused
+                        )
+                        ActionIconButton(
+                            icon = Icons.Default.ThumbUp,
+                            contentDescription = stringResource(R.string.trakt_rating_like),
+                            onClick = {
+                                if (currentReaction != TraktReaction.LIKE) ratingWasChanged = true
+                                onReactionSelected(TraktReaction.LIKE)
+                            },
+                            selected = userRating != null && userRating in 5..7,
+                            selectedContainerColor = Color(0xFF43A047),
+                            selectedContentColor = Color.White,
+                            focusRequester = likeFR,
+                            onFocused = onHeroActionFocused
+                        )
+                        ActionIconButton(
+                            icon = Icons.Default.Favorite,
+                            contentDescription = stringResource(R.string.trakt_rating_love),
+                            onClick = {
+                                if (currentReaction != TraktReaction.LOVE) ratingWasChanged = true
+                                onReactionSelected(TraktReaction.LOVE)
+                            },
+                            selected = userRating != null && userRating >= 8,
+                            selectedContainerColor = Color(0xFFE91E63),
+                            selectedContentColor = Color.White,
+                            focusRequester = loveFR,
+                            onFocused = onHeroActionFocused
+                        )
+                    }
+                }
+                else -> {
+                    InlineStarPicker(
+                        rating = ratingPickerDefault,
+                        isSubmitting = isRatingPending,
+                        onRatingSelected = { r -> ratingWasChanged = true; onRatingSelected(r) },
+                        onAutoSubmit = onSubmitRating,
+                        focusRequester = pickerFR
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InlineStarPicker(
+    rating: Int,
+    isSubmitting: Boolean,
+    onRatingSelected: (Int) -> Unit,
+    onAutoSubmit: () -> Unit,
+    focusRequester: FocusRequester,
+    modifier: Modifier = Modifier
+) {
+    var selectedRating by remember { mutableIntStateOf(rating) }
+    var isPersisting by remember { mutableStateOf(false) }
+    var isFocused by remember { mutableStateOf(false) }
+    var readyToAutoSubmit by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val dwellJob = remember { arrayOf<Job?>(null) }
+    val autoCloseJob = remember { arrayOf<Job?>(null) }
+
+    LaunchedEffect(rating) { selectedRating = rating }
+
+    // Guard: don't trigger focus-away submit during AnimatedContent transition (first ~400ms)
+    LaunchedEffect(Unit) {
+        delay(400)
+        readyToAutoSubmit = true
+    }
+
+    val persistIconSize by animateDpAsState(
+        targetValue = if (isPersisting) 28.dp else 24.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "starBloom"
+    )
+
+    fun triggerSubmit() {
+        if (isPersisting) return
+        autoCloseJob[0]?.cancel()
+        dwellJob[0]?.cancel()
+        scope.launch {
+            isPersisting = true
+            delay(300)
+            onAutoSubmit()
+        }
+    }
+
+    fun restartDwell() {
+        autoCloseJob[0]?.cancel()
+        dwellJob[0]?.cancel()
+        dwellJob[0] = scope.launch {
+            delay(1500)
+            triggerSubmit()
+        }
+    }
+
+    // Auto-submit 1.5s after picker opens if user doesn't interact (same as dwell timer)
+    DisposableEffect(Unit) {
+        autoCloseJob[0] = scope.launch {
+            delay(1500)
+            triggerSubmit()
+        }
+        onDispose { autoCloseJob[0]?.cancel() }
+    }
+
+    val reactionIcon = when {
+        selectedRating <= 4 -> Icons.Default.ThumbDown
+        selectedRating <= 7 -> Icons.Default.ThumbUp
+        else -> Icons.Default.Favorite
+    }
+    val reactionTint = when {
+        selectedRating <= 4 -> Color(0xFFE53935)
+        selectedRating <= 7 -> Color(0xFF43A047)
+        else -> Color(0xFFE91E63)
+    }
+
+    Row(
+        modifier = modifier
+            .background(
+                NuvioColors.Surface.copy(alpha = if (isFocused) 0.95f else 0.88f),
+                RoundedCornerShape(24.dp)
+            )
+            .border(
+                width = if (isFocused) 2.dp else 1.dp,
+                color = if (isFocused) NuvioColors.FocusRing else NuvioColors.TextDisabled.copy(alpha = 0.22f),
+                shape = RoundedCornerShape(24.dp)
+            )
+            .padding(horizontal = 14.dp, vertical = 13.dp)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onFocusChanged { state ->
+                isFocused = state.isFocused
+                if (!state.isFocused && !state.hasFocus && readyToAutoSubmit) {
+                    dwellJob[0]?.cancel()
+                    triggerSubmit()
+                }
+            }
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (native.action != AndroidKeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                when (native.keyCode) {
+                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
+                        if (selectedRating > 1) {
+                            selectedRating--
+                            onRatingSelected(selectedRating)
+                            restartDwell()
+                            true
+                        } else false  // let focus exit at left edge
+                    }
+                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        if (selectedRating < 10) {
+                            selectedRating++
+                            onRatingSelected(selectedRating)
+                            restartDwell()
+                            true
+                        } else false  // let focus exit at right edge
+                    }
+                    AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER -> {
+                        triggerSubmit()
+                        true
+                    }
+                    else -> false
+                }
+            },
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = reactionIcon,
+            contentDescription = null,
+            tint = reactionTint,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        // 5-star display: rating 1-10 maps to 0.5–5 stars (½★=1, ★=2, ★½=3, …, ★★★★★=10)
+        val fullStars = selectedRating / 2
+        val hasHalfStar = selectedRating % 2 == 1
+        repeat(5) { index ->
+            val icon = when {
+                index < fullStars -> Icons.Default.Star
+                index == fullStars && hasHalfStar -> Icons.Default.StarHalf
+                else -> Icons.Default.StarBorder
+            }
+            val isActive = index < fullStars || (index == fullStars && hasHalfStar)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isActive) NuvioColors.Secondary else Color.White.copy(alpha = 0.5f),
+                modifier = Modifier.size(if (isPersisting && isActive) persistIconSize else 24.dp)
+            )
+        }
+    }
 }
