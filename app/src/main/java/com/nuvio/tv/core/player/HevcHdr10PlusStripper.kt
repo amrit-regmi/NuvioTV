@@ -4,20 +4,6 @@ import androidx.media3.common.util.UnstableApi
 
 /**
  * Strips HDR10+ (SMPTE ST 2094-40) SEI messages from an HEVC bitstream on-the-fly.
- *
- * Fire TV devices black-screen when a stream carries both Dolby Vision RPU metadata
- * AND HDR10+ SEI simultaneously. After DV7→8.1 conversion via libdovi the RPU is
- * already rewritten, but the HDR10+ SEI survives untouched in the base-layer HEVC.
- * Stripping it leaves a clean DV8.1 stream the Fire TV decoder accepts.
- *
- * HDR10+ metadata lives inside HEVC SEI NAL units (type 39 = prefix SEI,
- * type 40 = suffix SEI) as a user_data_registered_itu_t_t35 payload with
- * country code 0xB5 (USA), provider code 0x003C, and user identifier 0x0001.
- * We parse each SEI NAL, drop any message matching that signature, and rebuild
- * the NAL without it. If no HDR10+ message is present the NAL is forwarded
- * unchanged.
- *
- * Works for both length-delimited (MP4/fMP4) and Annex-B (TS) framing.
  */
 @UnstableApi
 internal object HevcHdr10PlusStripper {

@@ -624,7 +624,8 @@ internal fun PlayerRuntimeController.initializePlayer(
             // The app-level factory performs DV7 conversion for the in-band-RPU containers
             // (MP4/fMP4/TS); MKV goes through the vendored extractor. Pass-through for non-DV.
             val stripDvRpuEnabled = playerSettings.stripDvFromHdr10PlusFiles &&
-                    isExperimentalDv7ToDv81ActiveForCurrentPlayback
+                    (isExperimentalDv7ToDv81ActiveForCurrentPlayback ||
+                            effectiveDv7Mode == Dv7HandlingMode.OFF)
             if (stripDvRpuEnabled) {
                 Log.i(PlayerRuntimeController.TAG, "DV_RPU_STRIP: enabled — will remove DV RPU NALs to fix Fire TV DOVIWithHDR10Plus black screen host=${url.safeHost()}")
             }

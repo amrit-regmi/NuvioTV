@@ -48,6 +48,7 @@ internal class DolbyVisionMatroskaTransformer(
     ): ByteArray? {
         if (blockAdditionalData == null) return null
         if (stripRpuOnly) return ByteArray(0)
+        if (stripHdr10Plus) return ByteArray(0)
         val profile = resolveProfile(null, dolbyVisionConfigBytes)
         if (!config.shouldConvert(profile)) return null
         return convertRpuNal(blockAdditionalData, config.conversionMode(profile))

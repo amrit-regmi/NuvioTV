@@ -558,25 +558,21 @@ private class DolbyVisionTrackOutput(
 }
 
 /**
- * Wraps [DolbyVisionTrackOutput] and strips HDR10+ SEI messages from each
- * sample after DV7→8.1 conversion has already run.
+ * Strips BOTH Dolby Vision RPU NAL units (type 62) AND HDR10+ SEI messages
+ * from HEVC video samples, producing a clean HDR10 base-layer stream.
  *
- * This is the correct fix for Fire TV black screen on DV7+HDR10+ files:
- *   1. DolbyVisionTrackOutput converts the DV7 RPU to DV8.1 via libdovi.
- *   2. This wrapper then removes the HDR10+ SEI from the converted sample.
- *   3. Fire TV MediaCodec receives a clean DV8.1 stream with no HDR10+ conflict.
+ * This matches Kodi PR #24584's approach: physically remove both metadata types
+ * from the bitstream before MediaCodec sees it. Fire TV reads NAL type 62 bytes
+ * directly from the bitstream regardless of codec MIME type, so codec string
+ * rewrites alone are insufficient. Both must be stripped.
  */
 @UnstableApi
 internal class Hdr10PlusStrippingTrackOutput(
-    delegate: TrackOutput,
+    private val delegate: TrackOutput,
     private val config: DolbyVisionConversionConfig,
     private val nalFormat: NalFormat
 ) : TrackOutput {
 
-    // The DV conversion TrackOutput — we sit on top of it
-    private val dvOutput = DolbyVisionTrackOutput(delegate, config, nalFormat)
-
-    // Buffer to accumulate sample data before stripping
     private var pendingBuf = ByteArray(0)
     private var pendingLen = 0
     private var inputScratch = ByteArray(0)
@@ -600,11 +596,20 @@ internal class Hdr10PlusStrippingTrackOutput(
         }
     }
 
-    override fun durationUs(durationUs: Long) = dvOutput.durationUs(durationUs)
+    override fun durationUs(durationUs: Long) = delegate.durationUs(durationUs)
 
     override fun format(format: Format) {
         nalLengthFieldLength = parseNalLengthFieldLength(format)
-        dvOutput.format(format)
+        val strippedCodecs = stripDvCodecString(format.codecs)
+        val outFormat = if (strippedCodecs != null && strippedCodecs != format.codecs) {
+            format.buildUpon()
+                .setCodecs(strippedCodecs)
+                .setSampleMimeType(MimeTypes.VIDEO_H265)
+                .build()
+        } else {
+            format
+        }
+        delegate.format(outFormat)
     }
 
     @Throws(java.io.IOException::class)
@@ -627,14 +632,14 @@ internal class Hdr10PlusStrippingTrackOutput(
             pendingLen += read
         } else {
             scratch.reset(inputScratch, read)
-            dvOutput.sampleData(scratch, read, sampleDataPart)
+            delegate.sampleData(scratch, read, sampleDataPart)
         }
         return read
     }
 
     override fun sampleData(data: ParsableByteArray, length: Int, sampleDataPart: Int) {
         if (sampleDataPart != TrackOutput.SAMPLE_DATA_PART_MAIN || length <= 0) {
-            dvOutput.sampleData(data, length, sampleDataPart)
+            delegate.sampleData(data, length, sampleDataPart)
             return
         }
         ensurePendingCapacity(length)
@@ -650,29 +655,36 @@ internal class Hdr10PlusStrippingTrackOutput(
         cryptoData: TrackOutput.CryptoData?
     ) {
         if (pendingLen == 0) {
-            dvOutput.sampleMetadata(timeUs, flags, size, offset, cryptoData)
+            delegate.sampleMetadata(timeUs, flags, size, offset, cryptoData)
             return
         }
         val carrySize = offset.coerceIn(0, pendingLen)
         val sampleEnd = pendingLen - carrySize
 
-        // Strip HDR10+ SEI from the raw (pre-DV-conversion) sample.
-        // DolbyVisionTrackOutput will then convert the DV7 RPU in the
-        // already-HDR10+-stripped data.
-        val stripped = when (nalFormat) {
+        // Step 1: strip DV RPU NAL units (type 62) — Fire TV reads these directly
+        // from the bitstream regardless of MIME type, triggering the black screen
+        val afterRpuStrip = when (nalFormat) {
             NalFormat.LENGTH_DELIMITED ->
-                HevcHdr10PlusStripper.stripHdr10PlusLengthDelimited(pendingBuf, sampleEnd, nalLengthFieldLength)
+                HevcDvRpuStripper.stripRpuLengthDelimited(pendingBuf, sampleEnd, nalLengthFieldLength)
             NalFormat.ANNEX_B ->
-                HevcHdr10PlusStripper.stripHdr10PlusAnnexB(pendingBuf, sampleEnd)
+                HevcDvRpuStripper.stripRpuAnnexB(pendingBuf, sampleEnd)
         }
+        val afterRpuData = afterRpuStrip ?: pendingBuf
+        val afterRpuLen = afterRpuStrip?.size ?: sampleEnd
 
-        val outputData = stripped ?: pendingBuf
-        val outputLen = stripped?.size ?: sampleEnd
+        // Step 2: strip HDR10+ SEI messages from the RPU-stripped data
+        val afterHdr10Strip = when (nalFormat) {
+            NalFormat.LENGTH_DELIMITED ->
+                HevcHdr10PlusStripper.stripHdr10PlusLengthDelimited(afterRpuData, afterRpuLen, nalLengthFieldLength)
+            NalFormat.ANNEX_B ->
+                HevcHdr10PlusStripper.stripHdr10PlusAnnexB(afterRpuData, afterRpuLen)
+        }
+        val outputData = afterHdr10Strip ?: afterRpuData
+        val outputLen = afterHdr10Strip?.size ?: afterRpuLen
 
-        // Feed the HDR10+-stripped data into the DV conversion output
         scratch.reset(outputData, outputLen)
-        dvOutput.sampleData(scratch, outputLen)
-        dvOutput.sampleMetadata(timeUs, flags, outputLen, 0, cryptoData)
+        delegate.sampleData(scratch, outputLen)
+        delegate.sampleMetadata(timeUs, flags, outputLen, 0, cryptoData)
 
         if (carrySize > 0) {
             System.arraycopy(pendingBuf, sampleEnd, pendingBuf, 0, carrySize)
@@ -680,7 +692,19 @@ internal class Hdr10PlusStrippingTrackOutput(
         pendingLen = carrySize
     }
 
-    private companion object {
+    internal companion object {
+        /**
+         * Rewrites a DV codec string to plain HEVC so ExoPlayer doesn't open
+         * a Dolby Vision decoder pipeline for the stripped stream.
+         * dvhe.08.xx / dvh1.08.xx → hvc1.2.4.L153.B0
+         */
+        fun stripDvCodecString(codecs: String?): String? {
+            if (codecs.isNullOrBlank()) return null
+            return Regex("(?i)(dvhe|dvh1)\\.[0-9]+\\.[0-9]+")
+                .replace(codecs.trim()) { "hvc1.2.4.L153.B0" }
+                .takeIf { it != codecs }
+        }
+
         fun parseNalLengthFieldLength(format: Format): Int {
             val csd = format.initializationData.firstOrNull() ?: return 4
             if (csd.size <= 21) return 4
