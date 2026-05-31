@@ -7,11 +7,17 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktTokenResponseDto
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -49,6 +55,9 @@ class TraktAuthDataStore @Inject constructor(
     companion object {
         private const val FEATURE = "trakt_auth_store"
     }
+
+    // Singleton-scoped scope so the eager StateFlow stays alive for the app lifetime.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val accessTokenKey = stringPreferencesKey("access_token")
     private val refreshTokenKey = stringPreferencesKey("refresh_token")
@@ -90,6 +99,12 @@ class TraktAuthDataStore @Inject constructor(
     val isAuthenticated: Flow<Boolean> = state.map { it.isAuthenticated }
 
     val isEffectivelyAuthenticated: Flow<Boolean> = isAuthenticated
+
+    // Eagerly-started in-memory cache — starts collecting when the singleton is created
+    // at app startup, so by the time any ViewModel subscribes, the value is already warm.
+    // Collecting this StateFlow never hits disk; it replays the latest known auth value.
+    val isAuthenticatedState: StateFlow<Boolean> = isAuthenticated
+        .stateIn(scope, SharingStarted.Eagerly, false)
 
     /** Direct read of auth state for the current active profile, bypassing flatMapLatest. */
     suspend fun getCurrentState(): TraktAuthState {

@@ -143,8 +143,7 @@ class StreamWarmer @Inject constructor(
             when (val result = safeApiCall { api.getStreams(url) }) {
                 is NetworkResult.Success -> {
                     val streams = result.data.streams?.map { it.toDomain(addonName, addonLogo) } ?: emptyList()
-                    cache[key] = CachedStreams(streams, System.currentTimeMillis())
-                    Log.d(TAG, "Cached ${streams.size} streams for addon=$addonName type=$type videoId=$videoId")
+                    Log.d(TAG, "Fetched ${streams.size} streams for addon=$addonName type=$type videoId=$videoId")
 
                     // Register session immediately so auto-advance and AFR cache-check work even
                     // if the user taps play before probing finishes. Probing will overwrite this
@@ -162,10 +161,9 @@ class StreamWarmer @Inject constructor(
                         )
                     }
 
-                    // Probe in background — does not block awaitWarm(); updates cache + session when done
-                    scope.launch { probeAndReorder(streams, key, type, videoId, resumePositionMs, durationMs) }
-
-                    streams
+                    // Probe inline — cache is only populated after probing validates streams.
+                    // awaitWarm() awaits this deferred, so it never serves unprobed streams.
+                    probeAndReorder(streams, key, type, videoId, resumePositionMs, durationMs)
                 }
                 else -> null
             }
@@ -188,7 +186,7 @@ class StreamWarmer @Inject constructor(
         videoId: String,
         resumePositionMs: Long? = null,
         durationMs: Long? = null
-    ): List<Stream> {
+    ): List<Stream>? {
         if (streams.isEmpty()) return streams
         val settings = debridSettingsDataStore.settings.first()
         val maxProbe = if (settings.streamMaxResults > 0) settings.streamMaxResults else DEFAULT_PROBE_COUNT
@@ -288,9 +286,9 @@ class StreamWarmer @Inject constructor(
         }
 
         if (firstValidIndex >= 0) {
-            // Update cache with reordered list
-            val existing = cache[cacheKey]
-            if (existing != null) cache[cacheKey] = existing.copy(streams = reordered)
+            // Populate cache now that streams are validated — never caches unprobed results
+            cache[cacheKey] = CachedStreams(reordered, System.currentTimeMillis())
+            Log.d(TAG, "Cached ${reordered.size} probed streams for type=$type videoId=$videoId")
 
             // Resolve MIME type from probe Content-Type header, falling back to filename.
             // Stored in WarmSession so the player's init block can skip its own probe.
@@ -370,6 +368,7 @@ class StreamWarmer @Inject constructor(
             Log.w(TAG, "All ${ minOf(maxProbe, streams.size) } probed streams invalid for type=$type videoId=$videoId — clearing warm session and cache")
             playerPreWarmer.clearSession(type, videoId)
             cache.remove(cacheKey)
+            return null
         }
 
         return reordered

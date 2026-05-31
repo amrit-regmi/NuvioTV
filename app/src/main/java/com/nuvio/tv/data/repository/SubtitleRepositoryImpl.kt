@@ -46,7 +46,8 @@ class SubtitleRepositoryImpl @Inject constructor(
         if (filename != null) {
             subtitleWarmer.awaitWarm(filename, videoSize)?.let { cached ->
                 Log.d(TAG, "Subtitle warm hit: ${cached.size} subs for filename=$filename")
-                return@withContext cached
+                if (cached.isNotEmpty()) return@withContext cached
+                // Empty warm result means warmer's addon found nothing; fall through to full fetch.
             }
         }
 

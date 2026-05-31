@@ -121,6 +121,8 @@ class SubtitleWarmer @Inject constructor(
                             addonLogo = addon.logo
                         )
                     } ?: return null
+                    // Don't cache empty results — other addons may have subs for this file.
+                    if (subtitles.isEmpty()) return null
                     cache[key] = CachedSubtitles(subtitles, System.currentTimeMillis())
                     Log.d(TAG, "Cached ${subtitles.size} subtitles key=$key")
                     subtitles

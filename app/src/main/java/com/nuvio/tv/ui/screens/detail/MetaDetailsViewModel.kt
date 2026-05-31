@@ -391,10 +391,12 @@ class MetaDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isRatingPending = true) }
             val ids = buildTraktIdsForMeta(meta)
-            val item = if (meta.apiType.equals("movie", ignoreCase = true)) {
-                com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
-            } else {
-                null
+            val item = when {
+                meta.apiType.equals("movie", ignoreCase = true) ->
+                    com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
+                meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) ->
+                    com.nuvio.tv.data.repository.TraktRatingItem.Show(ids = ids, title = meta.name)
+                else -> null
             }
             val result = if (item != null) traktRatingService.submitRating(item, rating) else Result.failure(Exception("Unsupported type"))
             result.fold(
@@ -899,13 +901,17 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun loadExistingRating(meta: Meta) {
         viewModelScope.launch {
-            if (!meta.apiType.equals("movie", ignoreCase = true)) {
-                // Series ratings not fetched — mark loaded immediately so button appears
-                _uiState.update { it.copy(isRatingLoaded = true) }
-                return@launch
-            }
             val ids = buildTraktIdsForMeta(meta)
-            val item = com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
+            val item = when {
+                meta.apiType.equals("movie", ignoreCase = true) ->
+                    com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
+                meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) ->
+                    com.nuvio.tv.data.repository.TraktRatingItem.Show(ids = ids, title = meta.name)
+                else -> {
+                    _uiState.update { it.copy(isRatingLoaded = true) }
+                    return@launch
+                }
+            }
             val existing = try { traktRatingService.getExistingRating(item) } catch (_: Exception) { null }
             _uiState.update { it.copy(userRating = existing, ratingPickerDefault = existing ?: it.ratingPickerDefault, isRatingLoaded = true) }
         }
