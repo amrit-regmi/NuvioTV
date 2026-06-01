@@ -338,9 +338,11 @@ class WatchProgressPreferences @Inject constructor(
                 if (existing == null || remote.lastWatched > existing.lastWatched) {
                     local[key] = mergeDisplayMetadata(remote, existing)
                     Log.d("WatchProgressPrefs", "  merged key=$key (existing=${existing != null})")
-                } else {
+                } else if (existing.lastWatched > remote.lastWatched && existing.lastWatched > lastSuccessfulPushMs) {
                     Log.d("WatchProgressPrefs", "  skipped key=$key (local is newer)")
                     preservedLocalItems = true
+                } else {
+                    Log.d("WatchProgressPrefs", "  skipped key=$key (already synced)")
                 }
             }
 
