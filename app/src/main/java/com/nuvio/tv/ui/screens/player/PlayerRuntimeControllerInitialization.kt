@@ -837,6 +837,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                                     // Tunneled mode — onRenderedFirstFrame() won't
                                     // fire; treat STATE_READY as the sync point.
                                     hasRenderedFirstFrame = true
+                                    if (_uiState.value.postPlayDismissedForCurrentEpisode) {
+                                        _uiState.update { it.copy(postPlayDismissedForCurrentEpisode = false) }
+                                    }
                                     if (!startPaused && !userPausedManually) {
                                         playWhenReady = true
                                         play()
@@ -923,6 +926,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                     override fun onRenderedFirstFrame() {
                         val isFirstFrame = !hasRenderedFirstFrame  // capture BEFORE flipping
                         hasRenderedFirstFrame = true
+                        if (isFirstFrame && _uiState.value.postPlayDismissedForCurrentEpisode) {
+                            _uiState.update { it.copy(postPlayDismissedForCurrentEpisode = false) }
+                        }
                         updateAudioControlAvailability()
                         // Start playback now that the first video frame is
                         // visible: audio and video begin in sync.

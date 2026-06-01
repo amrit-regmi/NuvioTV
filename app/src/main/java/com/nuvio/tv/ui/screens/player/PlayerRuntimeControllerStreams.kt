@@ -1207,7 +1207,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
             activeSkipInterval = null,
             skipIntervalDismissed = false,
             postPlayMode = null,
-            postPlayDismissedForCurrentEpisode = false,
+            postPlayDismissedForCurrentEpisode = true,
             playbackEnded = false,
         )
     }
@@ -1301,7 +1301,7 @@ private fun PlayerRuntimeController.switchToEpisodeStreamCommon(
             activeSkipInterval = null,
             skipIntervalDismissed = false,
             postPlayMode = null,
-            postPlayDismissedForCurrentEpisode = false,
+            postPlayDismissedForCurrentEpisode = true,
             playbackEnded = false,
         )
     }
@@ -1376,7 +1376,6 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                 nextEpisode = episodeForMode,
                 searching = true,
             ),
-            postPlayDismissedForCurrentEpisode = false,
         )
     }
 
@@ -1587,7 +1586,6 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
                                 sourceName = sourceName,
                                 countdownSec = remaining,
                             ),
-                            postPlayDismissedForCurrentEpisode = false,
                         )
                     }
                     delay(1000)
