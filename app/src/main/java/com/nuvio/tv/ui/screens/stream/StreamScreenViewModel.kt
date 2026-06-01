@@ -82,6 +82,7 @@ class StreamScreenViewModel @Inject constructor(
     private val directDebridStreamPreparer: DirectDebridStreamPreparer,
     private val externalPlaybackTracker: com.nuvio.tv.core.player.ExternalPlaybackTracker,
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
+    private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -1104,7 +1105,11 @@ class StreamScreenViewModel @Inject constructor(
         if (System.currentTimeMillis() - externalPlayerLaunchTimeMs < 500L) return
         externalPlayerLaunched = false
         externalPlayerLaunchTimeMs = 0L
-        externalPlaybackTracker.stopTracking()
+        if (com.nuvio.tv.core.player.ZidooPlayerMonitor.isZidooDevice()) {
+            externalPlaybackTracker.dismissOverlayOnly()
+        } else {
+            externalPlaybackTracker.stopTracking()
+        }
         updateUiStateIfChanged {
             it.copy(
                 showDirectAutoPlayOverlay = false,
@@ -1279,7 +1284,7 @@ class StreamScreenViewModel @Inject constructor(
         externalPlaybackTracker.launchPlayer(
             metadata = metadata,
             url = url,
-            title = playbackInfo.title,
+            title = metadata.buildPlayerTitle(),
             headers = playbackInfo.headers,
             resumePositionMs = resumePositionMs,
             subtitles = subtitleInputs,
@@ -1355,14 +1360,16 @@ class StreamScreenViewModel @Inject constructor(
                 Log.d(TAG, "No subtitles found for preferred languages: $preferredLanguages")
                 null
             } else {
-                Log.d(TAG, "Found ${filtered.size} subtitles for external player")
-                filtered.map { subtitle ->
+                Log.d(TAG, "Found ${filtered.size} subtitles for external player, downloading to cache...")
+                val inputs = filtered.map { subtitle ->
                     com.nuvio.tv.core.player.SubtitleInput(
                         url = subtitle.url,
                         name = "${subtitle.getDisplayLanguage()} - ${subtitle.addonName}",
                         lang = subtitle.lang
                     )
                 }
+                // Download subtitle files to local cache and convert to content:// URIs
+                subtitleFileCache.cacheSubtitles(inputs)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch subtitles for external player", e)
