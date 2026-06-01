@@ -29,7 +29,6 @@ import javax.inject.Singleton
 private const val TAG = "StartupSyncService"
 private const val FORCE_RESYNC_MIN_INTERVAL_MS = 30_000L
 private const val FULL_STARTUP_PULL_TTL_MS = 6 * 60 * 60 * 1000L
-private const val WATCH_PROGRESS_PULL_OVERLAP_MS = 1_000L
 
 @Singleton
 class StartupSyncService @Inject constructor(
@@ -255,8 +254,7 @@ class StartupSyncService @Inject constructor(
                 return pullWarmRemoteData(
                     profileId = profileId,
                     userId = userId,
-                    includeProfileSettings = includeProfileSettings,
-                    lastWatchProgressWatermarkMs = syncState.lastWatchProgressWatermarkMs
+                    includeProfileSettings = includeProfileSettings
                 )
             }
 
@@ -273,20 +271,18 @@ class StartupSyncService @Inject constructor(
             )
             if (!isTraktConnected) {
                 pullWatchedItemsDelta(profileId, traktMode = false)
-                pullWatchProgressFromRemote(
+                syncWatchProgressDelta(
                     profileId = profileId,
-                    sinceLastWatched = null,
                     pushUnsynced = true,
-                    failureMessage = "Failed to pull watch progress, continuing"
+                    failureMessage = "Failed to sync watch progress, continuing"
                 )
             } else if (shouldUseSupabaseWatchProgressSync) {
                 libraryRepository.hasCompletedInitialPull = true
                 pullWatchedItemsDelta(profileId, traktMode = true)
-                pullWatchProgressFromRemote(
+                syncWatchProgressDelta(
                     profileId = profileId,
-                    sinceLastWatched = null,
                     pushUnsynced = false,
-                    failureMessage = "Failed to pull watch progress while Trakt is connected, continuing"
+                    failureMessage = "Failed to sync watch progress while Trakt is connected, continuing"
                 )
             } else {
                 libraryRepository.hasCompletedInitialPull = true
@@ -311,8 +307,7 @@ class StartupSyncService @Inject constructor(
     private suspend fun pullWarmRemoteData(
         profileId: Int,
         userId: String,
-        includeProfileSettings: Boolean,
-        lastWatchProgressWatermarkMs: Long
+        includeProfileSettings: Boolean
     ): Result<Unit> {
         try {
             Log.d(TAG, "Running warm remote sync for profile $profileId")
@@ -327,26 +322,18 @@ class StartupSyncService @Inject constructor(
             )
             if (!isTraktConnected) {
                 pullWatchedItemsDelta(profileId, traktMode = false)
-                val sinceLastWatched = lastWatchProgressWatermarkMs
-                    .takeIf { it > 0L }
-                    ?.let { (it - WATCH_PROGRESS_PULL_OVERLAP_MS).coerceAtLeast(0L) }
-                pullWatchProgressFromRemote(
+                syncWatchProgressDelta(
                     profileId = profileId,
-                    sinceLastWatched = sinceLastWatched,
                     pushUnsynced = !isTraktConnected,
-                    failureMessage = "Failed to pull warm watch progress, continuing"
+                    failureMessage = "Failed to sync warm watch progress, continuing"
                 )
             } else if (shouldUseSupabaseWatchProgressSync) {
                 libraryRepository.hasCompletedInitialPull = true
                 pullWatchedItemsDelta(profileId, traktMode = true)
-                val sinceLastWatched = lastWatchProgressWatermarkMs
-                    .takeIf { it > 0L }
-                    ?.let { (it - WATCH_PROGRESS_PULL_OVERLAP_MS).coerceAtLeast(0L) }
-                pullWatchProgressFromRemote(
+                syncWatchProgressDelta(
                     profileId = profileId,
-                    sinceLastWatched = sinceLastWatched,
                     pushUnsynced = false,
-                    failureMessage = "Failed to pull warm watch progress while Trakt is connected, continuing"
+                    failureMessage = "Failed to sync warm watch progress while Trakt is connected, continuing"
                 )
             } else {
                 watchProgressRepository.hasCompletedInitialPull = true
@@ -516,35 +503,20 @@ class StartupSyncService @Inject constructor(
         }
     }
 
-    private suspend fun pullWatchProgressFromRemote(
+    private suspend fun syncWatchProgressDelta(
         profileId: Int,
-        sinceLastWatched: Long?,
         pushUnsynced: Boolean,
         failureMessage: String
     ): Result<Unit> {
         watchProgressRepository.isSyncingFromRemote = true
         try {
-            val remoteEntries = watchProgressSyncService.pullFromRemote(
-                profileId = profileId,
-                sinceLastWatched = sinceLastWatched
-            ).getOrElse { throw it }
-            Log.d(TAG, "Pulled ${remoteEntries.size} watch progress entries from remote")
-            if (remoteEntries.isEmpty() && sinceLastWatched != null) {
-                watchProgressRepository.hasCompletedInitialPull = true
-                Log.d(TAG, "No incremental watch progress updates for profile $profileId")
-                return Result.success(Unit)
-            }
-            val hadUnsyncedProgress = watchProgressPreferences.mergeRemoteEntries(
-                remoteEntries.toMap(),
-                lastSuccessfulPushMs = watchProgressSyncService.lastSuccessfulPushMs,
-                profileId = profileId,
-                removeMissingRemoteEntries = sinceLastWatched == null
-            )
-            val maxLastWatched = remoteEntries.maxOfOrNull { it.second.lastWatched } ?: 0L
-            startupSyncPreferences.setWatchProgressWatermark(profileId, maxLastWatched)
+            val syncResult = watchProgressSyncService.syncDeltaFromRemote(profileId).getOrElse { throw it }
             watchProgressRepository.hasCompletedInitialPull = true
-            Log.d(TAG, "Merged local watch progress with ${remoteEntries.size} remote entries")
-            if (pushUnsynced && hadUnsyncedProgress) {
+            Log.d(
+                TAG,
+                "Watch progress sync applied ${syncResult.upsertedEntries} upserts and ${syncResult.deletedEntries} deletes (snapshot=${syncResult.usedSnapshot})"
+            )
+            if (pushUnsynced && syncResult.preservedLocalItems) {
                 Log.d(TAG, "Detected unsynced watch progress, pushing to remote")
                 watchProgressSyncService.pushToRemote(profileId)
             }

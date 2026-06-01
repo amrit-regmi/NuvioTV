@@ -95,6 +95,21 @@ data class SupabaseWatchProgress(
 )
 
 @Serializable
+data class SupabaseWatchProgressEvent(
+    @SerialName("event_id") val eventId: Long,
+    val operation: String,
+    @SerialName("progress_key") val progressKey: String,
+    @SerialName("content_id") val contentId: String,
+    @SerialName("content_type") val contentType: String,
+    @SerialName("video_id") val videoId: String = "",
+    val season: Int? = null,
+    val episode: Int? = null,
+    val position: Long,
+    val duration: Long,
+    @SerialName("last_watched") val lastWatched: Long
+)
+
+@Serializable
 data class SupabaseLibraryItem(
     val id: String? = null,
     @SerialName("user_id") val userId: String? = null,
