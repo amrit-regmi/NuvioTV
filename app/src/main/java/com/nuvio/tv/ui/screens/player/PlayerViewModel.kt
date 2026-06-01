@@ -29,6 +29,7 @@ import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -62,6 +63,7 @@ class PlayerViewModel @Inject constructor(
     private val directDebridResolver: DirectDebridResolver,
     private val directDebridStreamPreparer: DirectDebridStreamPreparer,
     private val externalPlaybackTracker: com.nuvio.tv.core.player.ExternalPlaybackTracker,
+    private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -214,14 +216,19 @@ class PlayerViewModel @Inject constructor(
             } else null
         } else null
 
-        externalPlaybackTracker.launchPlayer(
-            metadata = metadata,
-            url = url,
-            title = controller.contentName ?: controller.title,
-            headers = controller.getCurrentHeaders(),
-            resumePositionMs = resumePositionMs,
-            subtitles = subtitleInputs,
-            context = activityContext
-        )
+        // Cache subtitle files locally and launch player in background
+        viewModelScope.launch {
+            val cachedSubtitles = subtitleInputs?.let { subtitleFileCache.cacheSubtitles(it) }
+
+            externalPlaybackTracker.launchPlayer(
+                metadata = metadata,
+                url = url,
+                title = metadata.buildPlayerTitle(),
+                headers = controller.getCurrentHeaders(),
+                resumePositionMs = resumePositionMs,
+                subtitles = cachedSubtitles,
+                context = activityContext
+            )
+        }
     }
 }
