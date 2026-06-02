@@ -72,7 +72,13 @@ internal class DolbyVisionMatroskaTransformer(
         dolbyVisionConfigBytes: ByteArray?
     ): ByteArray? {
         val sample = sampleLengthDelimitedData ?: return null
-        if (stripRpuOnly) return null
+        if (stripRpuOnly) {
+            val stripped = HevcDvRpuStripper.stripRpuLengthDelimited(
+                sample, sampleLength, nalUnitLengthFieldLength
+            ) ?: return null
+            lastTransformedLength = stripped.size
+            return stripped
+        }
         val profile = resolveProfile(null, dolbyVisionConfigBytes)
         if (!config.shouldConvert(profile)) return null
         // DV5 signal-only unless a mode is forced in Advanced; keep the profile-5 RPU.
@@ -110,7 +116,7 @@ internal class DolbyVisionMatroskaTransformer(
         dolbyVisionConfigBytes: ByteArray?
     ): String? {
         if (stripRpuOnly) {
-            return normalizeDolbyVisionCodecString(codecs)
+            return downgradeDolbyVisionCodecStringToHevc(codecs)
         }
         val profile = resolveProfile(codecs, dolbyVisionConfigBytes)
         if (!config.shouldConvert(profile)) return null
@@ -211,6 +217,18 @@ internal class DolbyVisionMatroskaTransformer(
         val width = parts[1].length.coerceAtLeast(2)
         parts[1] = "8".padStart(width, '0')
         return parts.joinToString(".")
+    }
+
+    private fun downgradeDolbyVisionCodecStringToHevc(codecs: String?): String? {
+        val raw = codecs?.trim().orEmpty()
+        if (raw.isEmpty()) return null
+        val parts = raw.split('.').toMutableList()
+        if (parts.size < 2) return null
+        return when (parts[0].lowercase()) {
+            "dvhe" -> { parts[0] = "hvc1"; parts.joinToString(".") }
+            "dvh1" -> { parts[0] = "hev1"; parts.joinToString(".") }
+            else -> null
+        }
     }
 
     private fun resolveProfile(codecs: String?, configBytes: ByteArray?): Int? {

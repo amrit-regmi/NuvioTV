@@ -545,6 +545,14 @@ internal fun PlayerRuntimeController.initializePlayer(
                         )
                     )
                 }
+                if (playerSettings.stripDvFromHdr10PlusFiles &&
+                    effectiveDv7Mode != Dv7HandlingMode.DV81_LIBDOVI) {
+                    setParameters(
+                        buildUponParameters()
+                            .setTunnelingEnabled(false)
+                            .setConstrainAudioChannelCountToDeviceCapabilities(true)
+                    )
+                }
             }
 
             // ── Extractors & DV Hook ──
@@ -624,8 +632,7 @@ internal fun PlayerRuntimeController.initializePlayer(
             // The app-level factory performs DV7 conversion for the in-band-RPU containers
             // (MP4/fMP4/TS); MKV goes through the vendored extractor. Pass-through for non-DV.
             val stripDvRpuEnabled = playerSettings.stripDvFromHdr10PlusFiles &&
-                    (isExperimentalDv7ToDv81ActiveForCurrentPlayback ||
-                            effectiveDv7Mode == Dv7HandlingMode.OFF)
+                    effectiveDv7Mode != Dv7HandlingMode.DV81_LIBDOVI
             if (stripDvRpuEnabled) {
                 Log.i(PlayerRuntimeController.TAG, "DV_RPU_STRIP: enabled — will remove DV RPU NALs to fix Fire TV DOVIWithHDR10Plus black screen host=${url.safeHost()}")
             }
@@ -662,7 +669,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                 // conversion never runs. (The libass path wires it via buildWithAssSupportCompat.)
                 mediaSourceFactory.configureSubtitleParsing(
                     extractorsFactory =
-                        if (isExperimentalDv7ToDv81ActiveForCurrentPlayback) effectiveExtractorsFactory else null,
+                        if (isExperimentalDv7ToDv81ActiveForCurrentPlayback || stripDvRpuEnabled) effectiveExtractorsFactory else null,
                     subtitleParserFactory = null
                 )
                 val playerDataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(context, headers)

@@ -18,6 +18,7 @@ import java.io.ByteArrayOutputStream
 internal object HevcDvRpuStripper {
 
     private const val NAL_TYPE_DV_RPU = 62
+    private const val NAL_TYPE_DV_EL = 63
 
     /**
      * Rewrites a length-delimited (MP4/fMP4) sample, removing any NAL unit
@@ -41,7 +42,7 @@ internal object HevcDvRpuStripper {
             val nalStart = pos + nalLengthFieldLength
             if (nalSize <= 0 || nalStart + nalSize > sampleLen) return null
             val nalType = (sample[nalStart].toInt() ushr 1) and 0x3F
-            if (nalType == NAL_TYPE_DV_RPU) {
+            if (nalType == NAL_TYPE_DV_RPU || nalType == NAL_TYPE_DV_EL) {
                 // Drop this NAL entirely — don't write start code or payload
                 changed = true
             } else {
@@ -80,7 +81,7 @@ internal object HevcDvRpuStripper {
 
             if (nalBegin < nalEnd) {
                 val nalType = (sample[nalBegin].toInt() ushr 1) and 0x3F
-                if (nalType == NAL_TYPE_DV_RPU) {
+                if (nalType == NAL_TYPE_DV_RPU || nalType == NAL_TYPE_DV_EL) {
                     changed = true
                     // Drop start code + NAL payload entirely
                 } else {
