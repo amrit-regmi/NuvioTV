@@ -283,7 +283,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
                 enabled = enabled
             )
         }
-        item(key = "strip_dv_from_hdr10plus") {
+        item(key = "strip_dv_from_hdr10") {
             ToggleSettingsItem(
                 icon = Icons.Default.Tune,
                 title = stringResource(R.string.strip_dv_hdr10_title),

@@ -634,7 +634,7 @@ internal fun PlayerRuntimeController.initializePlayer(
             val stripDvRpuEnabled = playerSettings.stripDvFromHdr10Files &&
                     effectiveDv7Mode != Dv7HandlingMode.DV81_LIBDOVI
             if (stripDvRpuEnabled) {
-                Log.i(PlayerRuntimeController.TAG, "DV_RPU_STRIP: enabled — will remove DV RPU NALs to fix Fire TV DOVIWithHDR10Plus black screen host=${url.safeHost()}")
+                Log.i(PlayerRuntimeController.TAG, "DV_RPU_STRIP: enabled — will remove DV RPU NALs")
             }
 
             val effectiveExtractorsFactory: ExtractorsFactory =
@@ -653,7 +653,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                             dv5Enabled = playerSettings.dv5ToDv81Enabled,
                             manualDv81 = manualDv81Selected && !dv7Mode1Forced
                         ),
-                        stripDvRpu = stripDvRpuEnabled   // ADD THIS
+                        stripDvRpu = stripDvRpuEnabled
                     )
                 } else {
                     extractorsFactory

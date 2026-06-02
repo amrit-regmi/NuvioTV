@@ -476,7 +476,7 @@ class PlayerSettingsDataStore @Inject constructor(
     // Legacy "DV7 - HEVC" boolean, read only to migrate existing users to HDR10_BASE_LAYER.
     private val legacyMapDv7ToHevcKey = booleanPreferencesKey("map_dv7_to_hevc")
     private val dv7LibdoviModeOverrideKey = intPreferencesKey("dv7_libdovi_mode_override")
-    private val stripDvFromHdr10FilesKey = booleanPreferencesKey("strip_dv_from_hdr10plus_files")
+    private val stripDvFromHdr10FilesKey = booleanPreferencesKey("strip_dv_from_hdr10_files")
     private val mpvHardwareDecodeModeKey = stringPreferencesKey("mpv_hardware_decode_mode")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
     private val frameRateMatchingModeKey = stringPreferencesKey("frame_rate_matching_mode")

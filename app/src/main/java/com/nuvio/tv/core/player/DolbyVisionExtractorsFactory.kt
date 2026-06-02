@@ -65,7 +65,7 @@ internal class DolbyVisionExtractorsFactory(
                 DolbyVisionMatroskaTransformer(
                     config = if (config.active) config else DolbyVisionConversionConfig(active = false),
                     stripRpuOnly = stripDvRpu && !config.active,
-                    stripHdr10Plus = stripDvRpu && config.active   // strip HDR10+ when conversion is also active
+                    stripHdr10 = stripDvRpu && config.active
                 )
             )
         }
@@ -213,7 +213,7 @@ private class DolbyVisionExtractorOutput(
         val track = delegate.track(id, type)
         return if (type == C.TRACK_TYPE_VIDEO) {
             when {
-                stripDvRpu -> Hdr10PlusStrippingTrackOutput(track, config, nalFormat)
+                stripDvRpu -> Hdr10StrippingTrackOutput(track, config, nalFormat)
                 else -> DolbyVisionTrackOutput(track, config, nalFormat)
             }
         } else {
@@ -557,17 +557,8 @@ private class DolbyVisionTrackOutput(
     }
 }
 
-/**
- * Strips BOTH Dolby Vision RPU NAL units (type 62) AND HDR10+ SEI messages
- * from HEVC video samples, producing a clean HDR10 base-layer stream.
- *
- * This matches Kodi PR #24584's approach: physically remove both metadata types
- * from the bitstream before MediaCodec sees it. Fire TV reads NAL type 62 bytes
- * directly from the bitstream regardless of codec MIME type, so codec string
- * rewrites alone are insufficient. Both must be stripped.
- */
 @UnstableApi
-internal class Hdr10PlusStrippingTrackOutput(
+internal class Hdr10StrippingTrackOutput(
     private val delegate: TrackOutput,
     private val config: DolbyVisionConversionConfig,
     private val nalFormat: NalFormat
@@ -661,8 +652,6 @@ internal class Hdr10PlusStrippingTrackOutput(
         val carrySize = offset.coerceIn(0, pendingLen)
         val sampleEnd = pendingLen - carrySize
 
-        // Step 1: strip DV RPU NAL units (type 62) — Fire TV reads these directly
-        // from the bitstream regardless of MIME type, triggering the black screen
         val afterRpuStrip = when (nalFormat) {
             NalFormat.LENGTH_DELIMITED ->
                 HevcDvRpuStripper.stripRpuLengthDelimited(pendingBuf, sampleEnd, nalLengthFieldLength)
@@ -672,12 +661,11 @@ internal class Hdr10PlusStrippingTrackOutput(
         val afterRpuData = afterRpuStrip ?: pendingBuf
         val afterRpuLen = afterRpuStrip?.size ?: sampleEnd
 
-        // Step 2: strip HDR10+ SEI messages from the RPU-stripped data
         val afterHdr10Strip = when (nalFormat) {
             NalFormat.LENGTH_DELIMITED ->
-                HevcHdr10PlusStripper.stripHdr10PlusLengthDelimited(afterRpuData, afterRpuLen, nalLengthFieldLength)
+                HevcHdr10Stripper.stripHdr10LengthDelimited(afterRpuData, afterRpuLen, nalLengthFieldLength)
             NalFormat.ANNEX_B ->
-                HevcHdr10PlusStripper.stripHdr10PlusAnnexB(afterRpuData, afterRpuLen)
+                HevcHdr10Stripper.stripHdr10AnnexB(afterRpuData, afterRpuLen)
         }
         val outputData = afterHdr10Strip ?: afterRpuData
         val outputLen = afterHdr10Strip?.size ?: afterRpuLen

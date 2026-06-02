@@ -29,7 +29,7 @@ import java.io.ByteArrayOutputStream
 internal class DolbyVisionMatroskaTransformer(
     private val config: DolbyVisionConversionConfig,
     private val stripRpuOnly: Boolean = false,
-    private val stripHdr10Plus: Boolean = false
+    private val stripHdr10: Boolean = false
 ) : MatroskaExtractor.DolbyVisionSampleTransformer {
 
     private var lastTransformedLength = 0
@@ -48,7 +48,7 @@ internal class DolbyVisionMatroskaTransformer(
     ): ByteArray? {
         if (blockAdditionalData == null) return null
         if (stripRpuOnly) return ByteArray(0)
-        if (stripHdr10Plus) return ByteArray(0)
+        if (stripHdr10) return ByteArray(0)
         val profile = resolveProfile(null, dolbyVisionConfigBytes)
         if (!config.shouldConvert(profile)) return null
         return convertRpuNal(blockAdditionalData, config.conversionMode(profile))
@@ -102,8 +102,8 @@ internal class DolbyVisionMatroskaTransformer(
         } else {
             null
         }
-        return if (converted != null && stripHdr10Plus) {
-            HevcHdr10PlusStripper.stripHdr10PlusLengthDelimited(converted, lastTransformedLength, nalUnitLengthFieldLength)
+        return if (converted != null && stripHdr10) {
+            HevcHdr10Stripper.stripHdr10LengthDelimited(converted, lastTransformedLength, nalUnitLengthFieldLength)
                 ?: converted
         } else {
             converted

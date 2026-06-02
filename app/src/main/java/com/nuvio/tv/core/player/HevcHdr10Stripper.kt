@@ -2,11 +2,8 @@ package com.nuvio.tv.core.player
 
 import androidx.media3.common.util.UnstableApi
 
-/**
- * Strips HDR10+ (SMPTE ST 2094-40) SEI messages from an HEVC bitstream on-the-fly.
- */
 @UnstableApi
-internal object HevcHdr10PlusStripper {
+internal object HevcHdr10Stripper {
 
     // HEVC SEI NAL types
     private const val NAL_TYPE_PREFIX_SEI = 39
@@ -15,21 +12,13 @@ internal object HevcHdr10PlusStripper {
     // SEI payload type for user_data_registered_itu_t_t35
     private const val SEI_TYPE_USER_DATA_REGISTERED = 4
 
-    // HDR10+ identification bytes inside the SEI payload:
-    //   itu_t_t35_country_code      = 0xB5  (USA)
-    //   itu_t_t35_provider_code     = 0x003C
-    //   itu_t_t35_user_identifier   = 0x0001 (HDR10+)
-    private const val HDR10PLUS_COUNTRY_CODE = 0xB5
-    private const val HDR10PLUS_PROVIDER_CODE_HI = 0x00
-    private const val HDR10PLUS_PROVIDER_CODE_LO = 0x3C
-    private const val HDR10PLUS_USER_ID_HI = 0x00
-    private const val HDR10PLUS_USER_ID_LO = 0x01
+    private const val HDR10_COUNTRY_CODE = 0xB5
+    private const val HDR10_PROVIDER_CODE_HI = 0x00
+    private const val HDR10_PROVIDER_CODE_LO = 0x3C
+    private const val HDR10_USER_ID_HI = 0x00
+    private const val HDR10_USER_ID_LO = 0x01
 
-    /**
-     * Strips HDR10+ SEI messages from a length-delimited (MP4/fMP4) sample.
-     * Returns a new byte array with HDR10+ SEIs removed, or null if nothing changed.
-     */
-    fun stripHdr10PlusLengthDelimited(
+    fun stripHdr10LengthDelimited(
         sample: ByteArray,
         sampleLen: Int,
         nalLengthFieldLength: Int
@@ -77,11 +66,7 @@ internal object HevcHdr10PlusStripper {
         return if (changed) out.toByteArray() else null
     }
 
-    /**
-     * Strips HDR10+ SEI messages from an Annex-B (TS) sample.
-     * Returns a new byte array with HDR10+ SEIs removed, or null if nothing changed.
-     */
-    fun stripHdr10PlusAnnexB(sample: ByteArray, sampleLen: Int): ByteArray? {
+    fun stripHdr10AnnexB(sample: ByteArray, sampleLen: Int): ByteArray? {
         val out = java.io.ByteArrayOutputStream(sampleLen)
         var scan = 0
         var changed = false
@@ -122,14 +107,6 @@ internal object HevcHdr10PlusStripper {
         return if (changed) out.toByteArray() else null
     }
 
-    /**
-     * Rewrites a single SEI NAL unit, removing any HDR10+ messages.
-     * Returns null if no HDR10+ messages were found (NAL unchanged).
-     * Returns an empty array if all messages were HDR10+ (entire NAL should be dropped).
-     * Returns a new byte array with HDR10+ messages removed if some remain.
-     *
-     * NAL header is 2 bytes for HEVC; SEI messages follow immediately.
-     */
     private fun rewriteSeiNal(data: ByteArray, nalOffset: Int, nalSize: Int): ByteArray? {
         if (nalSize < 2) return null
         val out = java.io.ByteArrayOutputStream(nalSize)
@@ -166,7 +143,7 @@ internal object HevcHdr10PlusStripper {
             val payloadStart = pos
             if (payloadStart + payloadSize > nalEnd) break
 
-            if (payloadType == SEI_TYPE_USER_DATA_REGISTERED && isHdr10PlusPayload(data, payloadStart, payloadSize)) {
+            if (payloadType == SEI_TYPE_USER_DATA_REGISTERED && isHdr10Payload(data, payloadStart, payloadSize)) {
                 // Drop this SEI message entirely
                 changed = true
             } else {
@@ -188,16 +165,16 @@ internal object HevcHdr10PlusStripper {
      * Checks country code (0xB5), provider code (0x003C), user identifier (0x0001).
      * Minimum payload size is 5 bytes: 1 country + 2 provider + 2 user_id.
      */
-    private fun isHdr10PlusPayload(data: ByteArray, offset: Int, size: Int): Boolean {
+    private fun isHdr10Payload(data: ByteArray, offset: Int, size: Int): Boolean {
         if (size < 5) return false
         val countryCode = data[offset].toInt() and 0xFF
-        if (countryCode != HDR10PLUS_COUNTRY_CODE) return false
+        if (countryCode != HDR10_COUNTRY_CODE) return false
         val providerHi = data[offset + 1].toInt() and 0xFF
         val providerLo = data[offset + 2].toInt() and 0xFF
-        if (providerHi != HDR10PLUS_PROVIDER_CODE_HI || providerLo != HDR10PLUS_PROVIDER_CODE_LO) return false
+        if (providerHi != HDR10_PROVIDER_CODE_HI || providerLo != HDR10_PROVIDER_CODE_LO) return false
         val userIdHi = data[offset + 3].toInt() and 0xFF
         val userIdLo = data[offset + 4].toInt() and 0xFF
-        return userIdHi == HDR10PLUS_USER_ID_HI && userIdLo == HDR10PLUS_USER_ID_LO
+        return userIdHi == HDR10_USER_ID_HI && userIdLo == HDR10_USER_ID_LO
     }
 
     private fun writeVariableLengthValue(out: java.io.ByteArrayOutputStream, value: Int) {

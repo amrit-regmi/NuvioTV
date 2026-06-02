@@ -6,13 +6,6 @@ import java.io.ByteArrayOutputStream
 /**
  * Strips Dolby Vision RPU NAL units (HEVC NAL type 62) from an HEVC bitstream
  * on-the-fly, leaving the HDR10/HDR10+ base layer intact.
- *
- * This fixes the black-screen bug on Fire TV devices where MediaCodec cannot
- * handle a stream that carries both DV RPU metadata AND HDR10+ SEI simultaneously
- * (DOVIWithHDR10Plus range type). Stripping the RPU NALs causes the decoder to
- * fall back to the clean HDR10+ stream.
- *
- * Works for both length-delimited (MP4/fMP4) and Annex-B (TS/MKV) framing.
  */
 @UnstableApi
 internal object HevcDvRpuStripper {
