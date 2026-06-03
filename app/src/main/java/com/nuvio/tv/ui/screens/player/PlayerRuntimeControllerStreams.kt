@@ -487,7 +487,7 @@ private fun PlayerRuntimeController.persistTorrentStreamForReuse(stream: Stream)
     if (!streamReuseLastLinkEnabled) return
 
     val key = streamCacheKey ?: return
-    val infoHash = stream.infoHash ?: return
+    val infoHash = stream.getEffectiveInfoHash() ?: return
     val streamName = (stream.name?.takeIf { it.isNotBlank() } ?: stream.addonName)?.takeIf { it.isNotBlank() }
         ?: title
 
@@ -501,7 +501,7 @@ private fun PlayerRuntimeController.persistTorrentStreamForReuse(stream: Stream)
             videoHash = stream.behaviorHints?.videoHash,
             videoSize = stream.behaviorHints?.videoSize,
             infoHash = infoHash,
-            fileIdx = stream.fileIdx,
+            fileIdx = stream.getEffectiveFileIdx(),
             sources = stream.sources,
             bingeGroup = stream.behaviorHints?.bingeGroup,
             contentLanguage = contentLanguage,
@@ -743,7 +743,7 @@ internal fun PlayerRuntimeController.selectEpisodesSeason(season: Int) {
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun PlayerRuntimeController.switchToTorrentSourceStream(stream: Stream) {
-    val infoHash = stream.infoHash ?: return
+    val infoHash = stream.getEffectiveInfoHash() ?: return
     sourceStreamsScope?.cancel()
     sourceStreamsScope = null
     sourceStreamsJob = null
@@ -788,7 +788,7 @@ private fun PlayerRuntimeController.switchToTorrentEpisodeStream(
     forcedTargetVideo: Video?,
     isAutoPlay: Boolean
 ) {
-    val infoHash = stream.infoHash ?: return
+    val infoHash = stream.getEffectiveInfoHash() ?: return
     consecutiveAutoPlayCount = nextConsecutiveAutoPlayCount(
         currentCount = consecutiveAutoPlayCount,
         isAutoPlay = isAutoPlay
