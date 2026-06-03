@@ -288,10 +288,13 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
                 icon = Icons.Default.Tune,
                 title = stringResource(R.string.strip_dv_hdr10_title),
                 subtitle = stringResource(R.string.strip_dv_hdr10_sub),
-                isChecked = playerSettings.stripDvFromHdr10Files,
+                // Only active when handling mode is OFF — strip is meaningless
+                // alongside AUTO, HDR10_BASE_LAYER or DV81 conversion.
+                isChecked = playerSettings.stripDvFromHdr10Files &&
+                        playerSettings.dv7HandlingMode == Dv7HandlingMode.OFF,
                 onCheckedChange = onSetStripDvFromHdr10Files,
                 onFocused = onItemFocused,
-                enabled = enabled
+                enabled = enabled && playerSettings.dv7HandlingMode == Dv7HandlingMode.OFF
             )
         }
         item(key = "audio_dv7_preserve_mapping") {
