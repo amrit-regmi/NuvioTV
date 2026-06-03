@@ -95,12 +95,16 @@ internal class DolbyVisionMatroskaTransformer(
         // `blockAdditionalData` is the pending value produced by onDolbyVisionBlockAdditionalData
         // (already an 8.1 RPU). Re-running conversion is a no-op (libdovi returns null for non-DV7
         // input), so we fall back to the already-converted bytes.
-        val converted = if (appendLengthDelimitedNalToScratch(blockAdditionalData, nalUnitLengthFieldLength)) {
+        val convertedBlockAdditional = convertRpuNal(blockAdditionalData, mode) ?: blockAdditionalData
+        if (!baseChanged) {
+            scratch.reset()
+            scratch.write(sample, 0, sampleLength)
+        }
+        return if (appendLengthDelimitedNalToScratch(convertedBlockAdditional, nalUnitLengthFieldLength)) {
             finishScratch()
         } else {
             null
         }
-        return converted
     }
 
     private fun finishScratch(): ByteArray {
