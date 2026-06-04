@@ -5,14 +5,19 @@ import com.nuvio.tv.data.remote.api.TorboxApi
 import com.nuvio.tv.data.remote.dto.TorboxCreateTorrentDataDto
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamClientResolve
+import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Response
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val TORBOX_RESOLVER_TAG = "TorboxDebridResolver"
+private const val RATE_LIMIT_COOLDOWN_MS = 60_000L
 
 @Singleton
 class TorboxDirectDebridResolver @Inject constructor(
@@ -20,11 +25,21 @@ class TorboxDirectDebridResolver @Inject constructor(
     private val api: TorboxApi,
     private val fileSelector: TorboxFileSelector
 ) {
+    private val rateLimitedUntilMs = AtomicLong(0L)
+
+    private fun isRateLimited(): Boolean = System.currentTimeMillis() < rateLimitedUntilMs.get()
+
+    private fun triggerCooldown() {
+        rateLimitedUntilMs.set(System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS)
+        Log.w(TORBOX_RESOLVER_TAG, "TorBox API returned 429 — backing off for ${RATE_LIMIT_COOLDOWN_MS / 1000}s")
+    }
+
     suspend fun resolve(
         stream: Stream,
         season: Int?,
         episode: Int?
     ): DirectDebridResolveResult {
+        if (isRateLimited()) return DirectDebridResolveResult.RateLimited
         val resolve = stream.clientResolve ?: return DirectDebridResolveResult.Error
         val apiKey = dataStore.settings.first().torboxApiKey.trim()
         if (apiKey.isBlank()) return DirectDebridResolveResult.MissingApiKey
@@ -47,6 +62,7 @@ class TorboxDirectDebridResolver @Inject constructor(
                 id = torrentId,
                 bypassCache = true
             )
+            if (torrent.code() == 429) { triggerCooldown(); return DirectDebridResolveResult.RateLimited }
             if (!torrent.isSuccessful) return DirectDebridResolveResult.Stale
             val files = torrent.body()?.data?.files.orEmpty()
             val file = fileSelector.selectFile(files, resolve, season, episode)
@@ -62,6 +78,7 @@ class TorboxDirectDebridResolver @Inject constructor(
                 redirect = false,
                 appendName = false
             )
+            if (link.code() == 429) { triggerCooldown(); return DirectDebridResolveResult.RateLimited }
             if (!link.isSuccessful) return DirectDebridResolveResult.Stale
             val url = link.body()?.data?.takeIf { it.isNotBlank() }
                 ?: return DirectDebridResolveResult.Stale
@@ -88,7 +105,14 @@ class TorboxDirectDebridResolver @Inject constructor(
         return when (code()) {
             401, 403 -> DirectDebridResolveResult.Error
             409 -> DirectDebridResolveResult.NotCached
-            else -> DirectDebridResolveResult.Stale
+            429 -> {
+                triggerCooldown()
+                DirectDebridResolveResult.RateLimited
+            }
+            else -> {
+                Log.d(TORBOX_RESOLVER_TAG, "createTorrent failed with HTTP ${code()}")
+                DirectDebridResolveResult.Stale
+            }
         }
     }
 
@@ -120,6 +144,7 @@ sealed class DirectDebridResolveResult {
 
     data object MissingApiKey : DirectDebridResolveResult()
     data object NotCached : DirectDebridResolveResult()
+    data object RateLimited : DirectDebridResolveResult()
     data object Stale : DirectDebridResolveResult()
     data object Error : DirectDebridResolveResult()
 }

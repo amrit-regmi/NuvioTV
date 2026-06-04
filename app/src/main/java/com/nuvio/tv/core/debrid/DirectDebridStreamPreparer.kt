@@ -63,6 +63,10 @@ class DirectDebridStreamPreparer @Inject constructor(
                             onPrepared(stream, result.stream)
                         }
                     }
+                    DirectDebridPlayableResult.RateLimited -> {
+                        Log.w(DIRECT_DEBRID_PREPARER_TAG, "TorBox rate-limited — stopping background preparation")
+                        return
+                    }
                     else -> Unit
                 }
             } catch (error: CancellationException) {

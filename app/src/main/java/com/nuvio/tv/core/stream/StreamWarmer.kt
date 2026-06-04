@@ -35,7 +35,9 @@ private const val TAG = "StreamWarmer"
 private const val MAX_CACHE_SIZE = 50
 private const val CACHE_TTL_MS = 15 * 60 * 1000L
 private const val PROBE_TIMEOUT_MS = 2_000L
-private const val DEFAULT_PROBE_COUNT = 10
+// Background warms probe fewer streams to limit CDN burst on startup.
+// User-initiated stream loading still uses the full streamMaxResults setting.
+private const val BACKGROUND_PROBE_COUNT = 3
 // Stub/error videos served by Comet and similar proxies for uncached content are tiny (< 1 MB).
 // Real video files are always larger. Any Content-Range total below this threshold is a stub.
 private const val MIN_REAL_VIDEO_BYTES = 1L * 1024 * 1024
@@ -189,7 +191,7 @@ class StreamWarmer @Inject constructor(
     ): List<Stream>? {
         if (streams.isEmpty()) return streams
         val settings = debridSettingsDataStore.settings.first()
-        val maxProbe = if (settings.streamMaxResults > 0) settings.streamMaxResults else DEFAULT_PROBE_COUNT
+        val maxProbe = if (settings.streamMaxResults > 0) minOf(settings.streamMaxResults, BACKGROUND_PROBE_COUNT) else BACKGROUND_PROBE_COUNT
         val startMs = System.currentTimeMillis()
 
         // Start frame rate detection concurrently with probing — all versions of the same

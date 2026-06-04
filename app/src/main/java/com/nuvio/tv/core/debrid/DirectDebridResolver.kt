@@ -111,6 +111,7 @@ class DirectDebridResolver @Inject constructor(
             is DirectDebridResolveResult.Success -> DirectDebridPlayableResult.Success(stream.withResolvedDebridUrl(result))
             DirectDebridResolveResult.MissingApiKey -> DirectDebridPlayableResult.MissingApiKey
             DirectDebridResolveResult.NotCached -> DirectDebridPlayableResult.NotCached
+            DirectDebridResolveResult.RateLimited -> DirectDebridPlayableResult.RateLimited
             DirectDebridResolveResult.Stale -> DirectDebridPlayableResult.Stale
             DirectDebridResolveResult.Error -> DirectDebridPlayableResult.Error
         }
@@ -268,6 +269,7 @@ sealed class DirectDebridPlayableResult {
     data class Success(val stream: Stream) : DirectDebridPlayableResult()
     data object MissingApiKey : DirectDebridPlayableResult()
     data object NotCached : DirectDebridPlayableResult()
+    data object RateLimited : DirectDebridPlayableResult()
     data object Stale : DirectDebridPlayableResult()
     data object Error : DirectDebridPlayableResult()
 }

@@ -1360,6 +1360,7 @@ internal suspend fun PlayerRuntimeController.resolveDirectDebridStreamIfNeeded(
         is DirectDebridPlayableResult.Success -> result.stream
         DirectDebridPlayableResult.MissingApiKey,
         DirectDebridPlayableResult.NotCached,
+        DirectDebridPlayableResult.RateLimited,
         DirectDebridPlayableResult.Stale,
         DirectDebridPlayableResult.Error -> null
     }
