@@ -163,6 +163,17 @@ object DebridFormatterWebPage {
   #descriptionTemplate {
     min-height: 280px;
   }
+  .subcopy {
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 0.875rem;
+    font-weight: 300;
+    margin: -0.35rem 0 1.5rem;
+  }
+  .mini-btn {
+    flex: 0 0 auto;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.78rem;
+  }
   .grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -246,6 +257,7 @@ object DebridFormatterWebPage {
     .header-logo { height: 32px; }
     .grid { grid-template-columns: 1fr; }
     .actions { flex-direction: column; }
+    .tabs { grid-template-columns: 1fr; }
     .tab { padding: 0.75rem 0.6rem; }
   }
 </style>
@@ -274,6 +286,7 @@ object DebridFormatterWebPage {
       <span class="chip">{stream.quality}</span>
       <span class="chip">{stream.visualTags::join(' | ')}</span>
       <span class="chip">{stream.audioTags::join(' | ')}</span>
+      <span class="chip">{stream.rseMatched::join(' | ')}</span>
       <span class="chip">{stream.size::bytes}</span>
       <span class="chip">{service.cached::istrue["Ready"||"Not Ready"]}</span>
     </div>
@@ -315,11 +328,12 @@ object DebridFormatterWebPage {
       <div class="field">
         <label for="sortPreset">Sort</label>
         <select id="sortPreset">
-          <option value="default">Default</option>
-          <option value="largest">Largest First</option>
-          <option value="smallest">Smallest First</option>
-          <option value="audio">Best Audio First</option>
-          <option value="language">Language First</option>
+          <option value="original">Original order</option>
+          <option value="bestQuality">Best quality first</option>
+          <option value="largest">Largest first</option>
+          <option value="smallest">Smallest first</option>
+          <option value="audio">Best audio first</option>
+          <option value="language">Language first</option>
         </select>
       </div>
     </div>
@@ -390,19 +404,22 @@ const groups = [
   ['excludedLanguages','Excluded Languages','languages']
 ];
 function sortCriteriaForPreset(value){
+  if(value==='bestQuality')return[{key:'RESOLUTION',direction:'DESC'},{key:'QUALITY',direction:'DESC'},{key:'VISUAL_TAG',direction:'DESC'},{key:'AUDIO_TAG',direction:'DESC'},{key:'AUDIO_CHANNEL',direction:'DESC'},{key:'ENCODE',direction:'DESC'},{key:'SIZE',direction:'DESC'}];
   if(value==='largest')return[{key:'SIZE',direction:'DESC'}];
   if(value==='smallest')return[{key:'SIZE',direction:'ASC'}];
   if(value==='audio')return[{key:'AUDIO_TAG',direction:'DESC'},{key:'AUDIO_CHANNEL',direction:'DESC'},{key:'RESOLUTION',direction:'DESC'},{key:'QUALITY',direction:'DESC'},{key:'SIZE',direction:'DESC'}];
   if(value==='language')return[{key:'LANGUAGE',direction:'DESC'},{key:'RESOLUTION',direction:'DESC'},{key:'QUALITY',direction:'DESC'},{key:'SIZE',direction:'DESC'}];
-  return[{key:'RESOLUTION',direction:'DESC'},{key:'QUALITY',direction:'DESC'},{key:'VISUAL_TAG',direction:'DESC'},{key:'AUDIO_TAG',direction:'DESC'},{key:'AUDIO_CHANNEL',direction:'DESC'},{key:'ENCODE',direction:'DESC'},{key:'SIZE',direction:'DESC'}];
+  return[];
 }
 function presetForSortCriteria(criteria){
   const keys=(criteria||[]).map(c=>c.key+':'+c.direction).join('|');
+  if(keys==='')return'original';
+  if(keys==='RESOLUTION:DESC|QUALITY:DESC|VISUAL_TAG:DESC|AUDIO_TAG:DESC|AUDIO_CHANNEL:DESC|ENCODE:DESC|SIZE:DESC')return'bestQuality';
   if(keys==='SIZE:DESC')return'largest';
   if(keys==='SIZE:ASC')return'smallest';
   if(keys.startsWith('AUDIO_TAG:DESC|AUDIO_CHANNEL:DESC'))return'audio';
   if(keys.startsWith('LANGUAGE:DESC'))return'language';
-  return'default';
+  return'original';
 }
 function renderRules(){
   streamRules.innerHTML=groups.map(([id,title,source])=>'<div class="checks"><div class="checks-title">'+title+'</div><div class="check-grid">'+options[source].map(([value,label])=>'<label class="check"><input type="checkbox" data-group="'+id+'" value="'+value+'"><span>'+label+'</span></label>').join('')+'</div></div>').join('');
@@ -442,12 +459,15 @@ function applyPreferences(prefs){
   document.getElementById('requiredReleaseGroups').value=(p.requiredReleaseGroups||[]).join('\\n');
   document.getElementById('excludedReleaseGroups').value=(p.excludedReleaseGroups||[]).join('\\n');
 }
+function escapeHtml(value){
+  return String(value||'').replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
 async function load(){
   const res = await fetch('/api/settings');
   const body = await res.json();
   defaults = body.defaults;
-  nameBox.value = body.settings.nameTemplate || defaults.nameTemplate;
-  descBox.value = body.settings.descriptionTemplate || defaults.descriptionTemplate;
+  nameBox.value = body.settings.nameTemplate ?? defaults.nameTemplate;
+  descBox.value = body.settings.descriptionTemplate ?? defaults.descriptionTemplate;
   applyPreferences(body.settings.streamPreferences || defaults.streamPreferences);
 }
 async function save(){

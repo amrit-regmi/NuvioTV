@@ -147,6 +147,9 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         firstFrameReady = pos > 0L || (playingNow && !cacheBuffering && playerDuration > 0L)
                         if (firstFrameReady) {
                             hasRenderedFirstFrame = true
+                            if (_uiState.value.postPlayDismissedForCurrentEpisode) {
+                                _uiState.update { it.copy(postPlayDismissedForCurrentEpisode = false) }
+                            }
                         }
                     }
                     if (playerDuration > lastKnownDuration) {
@@ -196,7 +199,8 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                 val displayPosition = pendingPreviewSeekPosition ?: pos
                 updatePlaybackTimeline(
                     currentPosition = displayPosition,
-                    duration = playerDuration.coerceAtLeast(0L)
+                    duration = playerDuration.coerceAtLeast(0L),
+                    bufferedPosition = player.bufferedPosition.coerceAtLeast(displayPosition)
                 )
                 // Update torrent rebuffer progress from ExoPlayer's buffer state
                 if (isTorrentStream && _uiState.value.isBuffering && hasRenderedFirstFrame) {
@@ -392,13 +396,17 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TraktScrobbleItem? {
 
 internal fun PlayerRuntimeController.emitScrobbleStart() {
     if (isShortPlaceholderStream()) return
-    val item = currentScrobbleItem ?: buildScrobbleItem().also { currentScrobbleItem = it }
-    if (item == null) return
     if (hasRequestedScrobbleStartForCurrentItem) return
 
     hasRequestedScrobbleStartForCurrentItem = true
     val requestGeneration = ++scrobbleStartRequestGeneration
     scope.launch {
+        // Wait for the episode mapping to finish (with its own timeout) so that
+        // the scrobble start is sent with the correct season/episode number.
+        traktMappingJob?.join()
+        currentScrobbleItem = buildScrobbleItem()
+        val item = currentScrobbleItem ?: return@launch
+        if (requestGeneration != scrobbleStartRequestGeneration || !hasRequestedScrobbleStartForCurrentItem) return@launch
         val progressPercent = currentPlaybackProgressPercent()
         traktScrobbleService.scrobbleStart(
             item = item,

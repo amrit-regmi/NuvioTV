@@ -801,11 +801,13 @@ fun ModernHomeContent(
 
             val currentLiveHeroSceneStateUpdated by rememberUpdatedState(liveHeroSceneState.value)
             val isScrollInProgressUpdated by rememberUpdatedState(verticalRowListState.isScrollInProgress)
+            val isRapidHorizontalNavUpdated by rememberUpdatedState(isRapidHorizontalNav.value)
 
             val heroSceneStateLambda = remember {
                 {
                     val currentLive = currentLiveHeroSceneStateUpdated
                     val isScrolling = isScrollInProgressUpdated
+                    val isRapidNav = isRapidHorizontalNavUpdated
                     val stable = stableHeroSceneStateRef.value
                     val stableHasPreview = stable?.preview?.title?.isNotBlank() == true
 
@@ -813,6 +815,8 @@ fun ModernHomeContent(
                         // During vertical scroll: freeze stable to avoid flashing
                         // transient addon data before enrichment completes
                         isScrolling && stableHasPreview -> stable!!
+                        // During rapid horizontal nav: freeze to avoid backdrop flashing
+                        isRapidNav && stable != null -> stable
                         // Normal: show live state
                         else -> currentLive
                     }
@@ -825,10 +829,16 @@ fun ModernHomeContent(
             // will gate the preview through enrichmentActive in previewProvider.
             val latestLiveForStable = liveHeroSceneState.value
             if (!verticalRowListState.isScrollInProgress &&
-                latestLiveForStable.preview?.title?.isNotBlank() == true &&
-                !latestLiveForStable.enrichmentActive &&
-                stableHeroSceneStateRef.value?.preview != latestLiveForStable.preview) {
-                stableHeroSceneStateRef.value = latestLiveForStable
+                !isRapidHorizontalNav.value &&
+                !latestLiveForStable.enrichmentActive
+            ) {
+                val hasNewPreview = latestLiveForStable.preview?.title?.isNotBlank() == true &&
+                    stableHeroSceneStateRef.value?.preview != latestLiveForStable.preview
+                val hasNewBackdrop = latestLiveForStable.heroBackdrop != null &&
+                    stableHeroSceneStateRef.value?.heroBackdrop != latestLiveForStable.heroBackdrop
+                if (hasNewPreview || hasNewBackdrop) {
+                    stableHeroSceneStateRef.value = latestLiveForStable
+                }
             }
 
             val isFullScreenState = remember {
@@ -836,24 +846,6 @@ fun ModernHomeContent(
             }
             val isFullScreenLambda = remember {
                 { isFullScreenState.value }
-            }
-
-            LaunchedEffect(verticalRowListState, liveHeroSceneState) {
-                snapshotFlow {
-                    val currentLive = liveHeroSceneState.value
-                    val isScrolling = verticalRowListState.isScrollInProgress
-                    val isRapidNav = isRapidHorizontalNav.value
-                    val stable = stableHeroSceneStateRef.value
-                    when {
-                        // During vertical scroll, freeze backdrop
-                        isScrolling && stable?.heroBackdrop != null -> stable.heroBackdrop
-                        // During rapid horizontal nav, freeze backdrop too
-                        isRapidNav && stable?.heroBackdrop != null -> stable.heroBackdrop
-                        else -> currentLive.heroBackdrop
-                    }
-                }.collect { backdrop ->
-                    HeroBackdropState.update(backdrop)
-                }
             }
 
             val localDensity = LocalDensity.current
@@ -891,13 +883,13 @@ fun ModernHomeContent(
                 with(localDensity) {
                     if (fullScreenBackdrop) screenWidth.roundToPx()
                     else (screenWidth * MODERN_HERO_MEDIA_WIDTH_FRACTION).roundToPx()
-                }
+                }.coerceAtLeast(1)
             }
             val heroMediaHeightPx = remember(heroBackdropHeight, screenHeight, localDensity, fullScreenBackdrop) {
                 with(localDensity) {
                     if (fullScreenBackdrop) screenHeight.roundToPx()
                     else heroBackdropHeight.roundToPx()
-                }
+                }.coerceAtLeast(1)
             }
 
             val heroMediaModifier = remember(heroBackdropHeight, screenHeight, fullScreenBackdrop) {

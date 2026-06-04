@@ -109,7 +109,6 @@ import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
-import com.nuvio.tv.core.player.ExternalPlayerLauncher
 import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.SubtitleStyleSettings
@@ -140,6 +139,7 @@ fun PlayerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
     val containerFocusRequester = remember { FocusRequester() }
     val playPauseFocusRequester = remember { FocusRequester() }
     val progressBarFocusRequester = remember { FocusRequester() }
@@ -153,6 +153,7 @@ fun PlayerScreen(
     val nextEpisodeFocusRequester = remember { FocusRequester() }
     var subtitleDelayAutoSyncFocused by remember { mutableStateOf(false) }
     var subtitleTimingConsumeNextConfirmKeyUp by remember { mutableStateOf(false) }
+
     val exitPlayer: () -> Unit = {
         val timeline = viewModel.playbackTimeline.value
         viewModel.stopAndRelease()
@@ -174,7 +175,8 @@ fun PlayerScreen(
     val shouldConfirmNextEpisodeOnEnd =
         uiState.playbackEnded &&
             uiState.error == null &&
-            uiState.streamAutoPlayMode != StreamAutoPlayMode.MANUAL &&
+            (uiState.streamAutoPlayMode != StreamAutoPlayMode.MANUAL ||
+                uiState.streamAutoPlayPreferBingeGroupForNextEpisode) &&
             !uiState.streamAutoPlayNextEpisodeEnabled &&
             nextEpisodeForEndPrompt != null
     val returnToDetailsFromEndPrompt = {
@@ -226,7 +228,11 @@ fun PlayerScreen(
         } else if (uiState.showSubtitleStylePanel) {
             viewModel.onEvent(PlayerEvent.OnDismissSubtitleStylePanel)
         } else if (uiState.showSourcesPanel) {
-            viewModel.onEvent(PlayerEvent.OnDismissSourcesPanel)
+            if (uiState.currentStreamUrl.isNullOrBlank()) {
+                exitPlayer()
+            } else {
+                viewModel.onEvent(PlayerEvent.OnDismissSourcesPanel)
+            }
         } else if (uiState.showEpisodesPanel) {
             if (uiState.showEpisodeStreams) {
                 viewModel.onEvent(PlayerEvent.OnBackFromEpisodeStreams)
@@ -315,6 +321,23 @@ fun PlayerScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // Bump UI thread priority to THREAD_PRIORITY_DISPLAY (-4) while the player is active.
+    // The Linux scheduler favors the thread under CPU pressure (background addon prefetch,
+    // Trakt sync, image decode), reducing dropped frames at scene cuts and during decoder
+    // spin-up. Restored on dispose so non-player screens stay at default priority.
+    DisposableEffect(Unit) {
+        val tid = android.os.Process.myTid()
+        val previousPriority = runCatching { android.os.Process.getThreadPriority(tid) }.getOrDefault(0)
+        runCatching {
+            android.os.Process.setThreadPriority(tid, android.os.Process.THREAD_PRIORITY_DISPLAY)
+        }
+        onDispose {
+            runCatching {
+                android.os.Process.setThreadPriority(tid, previousPriority)
+            }
         }
     }
 
@@ -675,7 +698,7 @@ fun PlayerScreen(
             backdropUrl = uiState.backdrop,
             logoUrl = uiState.logo,
             title = uiState.title,
-            message = uiState.loadingMessage,
+            message = uiState.loadingMessage.takeIf { uiState.showPlayerLoadingStatus || uiState.isTorrentStream },
             progress = uiState.loadingProgress,
             modifier = Modifier
                 .fillMaxSize()
@@ -913,15 +936,12 @@ fun PlayerScreen(
                     val headers = viewModel.getCurrentHeaders()
                     val timeline = viewModel.playbackTimeline.value
                     viewModel.stopAndRelease()
+                    // Launch via tracker - it handles progress saving independently
+                    viewModel.launchInExternalPlayer(context, timeline.currentPosition)
+                    // Exit PlayerScreen - tracker will save progress when external player returns
                     val completed = timeline.duration > 0L &&
                         (timeline.currentPosition.toFloat() / timeline.duration.toFloat()) >= WatchProgress.COMPLETED_THRESHOLD
                     onBackPress(uiState.currentVideoId, uiState.currentSeason, uiState.currentEpisode, uiState.streamAutoPlayMode != StreamAutoPlayMode.MANUAL, completed)
-                    ExternalPlayerLauncher.launch(
-                        context = context,
-                        url = url,
-                        title = title,
-                        headers = headers
-                    )
                 },
                 onShowStreamInfo = {
                     restoreStreamInfoFocus = true
@@ -1091,7 +1111,13 @@ fun PlayerScreen(
                 StreamSourcesSidePanel(
                     uiState = uiState,
                     streamsFocusRequester = sourceStreamsFocusRequester,
-                    onClose = { viewModel.onEvent(PlayerEvent.OnDismissSourcesPanel) },
+                    onClose = {
+                        if (uiState.currentStreamUrl.isNullOrBlank()) {
+                            exitPlayer()
+                        } else {
+                            viewModel.onEvent(PlayerEvent.OnDismissSourcesPanel)
+                        }
+                    },
                     onReload = { viewModel.onEvent(PlayerEvent.OnReloadSourceStreams) },
                     onAddonFilterSelected = { viewModel.onEvent(PlayerEvent.OnSourceAddonFilterSelected(it)) },
                     onStreamSelected = { viewModel.onEvent(PlayerEvent.OnSourceStreamSelected(it)) },
@@ -1879,7 +1905,8 @@ private fun PlayerControlsProgressBarHost(
         upFocusRequester = upFocusRequester,
         downFocusRequester = downFocusRequester,
         onUpKey = onUpKey,
-        onFocused = onFocused
+        onFocused = onFocused,
+        bufferedPosition = playbackTimeline.bufferedPosition
     )
 }
 
@@ -1981,10 +2008,16 @@ private fun ProgressBar(
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
     onUpKey: (() -> Unit)? = null,
-    onFocused: (() -> Unit)? = null
+    onFocused: (() -> Unit)? = null,
+    /** Position (ms) up to which content is buffered. Pass 0 to skip the overlay. */
+    bufferedPosition: Long = 0L
 ) {
     val progress = if (duration > 0) {
         (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+    } else 0f
+
+    val bufferedProgress = if (duration > 0 && bufferedPosition > currentPosition) {
+        (bufferedPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
     } else 0f
 
     val animatedProgress by animateFloatAsState(
@@ -1992,12 +2025,17 @@ private fun ProgressBar(
         animationSpec = tween(100),
         label = "progress"
     )
+    val animatedBufferedProgress by animateFloatAsState(
+        targetValue = bufferedProgress,
+        animationSpec = tween(200),
+        label = "bufferedProgress"
+    )
     var isFocused by remember { mutableStateOf(false) }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (isFocused) 10.dp else 6.dp)
+            .height(if (isFocused) 12.dp else 8.dp)
             .then(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester)
                 else Modifier
@@ -2077,10 +2115,24 @@ private fun ProgressBar(
                 else Color.White.copy(alpha = 0.3f)
             )
     ) {
+        val trackWidth = maxWidth
+
+        // Buffered-ahead overlay: the theme accent, faded so it reads under the played
+        // fill and on light themes.
+        if (animatedBufferedProgress > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(trackWidth * animatedBufferedProgress)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(NuvioColors.Secondary.copy(alpha = 0.35f))
+            )
+        }
+        // Played fill.
         Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .fillMaxWidth(animatedProgress)
+                .width(trackWidth * animatedProgress)
                 .clip(RoundedCornerShape(3.dp))
                 .background(NuvioColors.Secondary)
         )

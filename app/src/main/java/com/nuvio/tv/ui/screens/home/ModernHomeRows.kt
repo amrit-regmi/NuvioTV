@@ -59,6 +59,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -713,7 +715,9 @@ internal fun ModernRowSection(
                 }
         }
 
-        val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec, rowStartPadding) {
+        val layoutDirection = LocalLayoutDirection.current
+        val isRtl = layoutDirection == LayoutDirection.Rtl
+        val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec, rowStartPadding, isRtl) {
             val parentStartOffsetPx = with(density) { rowStartPadding.roundToPx() }
             @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
             object : BringIntoViewSpec {
@@ -726,18 +730,30 @@ internal fun ModernRowSection(
                     containerSize: Float
                 ): Float {
                     val childSize = abs(size)
-                    val childSmallerThanParent = childSize <= containerSize
-                    val initialTarget = parentStartOffsetPx.toFloat()
-                    val spaceAvailable = containerSize - initialTarget
+                    if (isRtl) {
+                        val childSmallerThanParent = childSize <= containerSize
+                        val initialTarget = containerSize - parentStartOffsetPx.toFloat()
+                        val targetForTrailingEdge =
+                            if (childSmallerThanParent && initialTarget < childSize) {
+                                childSize
+                            } else {
+                                initialTarget
+                            }
+                        return (offset + size) - targetForTrailingEdge
+                    } else {
+                        val childSmallerThanParent = childSize <= containerSize
+                        val initialTarget = parentStartOffsetPx.toFloat()
+                        val spaceAvailable = containerSize - initialTarget
 
-                    val targetForLeadingEdge =
-                        if (childSmallerThanParent && spaceAvailable < childSize) {
-                            containerSize - childSize
-                        } else {
-                            initialTarget
-                        }
+                        val targetForLeadingEdge =
+                            if (childSmallerThanParent && spaceAvailable < childSize) {
+                                containerSize - childSize
+                            } else {
+                                initialTarget
+                            }
 
-                    return offset - targetForLeadingEdge
+                        return offset - targetForLeadingEdge
+                    }
                 }
             }
         }
@@ -1069,10 +1085,10 @@ private fun ModernCarouselCard(
         cardWidth
     }
     val requestWidthPx = remember(maxRequestCardWidth, density) {
-        with(density) { maxRequestCardWidth.roundToPx() }
+        with(density) { maxRequestCardWidth.roundToPx() }.coerceAtLeast(1)
     }
     val requestHeightPx = remember(cardHeight, density) {
-        with(density) { cardHeight.roundToPx() }
+        with(density) { cardHeight.roundToPx() }.coerceAtLeast(1)
     }
 
     val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx) {
@@ -1087,10 +1103,10 @@ private fun ModernCarouselCard(
     }
     val logoHeight = cardHeight * 0.34f
     val logoHeightPx = remember(logoHeight, density) {
-        with(density) { logoHeight.roundToPx() }
+        with(density) { logoHeight.roundToPx() }.coerceAtLeast(1)
     }
     val maxLogoWidthPx = remember(maxRequestCardWidth, density) {
-        with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }
+        with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }.coerceAtLeast(1)
     }
 
     val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx) {

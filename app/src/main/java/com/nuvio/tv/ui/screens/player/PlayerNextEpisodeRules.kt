@@ -36,18 +36,20 @@ object PlayerNextEpisodeRules {
         thresholdPercent: Float,
         thresholdMinutesBeforeEnd: Float
     ): Boolean {
-        val outroInterval = skipIntervals.firstOrNull { it.type == "outro" }
+        val outroInterval = skipIntervals.firstOrNull {
+            it.type == "outro" || it.type == "ed" || it.type == "mixed-ed"
+        }
         return if (outroInterval != null) {
             positionMs / 1000.0 >= outroInterval.startTime
         } else {
             if (durationMs <= 0L) return false
             when (thresholdMode) {
                 NextEpisodeThresholdMode.PERCENTAGE -> {
-                    val clampedPercent = thresholdPercent.coerceIn(97f, 99.5f)
+                    val clampedPercent = thresholdPercent.coerceIn(97f, 100f)
                     (positionMs.toDouble() / durationMs.toDouble()) >= (clampedPercent / 100.0)
                 }
                 NextEpisodeThresholdMode.MINUTES_BEFORE_END -> {
-                    val clampedMinutes = thresholdMinutesBeforeEnd.coerceIn(1f, 3.5f)
+                    val clampedMinutes = thresholdMinutesBeforeEnd.coerceIn(0f, 3.5f)
                     val remainingMs = durationMs - positionMs
                     remainingMs <= (clampedMinutes * 60_000f).toLong()
                 }
