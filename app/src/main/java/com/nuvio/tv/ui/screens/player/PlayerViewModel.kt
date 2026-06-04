@@ -17,6 +17,7 @@ import com.nuvio.tv.data.local.AudioDelayRouteDataStore
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.DeviceLocalPlayerPreferences
 import com.nuvio.tv.data.local.StreamLinkCacheDataStore
+import com.nuvio.tv.data.local.StreamBadgeSettingsDataStore
 import com.nuvio.tv.data.repository.ParentalGuideRepository
 import com.nuvio.tv.data.repository.SkipIntroRepository
 import com.nuvio.tv.data.repository.TraktEpisodeMappingService
@@ -31,6 +32,7 @@ import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -49,6 +51,7 @@ class PlayerViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val deviceLocalPlayerPreferences: DeviceLocalPlayerPreferences,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
+    private val streamBadgeSettingsDataStore: StreamBadgeSettingsDataStore,
     private val bingeGroupCacheDataStore: com.nuvio.tv.data.local.BingeGroupCacheDataStore,
     private val layoutPreferenceDataStore: com.nuvio.tv.data.local.LayoutPreferenceDataStore,
     private val watchedItemsPreferences: com.nuvio.tv.data.local.WatchedItemsPreferences,
@@ -66,6 +69,7 @@ class PlayerViewModel @Inject constructor(
     private val playerPreWarmer: PlayerPreWarmer,
     private val streamWarmer: StreamWarmer,
     private val externalPlaybackTracker: com.nuvio.tv.core.player.ExternalPlaybackTracker,
+    private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -90,6 +94,7 @@ class PlayerViewModel @Inject constructor(
         playerSettingsDataStore = playerSettingsDataStore,
         deviceLocalPlayerPreferences = deviceLocalPlayerPreferences,
         streamLinkCacheDataStore = streamLinkCacheDataStore,
+        streamBadgeSettingsDataStore = streamBadgeSettingsDataStore,
         bingeGroupCacheDataStore = bingeGroupCacheDataStore,
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         watchedItemsPreferences = watchedItemsPreferences,
@@ -220,14 +225,19 @@ class PlayerViewModel @Inject constructor(
             } else null
         } else null
 
-        externalPlaybackTracker.launchPlayer(
-            metadata = metadata,
-            url = url,
-            title = controller.contentName ?: controller.title,
-            headers = controller.getCurrentHeaders(),
-            resumePositionMs = resumePositionMs,
-            subtitles = subtitleInputs,
-            context = activityContext
-        )
+        // Cache subtitle files locally and launch player in background
+        viewModelScope.launch {
+            val cachedSubtitles = subtitleInputs?.let { subtitleFileCache.cacheSubtitles(it) }
+
+            externalPlaybackTracker.launchPlayer(
+                metadata = metadata,
+                url = url,
+                title = metadata.buildPlayerTitle(),
+                headers = controller.getCurrentHeaders(),
+                resumePositionMs = resumePositionMs,
+                subtitles = cachedSubtitles,
+                context = activityContext
+            )
+        }
     }
 }
