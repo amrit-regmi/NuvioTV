@@ -1813,10 +1813,10 @@ private fun friendlyVideoHdrType(
         else -> null
     }
     return when {
-        // Stripped to the HDR10 base layer: output is HDR10/SDR, never Dolby Vision.
+        // Ignore DV data: output is HDR10/SDR, never Dolby Vision.
         effectiveModeName == "HDR10_BASE_LAYER" -> fromTransfer() ?: "HDR10"
         // DV RPU stripped: output is HDR10 base layer, never Dolby Vision.
-        effectiveModeName == "STRIP_DV" -> fromTransfer() ?: "HDR10"
+        effectiveModeName == "STRIP_DV" -> fromTransfer() ?: "Strip DV"
         // DV8.1 conversion, but only label it DV if a conversion actually ran. AUTO arms
         // this mode for every file on a DV display, so plain SDR/HDR10 lands here too.
         effectiveModeName == "DV81_LIBDOVI" && dvConversionOccurred -> "Dolby Vision"
