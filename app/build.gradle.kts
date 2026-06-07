@@ -131,6 +131,7 @@ android {
     productFlavors {
         create("full") {
             dimension = "distribution"
+            applicationId = "com.nuvio.tv.private"
             buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "true")
@@ -185,6 +186,10 @@ android {
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${devProperties.getProperty("AVATAR_PUBLIC_BASE_URL", localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", ""))}\"")
             buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${devProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", ""))}\"")
             buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${devProperties.getProperty("PREMIUMIZE_CLIENT_ID", localProperties.getProperty("PREMIUMIZE_CLIENT_ID", ""))}\"")
+            buildConfigField("String", "RECO_API_BASE_URL",
+                "\"${localProperties.getProperty("RECO_API_BASE_URL", "https://recoengine.regmig.com")}\"")
+            buildConfigField("String", "RECO_MODE",
+                "\"${localProperties.getProperty("RECO_MODE", "private")}\"")
         }
         release {
             isMinifyEnabled = true
@@ -215,6 +220,10 @@ android {
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", "")}\"")
             buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", "")}\"")
             buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
+            buildConfigField("String", "RECO_API_BASE_URL",
+                "\"${localProperties.getProperty("RECO_API_BASE_URL", "https://recoengine.regmig.com")}\"")
+            buildConfigField("String", "RECO_MODE",
+                "\"${localProperties.getProperty("RECO_MODE", "private")}\"")
         }
         create("benchmark") {
             initWith(buildTypes.getByName("release"))
@@ -284,7 +293,12 @@ android {
 androidComponents {
     onVariants(selector().withBuildType("debug")) { variant ->
         val isPlaystore = variant.productFlavors.any { it.second == "playstore" }
-        variant.applicationId.set(if (isPlaystore) "com.nuvio.appdebug" else "com.nuviodebug.com")
+        val isFull = variant.productFlavors.any { it.second == "full" }
+        variant.applicationId.set(when {
+            isPlaystore -> "com.nuvio.appdebug"
+            isFull -> "com.nuvio.tv.private.debug"
+            else -> "com.nuviodebug.com"
+        })
     }
 }
 

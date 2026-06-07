@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.LocaleCache
 import com.nuvio.tv.core.player.StreamAutoPlayPolicy
+import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.core.reco.RecommendationRepository
 import com.nuvio.tv.core.recommendations.TvRecommendationManager
 import com.nuvio.tv.core.stream.StreamWarmer
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
@@ -81,6 +83,8 @@ class HomeViewModel @Inject constructor(
     internal val cwEnrichmentCache: ContinueWatchingEnrichmentCache,
     internal val profileManager: com.nuvio.tv.core.profile.ProfileManager,
     internal val tvRecommendationManager: TvRecommendationManager,
+    internal val authManager: AuthManager,
+    internal val recommendationRepository: RecommendationRepository,
     private val streamWarmer: StreamWarmer
 ) : ViewModel() {
     companion object {
@@ -113,6 +117,8 @@ class HomeViewModel @Inject constructor(
         .distinctUntilChanged()
     internal val _fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
     val fullCatalogRows: StateFlow<List<CatalogRow>> = _fullCatalogRows.asStateFlow()
+
+    internal val _recoRows = MutableStateFlow<List<CatalogRow>>(emptyList())
 
     private val _focusState = MutableStateFlow(HomeScreenFocusState())
     val focusState: StateFlow<HomeScreenFocusState> = _focusState.asStateFlow()
@@ -284,6 +290,7 @@ class HomeViewModel @Inject constructor(
         observeStartupAuthNotice()
         viewModelScope.launch {
             profileManager.activeProfileReady.first { it }
+            observeRecoRows()
             observeLayoutPreferences()
             observeModernHomePresentation()
             loadContinueWatching()

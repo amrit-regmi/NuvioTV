@@ -115,6 +115,8 @@ class AuthManager @Inject constructor(
             else -> null
         }
 
+    fun currentAccessToken(): String? = auth.currentSessionOrNull()?.accessToken
+
     /**
      * Returns the effective user ID for data operations.
      * For sync-linked devices, this returns the sync owner's user ID.

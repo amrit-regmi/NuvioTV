@@ -84,7 +84,8 @@ private enum class IntegrationSettingsSection {
     Debrid,
     Tmdb,
     MdbList,
-    AnimeSkip
+    AnimeSkip,
+    Reco
 }
 
 internal enum class SettingsSectionDestination {
@@ -273,6 +274,7 @@ fun SettingsScreen(
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
+    val integrationRecoFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
@@ -501,6 +503,7 @@ fun SettingsScreen(
                             tmdbFocusRequester = integrationTmdbFocusRequester,
                             mdbListFocusRequester = integrationMdbListFocusRequester,
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
+                            recoFocusRequester = integrationRecoFocusRequester,
                             autoFocusEnabled = allowDetailAutofocus
                         )
                         SettingsCategory.ABOUT -> AboutSettingsContent(
@@ -629,6 +632,7 @@ private fun IntegrationSettingsContent(
     tmdbFocusRequester: FocusRequester,
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
+    recoFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
@@ -644,6 +648,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
+            IntegrationSettingsSection.Reco -> recoFocusRequester
         }
         runCatching { requester.requestFocus() }
     }
@@ -699,6 +704,13 @@ private fun IntegrationSettingsContent(
                                     onClick = { onSelectSection(IntegrationSettingsSection.AnimeSkip) }
                                 )
                             }
+                            item(key = "integration_hub_reco") {
+                                SettingsActionRow(
+                                    title = "Recommendations",
+                                    subtitle = "Configure your personal recommendation engine",
+                                    onClick = { onSelectSection(IntegrationSettingsSection.Reco) }
+                                )
+                            }
                         }
                         SettingsVerticalScrollIndicators(state = integrationHubState)
                     }
@@ -727,6 +739,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.AnimeSkip -> {
             AnimeSkipSettingsContent(
                 initialFocusRequester = animeSkipFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.Reco -> {
+            RecoSettingsContent(
+                initialFocusRequester = recoFocusRequester
             )
         }
     }

@@ -683,7 +683,9 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     heroItemOrder = baseHeroItems.map { it.id }
 
     val (computedHomeRows, nextGridItems) = withContext(Dispatchers.Default) {
+        val recoSnapshot = _recoRows.value
         val computedHomeRows = buildList {
+            recoSnapshot.filter { it.items.isNotEmpty() }.forEach { add(HomeRow.Catalog(it)) }
             val displayRowsByKey = displayRows.associateBy { "${it.addonId}_${it.apiType}_${it.catalogId}" }
             // Build a lookup of placeholder descriptors by key for lazy catalogs
             val placeholdersByKey = synchronized(catalogStateLock) {
