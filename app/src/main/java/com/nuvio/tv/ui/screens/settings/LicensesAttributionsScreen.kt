@@ -59,11 +59,16 @@ import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.nuvio.tv.R
+import com.nuvio.tv.core.cloud.PremiumizeCloudLibraryPosterUrl
+import com.nuvio.tv.core.cloud.TorboxCloudLibraryPosterUrl
+import com.nuvio.tv.core.cloud.cloudLibraryDisplayArtworkUrl
 import com.nuvio.tv.ui.theme.NuvioColors
 
 private const val NuvioRepositoryUrl = "https://github.com/NuvioMedia/NuvioTV"
 private const val TmdbUrl = "https://www.themoviedb.org"
 private const val TraktUrl = "https://trakt.tv"
+private const val PremiumizeUrl = "https://www.premiumize.me"
+private const val TorboxUrl = "https://torbox.app"
 private const val MdbListUrl = "https://mdblist.com"
 private const val IntroDbUrl = "https://introdb.app/"
 private const val ImdbDatasetsUrl = "https://developer.imdb.com/non-commercial-datasets/"
@@ -73,6 +78,7 @@ private const val LibMpvAndroidUrl = "https://github.com/jarnedemeulemeester/lib
 private sealed interface LicenseLogo {
     data class Drawable(@param:DrawableRes val resId: Int) : LicenseLogo
     data class Raw(@param:RawRes val resId: Int) : LicenseLogo
+    data class Url(val url: String) : LicenseLogo
 }
 
 private data class LicenseAttributionItem(
@@ -303,6 +309,7 @@ private fun AttributionLogo(
             painter = when (logo) {
                 is LicenseLogo.Drawable -> painterResource(id = logo.resId)
                 is LicenseLogo.Raw -> rememberRawSvgPainter(rawIconRes = logo.resId)
+                is LicenseLogo.Url -> rememberUrlSvgPainter(url = logo.url)
             },
             contentDescription = null,
             modifier = Modifier.size(38.dp),
@@ -319,6 +326,21 @@ private fun rememberRawSvgPainter(@RawRes rawIconRes: Int): Painter {
     val request = remember(rawIconRes, context, sizePx) {
         ImageRequest.Builder(context)
             .data(rawIconRes)
+            .size(sizePx)
+            .crossfade(false)
+            .build()
+    }
+    return rememberAsyncImagePainter(model = request)
+}
+
+@Composable
+private fun rememberUrlSvgPainter(url: String): Painter {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val sizePx = with(density) { 48.dp.roundToPx() }
+    val request = remember(url, context, sizePx) {
+        ImageRequest.Builder(context)
+            .data(url)
             .size(sizePx)
             .crossfade(false)
             .build()
@@ -346,6 +368,18 @@ private fun dataAttributionItems() = listOf(
         body = stringResource(R.string.licenses_attributions_trakt_body),
         url = TraktUrl,
         logo = LicenseLogo.Raw(R.raw.trakt_tv_favicon)
+    ),
+    LicenseAttributionItem(
+        title = stringResource(R.string.licenses_attributions_premiumize_title),
+        body = stringResource(R.string.licenses_attributions_premiumize_body),
+        url = PremiumizeUrl,
+        logo = LicenseLogo.Url(PremiumizeCloudLibraryPosterUrl)
+    ),
+    LicenseAttributionItem(
+        title = stringResource(R.string.licenses_attributions_torbox_title),
+        body = stringResource(R.string.licenses_attributions_torbox_body),
+        url = TorboxUrl,
+        logo = cloudLibraryDisplayArtworkUrl(TorboxCloudLibraryPosterUrl)?.let(LicenseLogo::Url)
     ),
     LicenseAttributionItem(
         title = stringResource(R.string.licenses_attributions_mdblist_title),
