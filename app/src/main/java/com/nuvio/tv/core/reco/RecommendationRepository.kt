@@ -6,6 +6,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -52,6 +55,32 @@ class RecommendationRepository @Inject constructor(
                 emptyList()
             }
         }
+
+    suspend fun reportWatched(
+        bearerToken: String,
+        tmdbId: Int,
+        kind: String,
+        progress: Float,
+        season: Int? = null,
+        episode: Int? = null,
+    ) = withContext(Dispatchers.IO) {
+        runCatching {
+            val bodyJson = buildJsonObject {
+                put("tmdb_id", tmdbId)
+                put("kind", kind)
+                put("progress", progress)
+                season?.let { put("season", it) }
+                episode?.let { put("episode", it) }
+            }
+            val body = bodyJson.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("${BuildConfig.RECO_API_BASE_URL}/events/watched")
+                .header("Authorization", "Bearer $bearerToken")
+                .post(body)
+                .build()
+            httpClient.newCall(request).execute().close()
+        }.onFailure { Log.w("RecoRepo", "reportWatched failed", it) }
+    }
 
     suspend fun issueWatchlyKey(bearerToken: String): String? =
         withContext(Dispatchers.IO) {
