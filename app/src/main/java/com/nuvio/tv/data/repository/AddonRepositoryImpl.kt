@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.sync.AddonSyncService
 import javax.inject.Inject
@@ -300,9 +301,16 @@ class AddonRepositoryImpl @Inject constructor(
         }
 
 
+        val effectiveFinalList = if (BuildConfig.RECO_MODE == "private") {
+            val privateUrl = canonicalizeUrl("https://recoengine.regmig.com/catalog-addon")
+            if (finalList.none { normalizeUrl(it) == normalizeUrl(privateUrl) }) {
+                listOf(privateUrl) + finalList
+            } else finalList
+        } else finalList
+
         val currentCanonical = initialLocalUrls.map { canonicalizeUrl(it) }
-        if (finalList != currentCanonical) {
-            preferences.setAddonOrder(finalList)
+        if (effectiveFinalList != currentCanonical) {
+            preferences.setAddonOrder(effectiveFinalList)
         }
     }
 
