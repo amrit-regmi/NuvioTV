@@ -95,6 +95,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val streamWarmer: StreamWarmer,
     private val traktRatingService: com.nuvio.tv.data.repository.TraktRatingService,
     private val recoRatingService: com.nuvio.tv.core.reco.RecoRatingService,
+    private val recoMetadataService: com.nuvio.tv.core.reco.RecoMetadataService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -1477,6 +1478,21 @@ class MetaDetailsViewModel @Inject constructor(
 
         var updated = meta
 
+        // In private mode, override TMDB credits with our own reco backend data.
+        val creditEnrichment = if (enrichment != null && com.nuvio.tv.BuildConfig.RECO_MODE == "private" && settings.useCredits) {
+            val tmdbIdInt = tmdbId.toIntOrNull()
+            val recoCredits = if (tmdbIdInt == null) null
+                              else if (isSeries) recoMetadataService.fetchTvCredits(tmdbIdInt)
+                              else recoMetadataService.fetchMovieCredits(tmdbIdInt)
+            if (recoCredits != null) enrichment.copy(
+                castMembers = recoCredits.cast,
+                directorMembers = recoCredits.directors,
+                writerMembers = recoCredits.writers,
+                director = recoCredits.directors.map { it.name },
+                writer = recoCredits.writers.map { it.name }
+            ) else enrichment
+        } else enrichment
+
         if (enrichment != null && settings.useArtwork) {
             updated = updated.copy(
                 background = enrichment.backdrop ?: updated.background,
@@ -1515,11 +1531,11 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
 
-        if (enrichment != null && settings.useCredits) {
+        if (creditEnrichment != null && settings.useCredits) {
             val peopleCredits = buildList {
-                addAll(enrichment.directorMembers)
-                addAll(enrichment.writerMembers)
-                addAll(enrichment.castMembers)
+                addAll(creditEnrichment.directorMembers)
+                addAll(creditEnrichment.writerMembers)
+                addAll(creditEnrichment.castMembers)
             }
                 .filter { it.name.isNotBlank() }
                 .distinctBy { it.tmdbId ?: (it.name.lowercase() + "|" + (it.character ?: "")) }
@@ -1527,12 +1543,12 @@ class MetaDetailsViewModel @Inject constructor(
             if (peopleCredits.isNotEmpty()) {
                 updated = updated.copy(
                     castMembers = peopleCredits,
-                    cast = enrichment.castMembers.takeIf { it.isNotEmpty() }?.map { it.name } ?: updated.cast
+                    cast = creditEnrichment.castMembers.takeIf { it.isNotEmpty() }?.map { it.name } ?: updated.cast
                 )
             }
             updated = updated.copy(
-                director = if (enrichment.director.isNotEmpty()) enrichment.director else updated.director,
-                writer = if (enrichment.writer.isNotEmpty()) enrichment.writer else updated.writer
+                director = if (creditEnrichment.director.isNotEmpty()) creditEnrichment.director else updated.director,
+                writer = if (creditEnrichment.writer.isNotEmpty()) creditEnrichment.writer else updated.writer
             )
         }
 

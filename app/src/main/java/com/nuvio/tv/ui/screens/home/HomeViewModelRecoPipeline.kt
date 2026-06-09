@@ -53,7 +53,11 @@ private fun RecoRow.toCatalogRow(): CatalogRow {
 private fun RecoItem.toMetaPreview(): MetaPreview {
     val type = if (kind == "movie") ContentType.MOVIE else ContentType.SERIES
     val posterUrl = poster_path?.let {
-        if (it.startsWith("http")) it else "$TMDB_POSTER_BASE$it"
+        when {
+            it.startsWith("http") -> it
+            BuildConfig.RECO_MODE == "private" -> "${BuildConfig.RECO_API_BASE_URL}/image$it"
+            else -> "$TMDB_POSTER_BASE$it"
+        }
     }
     return MetaPreview(
         id = "tmdb:$tmdb_id",
