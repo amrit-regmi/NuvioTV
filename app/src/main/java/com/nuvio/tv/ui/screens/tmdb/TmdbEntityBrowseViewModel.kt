@@ -4,11 +4,15 @@ import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
+import com.nuvio.tv.core.reco.RecoMetadataService
 import com.nuvio.tv.core.tmdb.TmdbEntityBrowseData
+import com.nuvio.tv.core.tmdb.TmdbEntityHeader
 import com.nuvio.tv.core.tmdb.TmdbEntityKind
-import com.nuvio.tv.core.tmdb.TmdbEntityRailType
 import com.nuvio.tv.core.tmdb.TmdbEntityMediaType
+import com.nuvio.tv.core.tmdb.TmdbEntityRail
+import com.nuvio.tv.core.tmdb.TmdbEntityRailType
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -25,6 +29,7 @@ import javax.inject.Inject
 class TmdbEntityBrowseViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val tmdbMetadataService: TmdbMetadataService,
+    private val recoMetadataService: RecoMetadataService,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
     savedStateHandle: SavedStateHandle
@@ -109,30 +114,94 @@ class TmdbEntityBrowseViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch {
             try {
-                val language = tmdbSettingsDataStore.settings.first().language
-                val browseData = tmdbMetadataService.fetchEntityBrowse(
-                    entityKind = entityKind,
-                    entityId = entityId,
-                    sourceType = sourceType,
-                    fallbackName = entityName,
-                    language = language
-                )
-                _uiState.value = if (browseData != null) {
-                    TmdbEntityBrowseUiState.Success(browseData)
+                if (BuildConfig.RECO_MODE == "private") {
+                    loadFromReco()
                 } else {
-                    TmdbEntityBrowseUiState.Error(
-                        if (entityName.isNotBlank()) {
-                            context.getString(R.string.tmdb_entity_error_load_named, entityName)
-                        } else {
-                            context.getString(R.string.tmdb_entity_error_load)
-                        }
-                    )
+                    loadFromTmdb()
                 }
             } catch (e: Exception) {
                 _uiState.value = TmdbEntityBrowseUiState.Error(
                     e.message ?: context.getString(R.string.tmdb_entity_error_load)
                 )
             }
+        }
+    }
+
+    private suspend fun loadFromReco() {
+        // Map sourceType ("movie", "series", "tv") to reco kind ("movie" or "tv")
+        val kind = when (sourceType.trim().lowercase()) {
+            "tv", "series", "show", "tvshow" -> "tv"
+            else -> "movie"
+        }
+        val result = recoMetadataService.fetchCompanyBrowse(
+            companyId = entityId,
+            kind = kind
+        )
+        if (result == null) {
+            // Backend returned 404 or error — show not available
+            _uiState.value = TmdbEntityBrowseUiState.Error(
+                if (entityName.isNotBlank()) {
+                    context.getString(R.string.tmdb_entity_error_load_named, entityName)
+                } else {
+                    context.getString(R.string.tmdb_entity_error_load)
+                }
+            )
+            return
+        }
+        val (companyName, items) = result
+        if (items.isEmpty()) {
+            _uiState.value = TmdbEntityBrowseUiState.Error(
+                if (entityName.isNotBlank()) {
+                    context.getString(R.string.tmdb_entity_error_load_named, entityName)
+                } else {
+                    context.getString(R.string.tmdb_entity_error_load)
+                }
+            )
+            return
+        }
+
+        val mediaType = if (kind == "tv") TmdbEntityMediaType.TV else TmdbEntityMediaType.MOVIE
+        val rail = TmdbEntityRail(
+            mediaType = mediaType,
+            railType = TmdbEntityRailType.POPULAR,
+            items = items,
+            currentPage = 1,
+            hasMore = false,
+            isLoading = false
+        )
+        val header = TmdbEntityHeader(
+            id = entityId,
+            kind = entityKind,
+            name = companyName?.takeIf { it.isNotBlank() } ?: entityName,
+            logo = null,
+            originCountry = null,
+            secondaryLabel = null,
+            description = null
+        )
+        _uiState.value = TmdbEntityBrowseUiState.Success(
+            TmdbEntityBrowseData(header = header, rails = listOf(rail))
+        )
+    }
+
+    private suspend fun loadFromTmdb() {
+        val language = tmdbSettingsDataStore.settings.first().language
+        val browseData = tmdbMetadataService.fetchEntityBrowse(
+            entityKind = entityKind,
+            entityId = entityId,
+            sourceType = sourceType,
+            fallbackName = entityName,
+            language = language
+        )
+        _uiState.value = if (browseData != null) {
+            TmdbEntityBrowseUiState.Success(browseData)
+        } else {
+            TmdbEntityBrowseUiState.Error(
+                if (entityName.isNotBlank()) {
+                    context.getString(R.string.tmdb_entity_error_load_named, entityName)
+                } else {
+                    context.getString(R.string.tmdb_entity_error_load)
+                }
+            )
         }
     }
 

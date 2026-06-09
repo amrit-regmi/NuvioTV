@@ -685,7 +685,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val (computedHomeRows, nextGridItems) = withContext(Dispatchers.Default) {
         val recoSnapshot = _recoRows.value
         val computedHomeRows = buildList {
-            recoSnapshot.filter { it.items.isNotEmpty() }.forEach { add(HomeRow.Catalog(it)) }
+            val recoByKey = recoSnapshot.associateBy { "reco_engine_${it.rawType}_${it.catalogId}" }
             val displayRowsByKey = displayRows.associateBy { "${it.addonId}_${it.apiType}_${it.catalogId}" }
             // Build a lookup of placeholder descriptors by key for lazy catalogs
             val placeholdersByKey = synchronized(catalogStateLock) {
@@ -699,6 +699,11 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         }
         for (key in orderedKeys) {
             if (key in disabledHomeCatalogKeys) continue
+            if (key.startsWith("reco_engine_")) {
+                val recoRow = recoByKey[key]
+                if (recoRow != null && recoRow.items.isNotEmpty()) add(HomeRow.Catalog(recoRow))
+                continue
+            }
             val collectionEntry = collectionsSnapshot[key]
             if (collectionEntry != null) {
                 if (!collectionEntry.pinToTop) {

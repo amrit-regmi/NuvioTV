@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.reco.RecoItem
 import com.nuvio.tv.core.reco.RecoRow
+import com.nuvio.tv.data.local.RecoRowDescriptor
 import com.nuvio.tv.domain.model.AuthState
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.ContentType
@@ -27,7 +28,17 @@ internal fun HomeViewModel.observeRecoRows() {
             .collectLatest { account ->
                 val token = authManager.currentAccessToken() ?: return@collectLatest
                 val rows = recommendationRepository.fetchRows(account.userId, token)
-                _recoRows.value = rows.mapIndexed { index, row -> row.toCatalogRow(index) }
+                val catalogRows = rows.mapIndexed { index, row -> row.toCatalogRow(index) }
+                _recoRows.value = catalogRows
+                val descriptors = catalogRows.map { cr ->
+                    RecoRowDescriptor(
+                        key = "reco_engine_${cr.rawType}_${cr.catalogId}",
+                        label = cr.catalogName
+                    )
+                }
+                recoRowKeys = descriptors.map { it.key }
+                layoutPreferenceDataStore.setRecoRowDescriptors(descriptors)
+                rebuildCatalogOrder(addonsCache)
                 scheduleUpdateCatalogRows()
                 Log.d("RecoRows", "Fetched ${rows.size} reco rows for ${account.userId}")
             }

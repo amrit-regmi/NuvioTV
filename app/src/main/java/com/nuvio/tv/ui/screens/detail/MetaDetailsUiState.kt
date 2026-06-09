@@ -13,7 +13,8 @@ import com.nuvio.tv.domain.model.MDBListRatings
 
 enum class MoreLikeThisSource {
     TMDB,
-    TRAKT
+    TRAKT,
+    RECO
 }
 
 enum class CommentsMode {

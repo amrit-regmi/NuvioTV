@@ -19,6 +19,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,12 +31,52 @@ data class RecoCredits(
     val writers: List<MetaCastMember>
 )
 
+internal data class RecoSimilarItem(
+    val tmdb_id: Int?,
+    val kind: String?,
+    val title: String?,
+    val poster_path: String?,
+    val poster: String?,
+    val vote_average: Double?,
+    val year: Int?
+)
+
+internal data class RecoSimilarResponse(
+    val items: List<RecoSimilarItem>?
+)
+
+internal data class RecoCompanyItem(
+    val tmdb_id: Int?,
+    val kind: String?,
+    val title: String?,
+    val poster_path: String?,
+    val poster: String?,
+    val vote_average: Double?,
+    val year: Int?
+)
+
+internal data class RecoCompanyInfo(
+    val id: Int?,
+    val name: String?,
+    val logo_path: String?,
+    val origin_country: String?
+)
+
+internal data class RecoCompanyResponse(
+    val company: RecoCompanyInfo?,
+    val items: List<RecoCompanyItem>?,
+    val total: Int?
+)
+
 @Singleton
 class RecoMetadataService @Inject constructor(
     private val httpClient: OkHttpClient,
     private val moshi: Moshi,
 ) {
     private val base = BuildConfig.RECO_API_BASE_URL
+
+    // In-memory cache for person details keyed by personId
+    private val personDetailCache = ConcurrentHashMap<Int, PersonDetail>()
 
     fun imageUrl(path: String?): String? =
         path?.takeIf { it.isNotBlank() }?.let { "$base/image$it" }
@@ -54,6 +95,9 @@ class RecoMetadataService @Inject constructor(
         preferCrewCredits: Boolean? = null,
         language: String = "en"
     ): PersonDetail? = withContext(Dispatchers.IO) {
+        // Return cached result if available
+        personDetailCache[personId]?.let { return@withContext it }
+
         try {
             val (person, credits) = coroutineScope {
                 val pd = async { get("$base/people/$personId")?.let { parseJson<TmdbPersonResponse>(it) } }
@@ -80,7 +124,7 @@ class RecoMetadataService @Inject constructor(
                 else -> crewTvCredits
             }
 
-            PersonDetail(
+            val detail = PersonDetail(
                 tmdbId = person.id,
                 name = person.name ?: "Unknown",
                 biography = null,
@@ -92,6 +136,8 @@ class RecoMetadataService @Inject constructor(
                 movieCredits = movieCredits,
                 tvCredits = tvCredits
             )
+            personDetailCache[personId] = detail
+            detail
         } catch (e: Exception) {
             Log.e(TAG, "fetchPersonDetail failed for $personId", e)
             null
@@ -116,6 +162,83 @@ class RecoMetadataService @Inject constructor(
             buildRecoCredits(resp)
         } catch (e: Exception) {
             Log.e(TAG, "fetchTvCredits failed for $tmdbId", e)
+            null
+        }
+    }
+
+    /**
+     * Fetches similar titles from the reco engine.
+     * @param kind "movie" or "tv"
+     * @param tmdbId numeric TMDB ID
+     */
+    suspend fun fetchSimilar(kind: String, tmdbId: Int): List<MetaPreview>? = withContext(Dispatchers.IO) {
+        try {
+            val body = get("$base/reco/similar/$kind/$tmdbId") ?: return@withContext null
+            val resp = parseJson<RecoSimilarResponse>(body) ?: return@withContext null
+            resp.items?.mapNotNull { item ->
+                val id = item.tmdb_id ?: return@mapNotNull null
+                val title = item.title ?: return@mapNotNull null
+                val contentType = when (item.kind?.lowercase()) {
+                    "tv", "series" -> ContentType.SERIES
+                    else -> ContentType.MOVIE
+                }
+                MetaPreview(
+                    id = "tmdb:$id",
+                    type = contentType,
+                    name = title,
+                    poster = item.poster ?: imageUrl(item.poster_path),
+                    posterShape = PosterShape.POSTER,
+                    background = null,
+                    logo = null,
+                    description = null,
+                    releaseInfo = item.year?.toString(),
+                    imdbRating = item.vote_average?.toFloat(),
+                    genres = emptyList()
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "fetchSimilar failed for $kind/$tmdbId", e)
+            null
+        }
+    }
+
+    /**
+     * Fetches titles by company/network from the reco engine.
+     * @param companyId TMDB company/network ID
+     * @param kind "movie" or "tv"
+     */
+    suspend fun fetchCompanyBrowse(
+        companyId: Int,
+        kind: String
+    ): Pair<String?, List<MetaPreview>>? = withContext(Dispatchers.IO) {
+        try {
+            val body = get("$base/titles/by-company/$companyId?kind=$kind&limit=50") ?: return@withContext null
+            val resp = parseJson<RecoCompanyResponse>(body) ?: return@withContext null
+            val companyName = resp.company?.name
+            val items = resp.items?.mapNotNull { item ->
+                val id = item.tmdb_id ?: return@mapNotNull null
+                val title = item.title ?: return@mapNotNull null
+                val contentType = when (item.kind?.lowercase()) {
+                    "tv", "series" -> ContentType.SERIES
+                    else -> ContentType.MOVIE
+                }
+                MetaPreview(
+                    id = "tmdb:$id",
+                    type = contentType,
+                    name = title,
+                    poster = item.poster ?: imageUrl(item.poster_path),
+                    posterShape = PosterShape.POSTER,
+                    background = null,
+                    logo = null,
+                    description = null,
+                    releaseInfo = item.year?.toString(),
+                    imdbRating = item.vote_average?.toFloat(),
+                    genres = emptyList()
+                )
+            } ?: emptyList()
+            companyName to items
+        } catch (e: Exception) {
+            Log.e(TAG, "fetchCompanyBrowse failed for companyId=$companyId kind=$kind", e)
             null
         }
     }

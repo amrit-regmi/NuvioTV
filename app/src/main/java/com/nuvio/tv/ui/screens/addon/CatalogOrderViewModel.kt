@@ -7,6 +7,7 @@ import com.nuvio.tv.core.sync.homeCatalogKey
 import com.nuvio.tv.core.sync.homeLegacyDisabledCatalogKey
 import com.nuvio.tv.data.local.CollectionsDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
+import com.nuvio.tv.data.local.RecoRowDescriptor
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.Collection
@@ -39,7 +40,7 @@ class CatalogOrderViewModel @Inject constructor(
     }
 
     fun moveUp(key: String) {
-        if (_uiState.value.followAddonsOrder) {
+        if (_uiState.value.followAddonsOrder && !key.startsWith("reco_engine_")) {
             moveCollectionBetweenAddons(key, -1)
         } else {
             moveCatalog(key, -1)
@@ -47,7 +48,7 @@ class CatalogOrderViewModel @Inject constructor(
     }
 
     fun moveDown(key: String) {
-        if (_uiState.value.followAddonsOrder) {
+        if (_uiState.value.followAddonsOrder && !key.startsWith("reco_engine_")) {
             moveCollectionBetweenAddons(key, 1)
         } else {
             moveCatalog(key, 1)
@@ -164,7 +165,8 @@ class CatalogOrderViewModel @Inject constructor(
                 layoutPreferenceDataStore.homeCatalogOrderKeys,
                 layoutPreferenceDataStore.disabledHomeCatalogKeys,
                 layoutPreferenceDataStore.customCatalogTitles,
-                layoutPreferenceDataStore.followAddonsOrder
+                layoutPreferenceDataStore.followAddonsOrder,
+                layoutPreferenceDataStore.recoRowDescriptors
             ) { values ->
                 @Suppress("UNCHECKED_CAST")
                 val addons = values[0] as List<Addon>
@@ -177,6 +179,8 @@ class CatalogOrderViewModel @Inject constructor(
                 @Suppress("UNCHECKED_CAST")
                 val customTitles = values[4] as Map<String, String>
                 val followAddons = values[5] as Boolean
+                @Suppress("UNCHECKED_CAST")
+                val recoDescriptors = values[6] as List<RecoRowDescriptor>
 
                 val items = buildOrderedCatalogItems(
                     addons = addons.enabledAddons(),
@@ -184,7 +188,8 @@ class CatalogOrderViewModel @Inject constructor(
                     savedOrderKeys = savedOrderKeys,
                     disabledKeys = disabledKeys,
                     customTitles = customTitles,
-                    followAddonsOrder = followAddons
+                    followAddonsOrder = followAddons,
+                    recoDescriptors = recoDescriptors
                 )
                 Pair(items, followAddons)
             }.collectLatest { (orderedItems, followAddons) ->
@@ -206,9 +211,19 @@ class CatalogOrderViewModel @Inject constructor(
         savedOrderKeys: List<String>,
         disabledKeys: Set<String>,
         customTitles: Map<String, String> = emptyMap(),
-        followAddonsOrder: Boolean = false
+        followAddonsOrder: Boolean = false,
+        recoDescriptors: List<RecoRowDescriptor> = emptyList()
     ): List<CatalogOrderItem> {
         val defaultEntries = buildDefaultCatalogEntries(addons)
+        val recoEntries = recoDescriptors.map { desc ->
+            CatalogOrderEntry(
+                key = desc.key,
+                disableKey = desc.key,
+                catalogName = desc.label,
+                addonName = "Recommendations",
+                typeLabel = "reco"
+            )
+        }
         val collectionEntries = collections.map { collection ->
             CatalogOrderEntry(
                 key = "collection_${collection.id}",
@@ -218,15 +233,17 @@ class CatalogOrderViewModel @Inject constructor(
                 typeLabel = "collection"
             )
         }
-        val allEntries = defaultEntries + collectionEntries
+        val allEntries = defaultEntries + recoEntries + collectionEntries
         val availableMap = allEntries.associateBy { it.key }
         val defaultOrderKeys = allEntries.map { it.key }
 
         val effectiveOrder: List<String>
         if (followAddonsOrder) {
             // In follow mode, addon catalogs stay in manifest order.
-            // Collections are positioned based on their relative position in savedOrderKeys.
+            // Reco rows and collections are positioned based on their relative position in savedOrderKeys.
             val addonKeys = defaultEntries.map { it.key }
+            val recoKeysInOrder = recoEntries.map { it.key }
+            val recoKeysSet = recoKeysInOrder.toSet()
             val collectionKeys = collectionEntries.map { it.key }.toSet()
 
             val savedValid = savedOrderKeys.filter { it in availableMap }.distinct()
@@ -234,14 +251,12 @@ class CatalogOrderViewModel @Inject constructor(
             if (savedValid.isNotEmpty()) {
                 // Rebuild order: take saved order but replace addon sequence with manifest order.
                 // Strategy: walk through savedValid, output addon keys in manifest order,
-                // insert collections at their saved positions relative to addon boundaries.
+                // insert reco/collections at their saved positions relative to addon boundaries.
                 val result = mutableListOf<String>()
                 var addonPointer = 0 // pointer into addonKeys (manifest order)
 
                 for (savedKey in savedValid) {
-                    if (savedKey in collectionKeys) {
-                        // Place collection here - but first flush any addon keys up to this point
-                        // that haven't been placed yet
+                    if (savedKey in collectionKeys || savedKey in recoKeysSet) {
                         result.add(savedKey)
                     } else {
                         // It's an addon catalog key in saved order - advance manifest pointer
@@ -266,6 +281,12 @@ class CatalogOrderViewModel @Inject constructor(
                     }
                     addonPointer++
                 }
+                // Append any reco keys not in savedValid
+                for (rk in recoKeysInOrder) {
+                    if (rk !in result) {
+                        result.add(rk)
+                    }
+                }
                 // Append any collections not in savedValid
                 for (ck in collectionKeys) {
                     if (ck !in result) {
@@ -276,8 +297,8 @@ class CatalogOrderViewModel @Inject constructor(
                 // If a collection is between two catalogs of the same addon, push it after that block.
                 effectiveOrder = normalizeCollectionPositions(result, availableMap)
             } else {
-                // No saved order - addon manifest order + collections at end
-                effectiveOrder = addonKeys + collectionKeys.toList()
+                // No saved order - addon manifest order + reco + collections at end
+                effectiveOrder = addonKeys + recoKeysInOrder + collectionKeys.toList()
             }
         } else {
             val savedValid = savedOrderKeys
@@ -295,11 +316,12 @@ class CatalogOrderViewModel @Inject constructor(
             val entry = availableMap[key] ?: return@mapIndexedNotNull null
             val displayName = customTitles[key]?.takeIf { it.isNotBlank() } ?: entry.catalogName
             val isCollection = key.startsWith("collection_")
+            val isReco = key.startsWith("reco_engine_")
 
             val canMoveUp: Boolean
             val canMoveDown: Boolean
             if (followAddonsOrder) {
-                if (isCollection) {
+                if (isCollection || isReco) {
                     canMoveUp = index > 0
                     canMoveDown = index < effectiveOrder.lastIndex
                 } else {

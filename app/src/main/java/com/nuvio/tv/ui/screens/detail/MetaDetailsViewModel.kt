@@ -865,11 +865,13 @@ class MetaDetailsViewModel @Inject constructor(
         val raw = itemId.trim()
         if (!raw.startsWith("tmdb:", ignoreCase = true)) return raw
 
-        val tmdbNumericId = raw
-            .substringAfter(':', missingDelimiterValue = "")
-            .substringBefore(':')
-            .toIntOrNull()
-            ?: return raw
+        // Handle "tmdb:12345", "tmdb:movie:12345", "tmdb:series:12345"
+        val parts = raw.split(":")
+        val tmdbNumericId = when (parts.size) {
+            2 -> parts[1].toIntOrNull()    // "tmdb:12345"
+            3 -> parts[2].toIntOrNull()    // "tmdb:movie:12345" or "tmdb:series:12345"
+            else -> null
+        } ?: return raw
 
         // Use a short timeout so a blocked TMDB API doesn't stall the detail screen.
         return kotlinx.coroutines.withTimeoutOrNull(5_000L) {
@@ -1219,6 +1221,8 @@ class MetaDetailsViewModel @Inject constructor(
         moreLikeThisJob = viewModelScope.launch {
             val source = if (shouldLoadTraktMoreLikeThis(meta)) {
                 MoreLikeThisSource.TRAKT
+            } else if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
+                MoreLikeThisSource.RECO
             } else {
                 val settings = tmdbSettingsDataStore.settings.first()
                 if (!shouldLoadMoreLikeThis(settings)) {
@@ -1238,6 +1242,26 @@ class MetaDetailsViewModel @Inject constructor(
                         )
                     }.getOrElse {
                         Log.w(TAG, "Failed to load Trakt related titles for ${meta.id}: ${it.message}")
+                        emptyList()
+                    }
+                }
+
+                MoreLikeThisSource.RECO -> {
+                    val tmdbNumericId = meta.id.removePrefix("tmdb:").toIntOrNull()
+                        ?: itemId.removePrefix("tmdb:").toIntOrNull()
+                    if (tmdbNumericId == null) {
+                        _uiState.update { it.copy(moreLikeThis = emptyList(), moreLikeThisSource = null) }
+                        return@launch
+                    }
+                    val contentType = resolveTmdbContentType(meta)
+                    val kind = when (contentType) {
+                        ContentType.SERIES, ContentType.TV -> "tv"
+                        else -> "movie"
+                    }
+                    runCatching {
+                        recoMetadataService.fetchSimilar(kind, tmdbNumericId) ?: emptyList()
+                    }.getOrElse {
+                        Log.w(TAG, "Failed to load reco similar titles for ${meta.id}: ${it.message}")
                         emptyList()
                     }
                 }

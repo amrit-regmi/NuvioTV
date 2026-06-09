@@ -52,7 +52,12 @@ class CastDetailViewModel @Inject constructor(
             try {
                 val language = tmdbSettingsDataStore.settings.first().language
                 val detail = if (BuildConfig.RECO_MODE == "private") {
+                    // Try reco engine first; fall back to TMDB if person not in our DB
                     recoMetadataService.fetchPersonDetail(
+                        personId = personId,
+                        preferCrewCredits = preferCrew,
+                        language = language
+                    ) ?: tmdbMetadataService.fetchPersonDetail(
                         personId = personId,
                         preferCrewCredits = preferCrew,
                         language = language

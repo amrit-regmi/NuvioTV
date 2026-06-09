@@ -171,18 +171,20 @@ internal fun HomeViewModel.removeTruncatedRowCacheEntry(key: String) {
 
 internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
     val defaultOrder = buildDefaultCatalogOrder(addons)
+    val recoKeys = recoRowKeys
     val collectionKeys = collectionsCache.map { "collection_${it.id}" }
-    val allAvailable = (defaultOrder + collectionKeys).toSet()
+    val allAvailable = (defaultOrder + recoKeys + collectionKeys).toSet()
 
     if (followAddonsOrderEnabled) {
         // In follow addons order mode, addon catalogs always stay in manifest order.
-        // Collections are positioned based on their relative position in saved order.
+        // Reco rows and collections are positioned based on their relative position in saved order.
         val savedValid = homeCatalogOrderKeys
             .asSequence()
             .filter { it in allAvailable }
             .distinct()
             .toList()
 
+        val recoKeysSet = recoKeys.toSet()
         val collectionKeysSet = collectionKeys.toSet()
 
         if (savedValid.isNotEmpty()) {
@@ -190,7 +192,7 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
             var addonPointer = 0
 
             for (savedKey in savedValid) {
-                if (savedKey in collectionKeysSet) {
+                if (savedKey in collectionKeysSet || savedKey in recoKeysSet) {
                     result.add(savedKey)
                 } else {
                     // Addon catalog - advance manifest pointer to include all up to this one
@@ -214,6 +216,12 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
                 }
                 addonPointer++
             }
+            // Append any reco keys not in saved order
+            for (rk in recoKeys) {
+                if (rk !in result) {
+                    result.add(rk)
+                }
+            }
             // Append any collections not in saved order
             for (ck in collectionKeys) {
                 if (ck !in result) {
@@ -230,10 +238,10 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
                 catalogOrder.addAll(normalized)
             }
         } else {
-            // No saved order - manifest order + collections at end
+            // No saved order - manifest order + reco + collections at end
             synchronized(catalogStateLock) {
                 catalogOrder.clear()
-                catalogOrder.addAll(defaultOrder + collectionKeys)
+                catalogOrder.addAll(defaultOrder + recoKeys + collectionKeys)
             }
         }
     } else {
@@ -245,8 +253,9 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
 
         val savedSet = savedValid.toSet()
         val unsavedCatalogs = defaultOrder.filterNot { it in savedSet }
+        val unsavedReco = recoKeys.filterNot { it in savedSet }
         val unsavedCollections = collectionKeys.filterNot { it in savedSet }
-        val mergedOrder = savedValid + unsavedCatalogs + unsavedCollections
+        val mergedOrder = savedValid + unsavedCatalogs + unsavedReco + unsavedCollections
 
         synchronized(catalogStateLock) {
             catalogOrder.clear()
