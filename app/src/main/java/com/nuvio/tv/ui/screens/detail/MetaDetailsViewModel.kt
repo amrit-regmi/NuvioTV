@@ -951,6 +951,27 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun loadExistingRating(meta: Meta) {
         viewModelScope.launch {
+            if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
+                val kind = when {
+                    meta.apiType.equals("movie", ignoreCase = true) -> "movie"
+                    meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) -> "tv"
+                    else -> null
+                }
+                val tmdbNumericId: Int? = run {
+                    val parsed = parseContentIds(meta.id)
+                    parsed.tmdb ?: parseContentIds(itemId).tmdb
+                        ?: tmdbService.ensureTmdbId(meta.id, meta.apiType)?.toIntOrNull()
+                        ?: tmdbService.ensureTmdbId(itemId, itemType)?.toIntOrNull()
+                }
+                if (kind != null && tmdbNumericId != null) {
+                    val existingStars = recoRatingService.fetchExistingRating(tmdbNumericId, kind)
+                    if (existingStars != null) {
+                        _uiState.update { it.copy(userRating = existingStars, ratingPickerDefault = existingStars, isRatingLoaded = true) }
+                        return@launch
+                    }
+                }
+            }
+            // Fallback: load from Trakt (existing behavior)
             val ids = buildTraktIdsForMeta(meta)
             val item = when {
                 meta.apiType.equals("movie", ignoreCase = true) ->
