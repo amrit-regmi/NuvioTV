@@ -7,6 +7,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -91,7 +94,7 @@ class RecommendationRepository @Inject constructor(
                     .post(ByteArray(0).toRequestBody())
                     .build()
                 val body = httpClient.newCall(request).execute().use { it.body?.string() ?: "" }
-                json.decodeFromString<Map<String, String>>(body)["url"]
+                Json.parseToJsonElement(body).jsonObject["url"]?.jsonPrimitive?.contentOrNull
             }.getOrNull()
         }
 }
