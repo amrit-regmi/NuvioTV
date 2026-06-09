@@ -173,45 +173,49 @@ class StreamScreenViewModel @Inject constructor(
         val newGroups = groups.filter { it.addonName !in badgedAddonNames }
         if (newGroups.isEmpty()) return
 
-        streamBadgePresentationRequestId += 1
-        val requestId = streamBadgePresentationRequestId
+        // Don't cancel a running job — let it finish its current addons.
+        // After it completes, it will check for any new addons that arrived.
+        if (streamBadgePresentationJob?.isActive == true) return
+
         streamBadgePresentationJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-            // Process in chunks of 5 streams, emitting after each chunk
-            val allNewStreams = newGroups.flatMap { it.streams }
-            val chunks = allNewStreams.chunked(5)
-            for (chunk in chunks) {
-                ensureActive()
-                if (requestId != streamBadgePresentationRequestId) return@launch
-                val chunkGroup = AddonStreams(addonName = "", addonLogo = null, streams = chunk)
-                val badgedChunk = streamBadgePresentation.apply(listOf(chunkGroup))
-                    .firstOrNull()?.streams ?: chunk
-                ensureActive()
-                if (requestId != streamBadgePresentationRequestId) return@launch
-                val badgedByKey = badgedChunk.associateBy { it.badgeMergeKey() }
-                updateUiStateIfChanged { state ->
-                    val updatedAddonStreams = state.addonStreams.map { group ->
-                        group.copy(
-                            streams = group.streams.map { stream ->
-                                badgedByKey[stream.badgeMergeKey()] ?: stream
-                            }
+            var pending = newGroups
+            while (pending.isNotEmpty()) {
+                val allNewStreams = pending.flatMap { it.streams }
+                val chunks = allNewStreams.chunked(5)
+                for (chunk in chunks) {
+                    ensureActive()
+                    val chunkGroup = AddonStreams(addonName = "", addonLogo = null, streams = chunk)
+                    val badgedChunk = streamBadgePresentation.apply(listOf(chunkGroup))
+                        .firstOrNull()?.streams ?: chunk
+                    ensureActive()
+                    val badgedByKey = badgedChunk.associateBy { it.badgeMergeKey() }
+                    updateUiStateIfChanged { state ->
+                        val updatedAddonStreams = state.addonStreams.map { group ->
+                            group.copy(
+                                streams = group.streams.map { stream ->
+                                    badgedByKey[stream.badgeMergeKey()] ?: stream
+                                }
+                            )
+                        }
+                        val updatedAllStreams = updatedAddonStreams.flatMap { it.streams }
+                        val currentFilter = state.selectedAddonFilter
+                        val filteredStreams = if (currentFilter == null) {
+                            updatedAllStreams
+                        } else {
+                            updatedAllStreams.filter { it.addonName == currentFilter }
+                        }
+                        state.copy(
+                            addonStreams = updatedAddonStreams,
+                            allStreams = updatedAllStreams,
+                            filteredStreams = filteredStreams
                         )
                     }
-                    val updatedAllStreams = updatedAddonStreams.flatMap { it.streams }
-                    val currentFilter = state.selectedAddonFilter
-                    val filteredStreams = if (currentFilter == null) {
-                        updatedAllStreams
-                    } else {
-                        updatedAllStreams.filter { it.addonName == currentFilter }
-                    }
-                    state.copy(
-                        addonStreams = updatedAddonStreams,
-                        allStreams = updatedAllStreams,
-                        filteredStreams = filteredStreams
-                    )
                 }
-                // Track which addon names were covered by this chunk
-                val coveredAddons = chunk.map { it.addonName }.toSet()
-                badgedAddonNames = badgedAddonNames + coveredAddons
+                // Mark processed addons as done
+                badgedAddonNames = badgedAddonNames + pending.map { it.addonName }.toSet()
+                // Check if new addons arrived while we were processing
+                val currentAddons = _uiState.value.addonStreams
+                pending = currentAddons.filter { it.addonName !in badgedAddonNames }
             }
         }
     }
