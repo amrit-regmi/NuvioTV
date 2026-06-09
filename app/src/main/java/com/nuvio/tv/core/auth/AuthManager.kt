@@ -360,7 +360,7 @@ class AuthManager @Inject constructor(
                     responseBody
                 }
             }
-            val result = json.decodeFromString<TvLoginExchangeResult>(body)
+            val result = json.decodeFromString<List<TvLoginExchangeResult>>(body).first()
             auth.importAuthToken(result.accessToken, result.refreshToken)
             Result.success(Unit)
         } catch (e: Exception) {
