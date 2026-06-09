@@ -136,6 +136,7 @@ android {
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_EXTERNAL_TRAILERS_ENABLED", "true")
+            buildConfigField("String", "RECO_MODE", "\"private\"")
         }
         create("playstore") {
             dimension = "distribution"
@@ -144,6 +145,7 @@ android {
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "false")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "false")
             buildConfigField("boolean", "FEATURE_EXTERNAL_TRAILERS_ENABLED", "true")
+            buildConfigField("String", "RECO_MODE", "\"open\"")
         }
     }
 

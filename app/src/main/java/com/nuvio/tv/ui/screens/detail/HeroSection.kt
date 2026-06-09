@@ -325,7 +325,10 @@ fun HeroContentSection(
                             )
                         }
 
-                        if (traktAuthenticated && isRatingLoaded && (meta.apiType != "movie" || isMovieWatched)) {
+                        val showRatingButton = (com.nuvio.tv.BuildConfig.RECO_MODE == "private" || traktAuthenticated) &&
+                            isRatingLoaded &&
+                            (meta.apiType != "movie" || isMovieWatched || com.nuvio.tv.BuildConfig.RECO_MODE == "private")
+                        if (showRatingButton) {
                             TraktRatingArea(
                                 userRating = userRating,
                                 showRatingPicker = showRatingPicker,

@@ -94,6 +94,7 @@ class MetaDetailsViewModel @Inject constructor(
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
     private val streamWarmer: StreamWarmer,
     private val traktRatingService: com.nuvio.tv.data.repository.TraktRatingService,
+    private val recoRatingService: com.nuvio.tv.core.reco.RecoRatingService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -390,25 +391,74 @@ class MetaDetailsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _uiState.update { it.copy(isRatingPending = true) }
-            val ids = buildTraktIdsForMeta(meta)
-            val item = when {
-                meta.apiType.equals("movie", ignoreCase = true) ->
-                    com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
-                meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) ->
-                    com.nuvio.tv.data.repository.TraktRatingItem.Show(ids = ids, title = meta.name)
-                else -> null
-            }
-            val result = if (item != null) traktRatingService.submitRating(item, rating) else Result.failure(Exception("Unsupported type"))
-            result.fold(
-                onSuccess = {
-                    _uiState.update { it.copy(isRatingPending = false, userRating = rating, showRatingPicker = false) }
-                    showMessage("Rating saved to Trakt", isError = false)
-                },
-                onFailure = {
-                    _uiState.update { it.copy(isRatingPending = false) }
-                    showMessage("Couldn't save rating", isError = true)
+
+            if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
+                // Resolve TMDB ID for the reco backend
+                val kind = when {
+                    meta.apiType.equals("movie", ignoreCase = true) -> "movie"
+                    meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) -> "tv"
+                    else -> null
                 }
-            )
+                val tmdbNumericId: Int? = run {
+                    val parsed = parseContentIds(meta.id)
+                    parsed.tmdb ?: parseContentIds(itemId).tmdb
+                        ?: tmdbService.ensureTmdbId(meta.id, meta.apiType)?.toIntOrNull()
+                        ?: tmdbService.ensureTmdbId(itemId, itemType)?.toIntOrNull()
+                }
+
+                val recoResult = if (kind != null && tmdbNumericId != null) {
+                    recoRatingService.submitRating(tmdbNumericId, kind, rating)
+                } else {
+                    Result.failure(Exception("Cannot resolve TMDB ID for reco rating"))
+                }
+
+                // Also submit to Trakt if authenticated (secondary target)
+                if (traktAuthenticated) {
+                    val ids = buildTraktIdsForMeta(meta)
+                    val item = when {
+                        meta.apiType.equals("movie", ignoreCase = true) ->
+                            com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
+                        meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) ->
+                            com.nuvio.tv.data.repository.TraktRatingItem.Show(ids = ids, title = meta.name)
+                        else -> null
+                    }
+                    if (item != null) {
+                        runCatching { traktRatingService.submitRating(item, rating) }
+                    }
+                }
+
+                recoResult.fold(
+                    onSuccess = {
+                        _uiState.update { it.copy(isRatingPending = false, userRating = rating, showRatingPicker = false) }
+                        showMessage("Rating saved", isError = false)
+                    },
+                    onFailure = {
+                        _uiState.update { it.copy(isRatingPending = false) }
+                        showMessage("Couldn't save rating", isError = true)
+                    }
+                )
+            } else {
+                // Non-private: submit to Trakt only (existing behavior)
+                val ids = buildTraktIdsForMeta(meta)
+                val item = when {
+                    meta.apiType.equals("movie", ignoreCase = true) ->
+                        com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
+                    meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) ->
+                        com.nuvio.tv.data.repository.TraktRatingItem.Show(ids = ids, title = meta.name)
+                    else -> null
+                }
+                val result = if (item != null) traktRatingService.submitRating(item, rating) else Result.failure(Exception("Unsupported type"))
+                result.fold(
+                    onSuccess = {
+                        _uiState.update { it.copy(isRatingPending = false, userRating = rating, showRatingPicker = false) }
+                        showMessage("Rating saved to Trakt", isError = false)
+                    },
+                    onFailure = {
+                        _uiState.update { it.copy(isRatingPending = false) }
+                        showMessage("Couldn't save rating", isError = true)
+                    }
+                )
+            }
         }
     }
 
@@ -894,7 +944,7 @@ class MetaDetailsViewModel @Inject constructor(
             loadComments(meta)
         }
 
-        if (traktAuthenticated) {
+        if (traktAuthenticated || com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
             loadExistingRating(meta)
         }
     }
