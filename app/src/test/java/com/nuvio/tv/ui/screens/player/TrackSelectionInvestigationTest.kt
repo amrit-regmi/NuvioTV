@@ -423,7 +423,7 @@ class TrackSelectionInvestigationTest {
                                       if (formatSupport == C.FORMAT_EXCEEDS_CAPABILITIES) {
                                           val mime = format.sampleMimeType
                                           val isAvcOrHevc = mime == MimeTypes.VIDEO_H264 || mime == MimeTypes.VIDEO_H265
-                                          val isAtMost1080p = format.width in 1..1920 && format.height in 1..1080
+                                          val isAtMost1080p = format.width <= 1920 && format.height <= 1080
                                           val codecs = format.codecs?.lowercase() ?: ""
                                           val is10Bit = codecs.contains("main10") || codecs.contains("hevc.2") || codecs.contains("hev2")
                                           val isHdr = format.colorInfo?.colorTransfer == C.COLOR_TRANSFER_ST2084

@@ -513,7 +513,6 @@ internal fun PlayerRuntimeController.initializePlayer(
                 AdaptiveTrackSelection.DEFAULT_MIN_DURATION_TO_RETAIN_AFTER_DISCARD_MS,
                 AdaptiveTrackSelection.DEFAULT_BANDWIDTH_FRACTION
             )
-            val isHls = currentStreamMimeType == MimeTypes.APPLICATION_M3U8
             trackSelector = object : DefaultTrackSelector(context, adaptiveTrackSelectionFactory) {
                 override fun selectAllTracks(
                     mappedTrackInfo: MappedTrackInfo,
@@ -521,6 +520,12 @@ internal fun PlayerRuntimeController.initializePlayer(
                     rendererMixedMimeTypeAdaptationSupports: IntArray,
                     params: Parameters
                 ): Array<ExoTrackSelection.Definition?> {
+                    val streamMime = currentStreamMimeType
+                    val isHls = streamMime != null && (
+                        streamMime.equals(MimeTypes.APPLICATION_M3U8, ignoreCase = true) ||
+                        streamMime.lowercase().contains("mpegurl") ||
+                        streamMime.lowercase().contains("m3u8")
+                    )
                     if (isHls) {
                         for (rendererIndex in 0 until mappedTrackInfo.rendererCount) {
                             if (mappedTrackInfo.getRendererType(rendererIndex) == C.TRACK_TYPE_VIDEO) {
@@ -534,7 +539,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                                         if (formatSupport == C.FORMAT_EXCEEDS_CAPABILITIES) {
                                             val mime = format.sampleMimeType
                                             val isAvcOrHevc = mime == MimeTypes.VIDEO_H264 || mime == MimeTypes.VIDEO_H265
-                                            val isAtMost1080p = format.width in 1..1920 && format.height in 1..1080
+                                            val isAtMost1080p = format.width <= 1920 && format.height <= 1080
                                             val codecs = format.codecs?.lowercase() ?: ""
                                             val is10Bit = codecs.contains("main10") || codecs.contains("hevc.2") || codecs.contains("hev2")
                                             val isHdr = format.colorInfo?.colorTransfer == C.COLOR_TRANSFER_ST2084
