@@ -27,21 +27,21 @@ internal fun HomeViewModel.observeRecoRows() {
             .collectLatest { account ->
                 val token = authManager.currentAccessToken() ?: return@collectLatest
                 val rows = recommendationRepository.fetchRows(account.userId, token)
-                _recoRows.value = rows.map { it.toCatalogRow() }
+                _recoRows.value = rows.mapIndexed { index, row -> row.toCatalogRow(index) }
                 scheduleUpdateCatalogRows()
                 Log.d("RecoRows", "Fetched ${rows.size} reco rows for ${account.userId}")
             }
     }
 }
 
-private fun RecoRow.toCatalogRow(): CatalogRow {
+private fun RecoRow.toCatalogRow(index: Int = 0): CatalogRow {
     val dominant = items.groupBy { it.kind }.maxByOrNull { it.value.size }?.key ?: "movie"
     val type = if (dominant == "movie") ContentType.MOVIE else ContentType.SERIES
     return CatalogRow(
         addonId = "reco_engine",
         addonName = "For You",
         addonBaseUrl = BuildConfig.RECO_API_BASE_URL,
-        catalogId = reason_type,
+        catalogId = "${reason_type}_$index",
         catalogName = label,
         type = type,
         rawType = dominant,
