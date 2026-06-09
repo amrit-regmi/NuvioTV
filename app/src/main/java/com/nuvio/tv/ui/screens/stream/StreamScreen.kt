@@ -1108,6 +1108,12 @@ private fun StreamCard(
     val streamName = remember(stream) { stream.getDisplayName() }
     val streamDescription = remember(stream) { stream.getDisplayDescription() }
     val hasBadges = stream.badges.isNotEmpty() || (showFileSizeBadges && stream.behaviorHints?.videoSize != null) || reserveBadgeSpace
+
+    // Track whether badges transitioned from empty to non-empty while this
+    // card was composed. If they did, we animate. If the card enters
+    // composition with badges already present (tab switch), no animation.
+    val hadBadgesOnFirstComposition = remember { stream.badges.isNotEmpty() }
+    val shouldAnimateBadges = stream.badges.isNotEmpty() && !hadBadgesOnFirstComposition
     // Pre-upscale: decode at 2× target pixels so the hardware compositor
     // has enough pixel data for smooth edges inside Card RenderNodes.
     val logoDecodeSize = remember(density) {
@@ -1157,7 +1163,8 @@ private fun StreamCard(
                         StreamBadgeChips(
                             badges = stream.badges,
                             fileSizeBytes = stream.behaviorHints?.videoSize,
-                            showFileSizeBadge = showFileSizeBadges
+                            showFileSizeBadge = showFileSizeBadges,
+                            animate = shouldAnimateBadges
                         )
                     } else {
                         Spacer(modifier = Modifier.height(20.dp))
@@ -1187,6 +1194,7 @@ private fun StreamCard(
                             badges = stream.badges,
                             fileSizeBytes = stream.behaviorHints?.videoSize,
                             showFileSizeBadge = showFileSizeBadges,
+                            animate = shouldAnimateBadges,
                             modifier = Modifier.padding(top = NuvioTheme.spacing.xxs)
                         )
                     } else {
