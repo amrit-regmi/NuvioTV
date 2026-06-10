@@ -2,6 +2,9 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import com.nuvio.tv.ui.theme.NuvioTheme
+
+import android.content.Context
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -78,7 +81,6 @@ import com.nuvio.tv.domain.model.DebridStreamSortKey
 import com.nuvio.tv.domain.model.DebridStreamVisualTag
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.screens.addon.QrCodeOverlay
-import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
@@ -119,7 +121,7 @@ fun DebridSettingsContent(
                 LazyColumn(
                     state = state,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 8.dp),
+                    contentPadding = PaddingValues(bottom = NuvioTheme.spacing.sm),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     item(key = "debrid_notice") {
@@ -133,7 +135,7 @@ fun DebridSettingsContent(
                             checked = uiState.canUseCloudLibrary,
                             onToggle = { viewModel.setCloudLibraryEnabled(!uiState.cloudLibraryEnabled) },
                             modifier = Modifier
-                                .padding(top = 2.dp)
+                                .padding(top = NuvioTheme.spacing.xxs)
                                 .then(
                                     if (initialFocusRequester != null) {
                                         Modifier.focusRequester(initialFocusRequester)
@@ -283,8 +285,8 @@ fun DebridSettingsContent(
 
                         item(key = "debrid_per_resolution_limit") {
                             SettingsActionRow(
-                                title = "Per resolution limit",
-                                subtitle = "Cap repeated 2160p, 1080p, 720p results after sorting.",
+                                title = stringResource(R.string.debrid_stream_per_resolution_limit_title),
+                                subtitle = stringResource(R.string.debrid_stream_per_resolution_limit_subtitle),
                                 value = streamMaxResultsLabel(uiState.streamPreferences.maxPerResolution),
                                 onClick = { activeStreamPicker = DebridStreamPicker.MAX_PER_RESOLUTION },
                                 enabled = true
@@ -293,8 +295,8 @@ fun DebridSettingsContent(
 
                         item(key = "debrid_per_quality_limit") {
                             SettingsActionRow(
-                                title = "Per quality limit",
-                                subtitle = "Cap repeated BluRay, WEB-DL, REMUX results after sorting.",
+                                title = stringResource(R.string.debrid_stream_per_quality_limit_title),
+                                subtitle = stringResource(R.string.debrid_stream_per_quality_limit_subtitle),
                                 value = streamMaxResultsLabel(uiState.streamPreferences.maxPerQuality),
                                 onClick = { activeStreamPicker = DebridStreamPicker.MAX_PER_QUALITY },
                                 enabled = true
@@ -303,15 +305,15 @@ fun DebridSettingsContent(
 
                         item(key = "debrid_size_range") {
                             SettingsActionRow(
-                                title = "Size range",
-                                subtitle = "Filter streams by file size.",
-                                value = sizeRangeLabel(uiState.streamPreferences),
+                                title = stringResource(R.string.debrid_stream_size_range_title),
+                                subtitle = stringResource(R.string.debrid_stream_size_range_subtitle),
+                                value = sizeRangeLabel(uiState.streamPreferences, context),
                                 onClick = { activeStreamPicker = DebridStreamPicker.SIZE_RANGE },
                                 enabled = true
                             )
                         }
 
-                        debridRuleRows(uiState.streamPreferences) { picker, title, subtitle, value ->
+                        debridRuleRows(uiState.streamPreferences, context) { picker, title, subtitle, value ->
                             item(key = "debrid_rule_${picker.name}") {
                                 SettingsActionRow(
                                     title = title,
@@ -415,7 +417,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.PREFERRED_RESOLUTIONS -> DebridMultiChoiceDialog(
-            title = "Preferred resolutions",
+            title = stringResource(R.string.debrid_stream_resolutions_preferred),
             selectedValues = uiState.streamPreferences.preferredResolutions,
             values = DebridStreamResolution.defaultOrder,
             label = { it.label },
@@ -426,7 +428,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.REQUIRED_RESOLUTIONS -> DebridMultiChoiceDialog(
-            title = "Required resolutions",
+            title = stringResource(R.string.debrid_stream_resolutions_required),
             selectedValues = uiState.streamPreferences.requiredResolutions,
             values = DebridStreamResolution.defaultOrder,
             label = { it.label },
@@ -437,7 +439,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.EXCLUDED_RESOLUTIONS -> DebridMultiChoiceDialog(
-            title = "Excluded resolutions",
+            title = stringResource(R.string.debrid_stream_resolutions_excluded),
             selectedValues = uiState.streamPreferences.excludedResolutions,
             values = DebridStreamResolution.defaultOrder,
             label = { it.label },
@@ -448,7 +450,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.PREFERRED_QUALITIES -> DebridMultiChoiceDialog(
-            title = "Preferred qualities",
+            title = stringResource(R.string.debrid_stream_qualities_preferred),
             selectedValues = uiState.streamPreferences.preferredQualities,
             values = DebridStreamQuality.defaultOrder,
             label = { it.label },
@@ -459,7 +461,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.REQUIRED_QUALITIES -> DebridMultiChoiceDialog(
-            title = "Required qualities",
+            title = stringResource(R.string.debrid_stream_qualities_required),
             selectedValues = uiState.streamPreferences.requiredQualities,
             values = DebridStreamQuality.defaultOrder,
             label = { it.label },
@@ -470,7 +472,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.EXCLUDED_QUALITIES -> DebridMultiChoiceDialog(
-            title = "Excluded qualities",
+            title = stringResource(R.string.debrid_stream_qualities_excluded),
             selectedValues = uiState.streamPreferences.excludedQualities,
             values = DebridStreamQuality.defaultOrder,
             label = { it.label },
@@ -481,7 +483,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.PREFERRED_VISUAL_TAGS -> DebridMultiChoiceDialog(
-            title = "Preferred visual tags",
+            title = stringResource(R.string.debrid_stream_visual_tags_preferred),
             selectedValues = uiState.streamPreferences.preferredVisualTags,
             values = DebridStreamVisualTag.defaultOrder,
             label = { it.label },
@@ -492,7 +494,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.REQUIRED_VISUAL_TAGS -> DebridMultiChoiceDialog(
-            title = "Required visual tags",
+            title = stringResource(R.string.debrid_stream_visual_tags_required),
             selectedValues = uiState.streamPreferences.requiredVisualTags,
             values = DebridStreamVisualTag.defaultOrder,
             label = { it.label },
@@ -503,7 +505,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.EXCLUDED_VISUAL_TAGS -> DebridMultiChoiceDialog(
-            title = "Excluded visual tags",
+            title = stringResource(R.string.debrid_stream_visual_tags_excluded),
             selectedValues = uiState.streamPreferences.excludedVisualTags,
             values = DebridStreamVisualTag.defaultOrder,
             label = { it.label },
@@ -514,7 +516,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.PREFERRED_AUDIO_TAGS -> DebridMultiChoiceDialog(
-            title = "Preferred audio tags",
+            title = stringResource(R.string.debrid_stream_audio_tags_preferred),
             selectedValues = uiState.streamPreferences.preferredAudioTags,
             values = DebridStreamAudioTag.defaultOrder,
             label = { it.label },
@@ -525,7 +527,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.REQUIRED_AUDIO_TAGS -> DebridMultiChoiceDialog(
-            title = "Required audio tags",
+            title = stringResource(R.string.debrid_stream_audio_tags_required),
             selectedValues = uiState.streamPreferences.requiredAudioTags,
             values = DebridStreamAudioTag.defaultOrder,
             label = { it.label },
@@ -536,7 +538,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.EXCLUDED_AUDIO_TAGS -> DebridMultiChoiceDialog(
-            title = "Excluded audio tags",
+            title = stringResource(R.string.debrid_stream_audio_tags_excluded),
             selectedValues = uiState.streamPreferences.excludedAudioTags,
             values = DebridStreamAudioTag.defaultOrder,
             label = { it.label },
@@ -547,7 +549,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.PREFERRED_AUDIO_CHANNELS -> DebridMultiChoiceDialog(
-            title = "Preferred channels",
+            title = stringResource(R.string.debrid_stream_channels_preferred),
             selectedValues = uiState.streamPreferences.preferredAudioChannels,
             values = DebridStreamAudioChannel.defaultOrder,
             label = { it.label },
@@ -558,7 +560,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.REQUIRED_AUDIO_CHANNELS -> DebridMultiChoiceDialog(
-            title = "Required channels",
+            title = stringResource(R.string.debrid_stream_channels_required),
             selectedValues = uiState.streamPreferences.requiredAudioChannels,
             values = DebridStreamAudioChannel.defaultOrder,
             label = { it.label },
@@ -569,7 +571,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.EXCLUDED_AUDIO_CHANNELS -> DebridMultiChoiceDialog(
-            title = "Excluded channels",
+            title = stringResource(R.string.debrid_stream_channels_excluded),
             selectedValues = uiState.streamPreferences.excludedAudioChannels,
             values = DebridStreamAudioChannel.defaultOrder,
             label = { it.label },
@@ -580,7 +582,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.PREFERRED_ENCODES -> DebridMultiChoiceDialog(
-            title = "Preferred encodes",
+            title = stringResource(R.string.debrid_stream_encodes_preferred),
             selectedValues = uiState.streamPreferences.preferredEncodes,
             values = DebridStreamEncode.defaultOrder,
             label = { it.label },
@@ -591,7 +593,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.REQUIRED_ENCODES -> DebridMultiChoiceDialog(
-            title = "Required encodes",
+            title = stringResource(R.string.debrid_stream_encodes_required),
             selectedValues = uiState.streamPreferences.requiredEncodes,
             values = DebridStreamEncode.defaultOrder,
             label = { it.label },
@@ -602,7 +604,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.EXCLUDED_ENCODES -> DebridMultiChoiceDialog(
-            title = "Excluded encodes",
+            title = stringResource(R.string.debrid_stream_encodes_excluded),
             selectedValues = uiState.streamPreferences.excludedEncodes,
             values = DebridStreamEncode.defaultOrder,
             label = { it.label },
@@ -613,7 +615,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.PREFERRED_LANGUAGES -> DebridMultiChoiceDialog(
-            title = "Preferred languages",
+            title = stringResource(R.string.debrid_stream_languages_preferred),
             selectedValues = uiState.streamPreferences.preferredLanguages,
             values = DebridStreamLanguage.entries,
             label = { it.label },
@@ -624,7 +626,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.REQUIRED_LANGUAGES -> DebridMultiChoiceDialog(
-            title = "Required languages",
+            title = stringResource(R.string.debrid_stream_languages_required),
             selectedValues = uiState.streamPreferences.requiredLanguages,
             values = DebridStreamLanguage.entries,
             label = { it.label },
@@ -635,7 +637,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.EXCLUDED_LANGUAGES -> DebridMultiChoiceDialog(
-            title = "Excluded languages",
+            title = stringResource(R.string.debrid_stream_languages_excluded),
             selectedValues = uiState.streamPreferences.excludedLanguages,
             values = DebridStreamLanguage.entries,
             label = { it.label },
@@ -646,7 +648,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.REQUIRED_RELEASE_GROUPS -> DebridTextListDialog(
-            title = "Required release groups",
+            title = stringResource(R.string.debrid_stream_release_groups_required),
             selectedValues = uiState.streamPreferences.requiredReleaseGroups,
             onSelected = { value ->
                 viewModel.setStreamPreferences(uiState.streamPreferences.copy(requiredReleaseGroups = value))
@@ -655,7 +657,7 @@ fun DebridSettingsContent(
             onDismiss = { activeStreamPicker = null }
         )
         DebridStreamPicker.EXCLUDED_RELEASE_GROUPS -> DebridTextListDialog(
-            title = "Excluded release groups",
+            title = stringResource(R.string.debrid_stream_release_groups_excluded),
             selectedValues = uiState.streamPreferences.excludedReleaseGroups,
             onSelected = { value ->
                 viewModel.setStreamPreferences(uiState.streamPreferences.copy(excludedReleaseGroups = value))
@@ -692,10 +694,10 @@ private fun DebridInfoText(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodySmall,
-        color = NuvioColors.TextSecondary,
+        color = NuvioTheme.colors.TextSecondary,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 8.dp)
+            .padding(horizontal = 18.dp, vertical = NuvioTheme.spacing.sm)
     )
 }
 
@@ -704,8 +706,8 @@ private fun DebridSectionLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleSmall,
-        color = NuvioColors.TextPrimary,
-        modifier = Modifier.padding(start = 8.dp, top = 8.dp)
+        color = NuvioTheme.colors.TextPrimary,
+        modifier = Modifier.padding(start = NuvioTheme.spacing.sm, top = NuvioTheme.spacing.sm)
     )
 }
 
@@ -791,7 +793,8 @@ private fun DebridSortModeDialog(
     onDismiss: () -> Unit
 ) {
     val options = listOf(
-        DebridSortProfile.DEFAULT,
+        DebridSortProfile.ORIGINAL,
+        DebridSortProfile.BEST_QUALITY,
         DebridSortProfile.LARGEST,
         DebridSortProfile.SMALLEST,
         DebridSortProfile.AUDIO,
@@ -807,7 +810,7 @@ private fun DebridSortModeDialog(
         onOptionSelected = onSelected,
         onDismiss = onDismiss,
         width = 460.dp,
-        maxHeight = 360.dp
+        maxHeight = 420.dp
     )
 }
 
@@ -817,6 +820,7 @@ private fun DebridSizeRangeDialog(
     onSelected: (Pair<Int, Int>) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val options = listOf(
         0 to 0,
         0 to 5,
@@ -827,9 +831,9 @@ private fun DebridSizeRangeDialog(
     )
 
     SettingsSingleChoiceDialog(
-        title = "Size range",
+        title = stringResource(R.string.debrid_stream_size_range_title),
         options = options.map { value ->
-            SettingsPickerOption(value, sizeRangeLabel(value.first, value.second))
+            SettingsPickerOption(value, sizeRangeLabel(value.first, value.second, context))
         },
         selectedValue = selectedValue,
         onOptionSelected = onSelected,
@@ -883,7 +887,7 @@ private fun DebridTextListDialog(
     NuvioDialog(
         onDismiss = onDismiss,
         title = title,
-        subtitle = "Enter one group per line.",
+        subtitle = stringResource(R.string.debrid_stream_release_groups_input_subtitle),
         width = 560.dp,
         suppressFirstKeyUp = false
     ) {
@@ -891,8 +895,8 @@ private fun DebridTextListDialog(
             onClick = { inputFocusRequester.requestFocus() },
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundElevated,
-                focusedContainerColor = NuvioColors.BackgroundElevated
+                containerColor = NuvioTheme.colors.BackgroundElevated,
+                focusedContainerColor = NuvioTheme.colors.BackgroundElevated
             ),
             shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
             scale = CardDefaults.scale(focusedScale = 1f)
@@ -918,8 +922,8 @@ private fun DebridTextListDialog(
                         },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { submit() }),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioColors.TextPrimary),
-                    cursorBrush = SolidColor(NuvioColors.Primary)
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary),
+                    cursorBrush = SolidColor(NuvioTheme.colors.Primary)
                 )
             }
         }
@@ -947,65 +951,199 @@ private fun streamMaxResultsLabel(value: Int): String {
     }
 }
 
+@Composable
 private fun sortProfileLabel(value: DebridSortProfile): String {
     return when (value) {
-        DebridSortProfile.DEFAULT -> "Default"
-        DebridSortProfile.LARGEST -> "Largest first"
-        DebridSortProfile.SMALLEST -> "Smallest first"
-        DebridSortProfile.AUDIO -> "Best audio first"
-        DebridSortProfile.LANGUAGE -> "Language first"
+        DebridSortProfile.ORIGINAL -> stringResource(R.string.debrid_stream_sort_original)
+        DebridSortProfile.BEST_QUALITY -> stringResource(R.string.debrid_stream_sort_best_quality)
+        DebridSortProfile.LARGEST -> stringResource(R.string.debrid_stream_sort_largest)
+        DebridSortProfile.SMALLEST -> stringResource(R.string.debrid_stream_sort_smallest)
+        DebridSortProfile.AUDIO -> stringResource(R.string.debrid_stream_sort_best_audio)
+        DebridSortProfile.LANGUAGE -> stringResource(R.string.debrid_stream_sort_language)
     }
 }
 
 private fun LazyListScope.debridRuleRows(
     preferences: DebridStreamPreferences,
+    context: Context,
     row: LazyListScope.(DebridStreamPicker, String, String?, String) -> Unit
 ) {
-    row(DebridStreamPicker.PREFERRED_RESOLUTIONS, "Preferred resolutions", "Sort selected resolutions first, in default order.", selectionCountLabel(preferences.preferredResolutions))
-    row(DebridStreamPicker.REQUIRED_RESOLUTIONS, "Required resolutions", "Only show selected resolutions.", selectionCountLabel(preferences.requiredResolutions))
-    row(DebridStreamPicker.EXCLUDED_RESOLUTIONS, "Excluded resolutions", "Hide selected resolutions.", selectionCountLabel(preferences.excludedResolutions))
-    row(DebridStreamPicker.PREFERRED_QUALITIES, "Preferred qualities", "Sort selected qualities first, in default order.", selectionCountLabel(preferences.preferredQualities))
-    row(DebridStreamPicker.REQUIRED_QUALITIES, "Required qualities", "Only show selected source qualities.", selectionCountLabel(preferences.requiredQualities))
-    row(DebridStreamPicker.EXCLUDED_QUALITIES, "Excluded qualities", "Hide selected source qualities.", selectionCountLabel(preferences.excludedQualities))
-    row(DebridStreamPicker.PREFERRED_VISUAL_TAGS, "Preferred visual tags", "Sort DV, HDR, 10bit, IMAX and similar tags.", selectionCountLabel(preferences.preferredVisualTags))
-    row(DebridStreamPicker.REQUIRED_VISUAL_TAGS, "Required visual tags", "Require DV, HDR, 10bit, IMAX, SDR and similar tags.", selectionCountLabel(preferences.requiredVisualTags))
-    row(DebridStreamPicker.EXCLUDED_VISUAL_TAGS, "Excluded visual tags", "Hide DV, HDR, 10bit, 3D and similar tags.", selectionCountLabel(preferences.excludedVisualTags))
-    row(DebridStreamPicker.PREFERRED_AUDIO_TAGS, "Preferred audio tags", "Sort Atmos, TrueHD, DTS, AAC and similar tags.", selectionCountLabel(preferences.preferredAudioTags))
-    row(DebridStreamPicker.REQUIRED_AUDIO_TAGS, "Required audio tags", "Require Atmos, TrueHD, DTS, AAC and similar tags.", selectionCountLabel(preferences.requiredAudioTags))
-    row(DebridStreamPicker.EXCLUDED_AUDIO_TAGS, "Excluded audio tags", "Hide selected audio tags.", selectionCountLabel(preferences.excludedAudioTags))
-    row(DebridStreamPicker.PREFERRED_AUDIO_CHANNELS, "Preferred channels", "Sort preferred channel layouts first.", selectionCountLabel(preferences.preferredAudioChannels))
-    row(DebridStreamPicker.REQUIRED_AUDIO_CHANNELS, "Required channels", "Only show selected channel layouts.", selectionCountLabel(preferences.requiredAudioChannels))
-    row(DebridStreamPicker.EXCLUDED_AUDIO_CHANNELS, "Excluded channels", "Hide selected channel layouts.", selectionCountLabel(preferences.excludedAudioChannels))
-    row(DebridStreamPicker.PREFERRED_ENCODES, "Preferred encodes", "Sort AV1, HEVC, AVC and similar encodes.", selectionCountLabel(preferences.preferredEncodes))
-    row(DebridStreamPicker.REQUIRED_ENCODES, "Required encodes", "Require AV1, HEVC, AVC and similar encodes.", selectionCountLabel(preferences.requiredEncodes))
-    row(DebridStreamPicker.EXCLUDED_ENCODES, "Excluded encodes", "Hide selected encodes.", selectionCountLabel(preferences.excludedEncodes))
-    row(DebridStreamPicker.PREFERRED_LANGUAGES, "Preferred languages", "Sort preferred audio languages first.", selectionCountLabel(preferences.preferredLanguages))
-    row(DebridStreamPicker.REQUIRED_LANGUAGES, "Required languages", "Only show streams with selected languages.", selectionCountLabel(preferences.requiredLanguages))
-    row(DebridStreamPicker.EXCLUDED_LANGUAGES, "Excluded languages", "Hide streams where every language is excluded.", selectionCountLabel(preferences.excludedLanguages))
-    row(DebridStreamPicker.REQUIRED_RELEASE_GROUPS, "Required release groups", "Only show selected release groups.", selectionCountLabel(preferences.requiredReleaseGroups))
-    row(DebridStreamPicker.EXCLUDED_RELEASE_GROUPS, "Excluded release groups", "Hide selected release groups.", selectionCountLabel(preferences.excludedReleaseGroups))
+    row(
+        DebridStreamPicker.PREFERRED_RESOLUTIONS,
+        context.getString(R.string.debrid_picker_preferred_resolutions_title),
+        context.getString(R.string.debrid_picker_preferred_resolutions_subtitle),
+        selectionCountLabel(preferences.preferredResolutions, context)
+    )
+    row(
+        DebridStreamPicker.REQUIRED_RESOLUTIONS,
+        context.getString(R.string.debrid_picker_required_resolutions_title),
+        context.getString(R.string.debrid_picker_required_resolutions_subtitle),
+        selectionCountLabel(preferences.requiredResolutions, context)
+    )
+    row(
+        DebridStreamPicker.EXCLUDED_RESOLUTIONS,
+        context.getString(R.string.debrid_picker_excluded_resolutions_title),
+        context.getString(R.string.debrid_picker_excluded_resolutions_subtitle),
+        selectionCountLabel(preferences.excludedResolutions, context)
+    )
+    row(
+        DebridStreamPicker.PREFERRED_QUALITIES,
+        context.getString(R.string.debrid_picker_preferred_qualities_title),
+        context.getString(R.string.debrid_picker_preferred_qualities_subtitle),
+        selectionCountLabel(preferences.preferredQualities, context)
+    )
+    row(
+        DebridStreamPicker.REQUIRED_QUALITIES,
+        context.getString(R.string.debrid_picker_required_qualities_title),
+        context.getString(R.string.debrid_picker_required_qualities_subtitle),
+        selectionCountLabel(preferences.requiredQualities, context)
+    )
+    row(
+        DebridStreamPicker.EXCLUDED_QUALITIES,
+        context.getString(R.string.debrid_picker_excluded_qualities_title),
+        context.getString(R.string.debrid_picker_excluded_qualities_subtitle),
+        selectionCountLabel(preferences.excludedQualities, context)
+    )
+    row(
+        DebridStreamPicker.PREFERRED_VISUAL_TAGS,
+        context.getString(R.string.debrid_picker_preferred_visual_tags_title),
+        context.getString(R.string.debrid_picker_preferred_visual_tags_subtitle),
+        selectionCountLabel(preferences.preferredVisualTags, context)
+    )
+    row(
+        DebridStreamPicker.REQUIRED_VISUAL_TAGS,
+        context.getString(R.string.debrid_picker_required_visual_tags_title),
+        context.getString(R.string.debrid_picker_required_visual_tags_subtitle),
+        selectionCountLabel(preferences.requiredVisualTags, context)
+    )
+    row(
+        DebridStreamPicker.EXCLUDED_VISUAL_TAGS,
+        context.getString(R.string.debrid_picker_excluded_visual_tags_title),
+        context.getString(R.string.debrid_picker_excluded_visual_tags_subtitle),
+        selectionCountLabel(preferences.excludedVisualTags, context)
+    )
+    row(
+        DebridStreamPicker.PREFERRED_AUDIO_TAGS,
+        context.getString(R.string.debrid_picker_preferred_audio_tags_title),
+        context.getString(R.string.debrid_picker_preferred_audio_tags_subtitle),
+        selectionCountLabel(preferences.preferredAudioTags, context)
+    )
+    row(
+        DebridStreamPicker.REQUIRED_AUDIO_TAGS,
+        context.getString(R.string.debrid_picker_required_audio_tags_title),
+        context.getString(R.string.debrid_picker_required_audio_tags_subtitle),
+        selectionCountLabel(preferences.requiredAudioTags, context)
+    )
+    row(
+        DebridStreamPicker.EXCLUDED_AUDIO_TAGS,
+        context.getString(R.string.debrid_picker_excluded_audio_tags_title),
+        context.getString(R.string.debrid_picker_excluded_audio_tags_subtitle),
+        selectionCountLabel(preferences.excludedAudioTags, context)
+    )
+    row(
+        DebridStreamPicker.PREFERRED_AUDIO_CHANNELS,
+        context.getString(R.string.debrid_picker_preferred_audio_channels_title),
+        context.getString(R.string.debrid_picker_preferred_audio_channels_subtitle),
+        selectionCountLabel(preferences.preferredAudioChannels, context)
+    )
+    row(
+        DebridStreamPicker.REQUIRED_AUDIO_CHANNELS,
+        context.getString(R.string.debrid_picker_required_audio_channels_title),
+        context.getString(R.string.debrid_picker_required_audio_channels_subtitle),
+        selectionCountLabel(preferences.requiredAudioChannels, context)
+    )
+    row(
+        DebridStreamPicker.EXCLUDED_AUDIO_CHANNELS,
+        context.getString(R.string.debrid_picker_excluded_audio_channels_title),
+        context.getString(R.string.debrid_picker_excluded_audio_channels_subtitle),
+        selectionCountLabel(preferences.excludedAudioChannels, context)
+    )
+    row(
+        DebridStreamPicker.PREFERRED_ENCODES,
+        context.getString(R.string.debrid_picker_preferred_encodes_title),
+        context.getString(R.string.debrid_picker_preferred_encodes_subtitle),
+        selectionCountLabel(preferences.preferredEncodes, context)
+    )
+    row(
+        DebridStreamPicker.REQUIRED_ENCODES,
+        context.getString(R.string.debrid_picker_required_encodes_title),
+        context.getString(R.string.debrid_picker_required_encodes_subtitle),
+        selectionCountLabel(preferences.requiredEncodes, context)
+    )
+    row(
+        DebridStreamPicker.EXCLUDED_ENCODES,
+        context.getString(R.string.debrid_picker_excluded_encodes_title),
+        context.getString(R.string.debrid_picker_excluded_encodes_subtitle),
+        selectionCountLabel(preferences.excludedEncodes, context)
+    )
+    row(
+        DebridStreamPicker.PREFERRED_LANGUAGES,
+        context.getString(R.string.debrid_picker_preferred_languages_title),
+        context.getString(R.string.debrid_picker_preferred_languages_subtitle),
+        selectionCountLabel(preferences.preferredLanguages, context)
+    )
+    row(
+        DebridStreamPicker.REQUIRED_LANGUAGES,
+        context.getString(R.string.debrid_picker_required_languages_title),
+        context.getString(R.string.debrid_picker_required_languages_subtitle),
+        selectionCountLabel(preferences.requiredLanguages, context)
+    )
+    row(
+        DebridStreamPicker.EXCLUDED_LANGUAGES,
+        context.getString(R.string.debrid_picker_excluded_languages_title),
+        context.getString(R.string.debrid_picker_excluded_languages_subtitle),
+        selectionCountLabel(preferences.excludedLanguages, context)
+    )
+    row(
+        DebridStreamPicker.REQUIRED_RELEASE_GROUPS,
+        context.getString(R.string.debrid_picker_required_release_groups_title),
+        context.getString(R.string.debrid_picker_required_release_groups_subtitle),
+        selectionCountLabel(preferences.requiredReleaseGroups, context)
+    )
+    row(
+        DebridStreamPicker.EXCLUDED_RELEASE_GROUPS,
+        context.getString(R.string.debrid_picker_excluded_release_groups_title),
+        context.getString(R.string.debrid_picker_excluded_release_groups_subtitle),
+        selectionCountLabel(preferences.excludedReleaseGroups, context)
+    )
 }
 
-private fun selectionCountLabel(values: List<*>): String {
-    return if (values.isEmpty()) "Any" else "${values.size} selected"
+private fun selectionCountLabel(values: List<*>, context: Context): String {
+    return if (values.isEmpty()) {
+        context.getString(R.string.debrid_selection_count_any)
+    } else {
+        context.resources.getQuantityString(
+            R.plurals.debrid_selection_count_value,
+            values.size,
+            values.size
+        )
+    }
 }
 
-private fun sizeRangeLabel(preferences: DebridStreamPreferences): String {
-    return sizeRangeLabel(preferences.sizeMinGb, preferences.sizeMaxGb)
+private fun sizeRangeLabel(preferences: DebridStreamPreferences, context: Context): String {
+    return sizeRangeLabel(preferences.sizeMinGb, preferences.sizeMaxGb, context)
 }
 
-private fun sizeRangeLabel(minGb: Int, maxGb: Int): String {
+private fun sizeRangeLabel(minGb: Int, maxGb: Int, context: Context): String {
     return when {
-        minGb <= 0 && maxGb <= 0 -> "Any"
-        minGb <= 0 -> "Up to ${maxGb}GB"
-        maxGb <= 0 -> "${minGb}GB+"
-        else -> "${minGb}-${maxGb}GB"
+        minGb <= 0 && maxGb <= 0 -> context.getString(R.string.debrid_size_range_any)
+        minGb <= 0 -> context.getString(R.string.debrid_size_range_up_to, maxGb)
+        maxGb <= 0 -> context.getString(R.string.debrid_size_range_min_plus, minGb)
+        else -> context.getString(R.string.debrid_size_range_min_max, minGb, maxGb)
     }
 }
 
 private fun sortProfileFor(criteria: List<DebridStreamSortCriterion>): DebridSortProfile {
     val normalized = criteria.map { it.key to it.direction }
+    val bestQuality = DebridStreamSortCriterion.defaultOrder.map { it.key to it.direction }
+    val legacyQuality = listOf(
+        DebridStreamSortKey.RESOLUTION to DebridStreamSortDirection.DESC,
+        DebridStreamSortKey.QUALITY to DebridStreamSortDirection.DESC,
+        DebridStreamSortKey.SIZE to DebridStreamSortDirection.DESC
+    )
     return when {
+        normalized.isEmpty() -> DebridSortProfile.ORIGINAL
+        normalized == bestQuality || normalized == legacyQuality -> DebridSortProfile.BEST_QUALITY
         normalized == listOf(DebridStreamSortKey.SIZE to DebridStreamSortDirection.DESC) -> DebridSortProfile.LARGEST
         normalized == listOf(DebridStreamSortKey.SIZE to DebridStreamSortDirection.ASC) -> DebridSortProfile.SMALLEST
         normalized.take(2) == listOf(
@@ -1013,17 +1151,19 @@ private fun sortProfileFor(criteria: List<DebridStreamSortCriterion>): DebridSor
             DebridStreamSortKey.AUDIO_CHANNEL to DebridStreamSortDirection.DESC
         ) -> DebridSortProfile.AUDIO
         normalized.firstOrNull() == DebridStreamSortKey.LANGUAGE to DebridStreamSortDirection.DESC -> DebridSortProfile.LANGUAGE
-        else -> DebridSortProfile.DEFAULT
+        else -> DebridSortProfile.BEST_QUALITY
     }
 }
 
+@Composable
 private fun sortProfileLabel(criteria: List<DebridStreamSortCriterion>): String {
     return sortProfileLabel(sortProfileFor(criteria))
 }
 
 private fun sortCriteriaForProfile(profile: DebridSortProfile): List<DebridStreamSortCriterion> {
     return when (profile) {
-        DebridSortProfile.DEFAULT -> DebridStreamSortCriterion.defaultOrder
+        DebridSortProfile.ORIGINAL -> DebridStreamSortCriterion.originalOrder
+        DebridSortProfile.BEST_QUALITY -> DebridStreamSortCriterion.defaultOrder
         DebridSortProfile.LARGEST -> listOf(DebridStreamSortCriterion(DebridStreamSortKey.SIZE, DebridStreamSortDirection.DESC))
         DebridSortProfile.SMALLEST -> listOf(DebridStreamSortCriterion(DebridStreamSortKey.SIZE, DebridStreamSortDirection.ASC))
         DebridSortProfile.AUDIO -> listOf(
@@ -1043,7 +1183,8 @@ private fun sortCriteriaForProfile(profile: DebridSortProfile): List<DebridStrea
 }
 
 private enum class DebridSortProfile {
-    DEFAULT,
+    ORIGINAL,
+    BEST_QUALITY,
     LARGEST,
     SMALLEST,
     AUDIO,
@@ -1155,21 +1296,21 @@ private fun DebridDeviceAuthDialog(
             Text(
                 text = stringResource(R.string.debrid_device_auth_connected, provider.displayName),
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary,
+                color = NuvioTheme.colors.TextSecondary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
         } else if (isStarting) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                CircularProgressIndicator(strokeWidth = NuvioTheme.spacing.xxs, modifier = Modifier.size(18.dp))
                 Text(
                     text = startingMessage,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
+                    color = NuvioTheme.colors.TextSecondary
                 )
             }
         } else {
@@ -1180,7 +1321,7 @@ private fun DebridDeviceAuthDialog(
                 Text(
                     text = stringResource(R.string.debrid_device_auth_instructions),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary,
+                    color = NuvioTheme.colors.TextSecondary,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1203,19 +1344,19 @@ private fun DebridDeviceAuthDialog(
             statusMessage?.let { message ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                    horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isPolling) {
-                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                        CircularProgressIndicator(strokeWidth = NuvioTheme.spacing.xxs, modifier = Modifier.size(NuvioTheme.spacing.lg))
                     }
                     Text(
                         text = message,
                         style = MaterialTheme.typography.bodySmall,
                         color = if (message == failedMessage || message == expiredMessage || message == missingConfigurationMessage) {
-                            NuvioColors.Error
+                            NuvioTheme.colors.Error
                         } else {
-                            NuvioColors.TextSecondary
+                            NuvioTheme.colors.TextSecondary
                         },
                         textAlign = TextAlign.Center
                     )
@@ -1257,19 +1398,19 @@ private fun DebridDeviceAuthCodes(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
     ) {
         Text(
             text = userCode,
             style = MaterialTheme.typography.headlineSmall,
-            color = NuvioColors.TextPrimary,
+            color = NuvioTheme.colors.TextPrimary,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center
         )
         Text(
             text = verificationUrl,
             style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextTertiary,
+            color = NuvioTheme.colors.TextTertiary,
             textAlign = TextAlign.Center
         )
     }
@@ -1344,23 +1485,23 @@ private fun DebridApiKeyDialog(
                 .fillMaxWidth()
                 .onFocusChanged { isInputFocused = it.isFocused || it.hasFocus },
             colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundElevated,
-                focusedContainerColor = NuvioColors.BackgroundElevated
+                containerColor = NuvioTheme.colors.BackgroundElevated,
+                focusedContainerColor = NuvioTheme.colors.BackgroundElevated
             ),
             border = CardDefaults.border(
                 border = Border(
-                    border = BorderStroke(1.dp, NuvioColors.Border),
+                    border = BorderStroke(NuvioTheme.spacing.hairline, NuvioTheme.colors.Border),
                     shape = RoundedCornerShape(10.dp)
                 ),
                 focusedBorder = Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    border = BorderStroke(NuvioTheme.spacing.xxs, NuvioTheme.colors.FocusRing),
                     shape = RoundedCornerShape(10.dp)
                 )
             ),
             shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
             scale = CardDefaults.scale(focusedScale = 1f)
         ) {
-            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = NuvioTheme.spacing.md)) {
                 BasicTextField(
                     value = value,
                     onValueChange = { value = it },
@@ -1386,16 +1527,16 @@ private fun DebridApiKeyDialog(
                     keyboardActions = KeyboardActions(
                         onDone = { submit() }
                     ),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioColors.TextPrimary),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary),
                     cursorBrush = SolidColor(
-                        if (isInputFocused) NuvioColors.Primary else Color.Transparent
+                        if (isInputFocused) NuvioTheme.colors.Primary else Color.Transparent
                     ),
                     decorationBox = { innerTextField ->
                         if (value.isBlank()) {
                             Text(
                                 text = placeholder,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = NuvioColors.TextTertiary
+                                color = NuvioTheme.colors.TextTertiary
                             )
                         }
                         innerTextField()

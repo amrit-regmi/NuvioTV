@@ -292,9 +292,6 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
                             state.copy(modernHomePresentation = warmStartPresentation)
                         }
                     }
-                    // Yield to allow the UI to render the warm-start rows before
-                    // building the full presentation, reducing jank on gate release.
-                    kotlinx.coroutines.yield()
                 }
 
                 val presentation = withContext(Dispatchers.Default) {
@@ -429,7 +426,10 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
 }
 
 internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
-    if (startupGracePeriodActive) return
+    if (startupGracePeriodActive) {
+        deferredEnrichItem = item
+        return
+    }
     if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return
     if (pendingTmdbEnrichItemId == item.id) return
 

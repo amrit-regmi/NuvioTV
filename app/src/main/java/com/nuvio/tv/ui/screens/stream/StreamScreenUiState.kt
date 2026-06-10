@@ -9,6 +9,8 @@ data class StreamScreenUiState(
     val isLoading: Boolean = true,
     val isDirectAutoPlayFlow: Boolean = false,
     val showDirectAutoPlayOverlay: Boolean = false,
+    val autoPlayDecided: Boolean = false,
+    val externalPlayerOverlayVisible: Boolean = false,
     val directAutoPlayMessage: String? = null,
     val videoId: String = "",
     val contentType: String = "",
@@ -44,4 +46,5 @@ sealed class StreamScreenEvent {
     data object OnAutoPlayConsumed : StreamScreenEvent()
     data object OnRetry : StreamScreenEvent()
     data object OnBackPress : StreamScreenEvent()
+    data object OnResume : StreamScreenEvent()
 }
