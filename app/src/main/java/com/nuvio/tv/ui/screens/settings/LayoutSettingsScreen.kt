@@ -565,15 +565,6 @@ fun LayoutSettingsContent(
                         },
                         onFocused = { focusedSection = LayoutSettingsSection.STREAMS }
                     )
-                    CompactToggleRow(
-                        title = stringResource(R.string.settings_stream_addon_logo_title),
-                        subtitle = stringResource(R.string.settings_stream_addon_logo_description),
-                        checked = streamBadgeUiState.showAddonLogo,
-                        onToggle = {
-                            viewModel.setShowAddonLogo(!streamBadgeUiState.showAddonLogo)
-                        },
-                        onFocused = { focusedSection = LayoutSettingsSection.STREAMS }
-                    )
                     NavigationSettingsItem(
                         icon = Icons.Default.Image,
                         title = stringResource(R.string.settings_stream_badge_position_title),
@@ -586,6 +577,20 @@ fun LayoutSettingsContent(
                         title = stringResource(R.string.settings_stream_badge_urls_title),
                         subtitle = streamBadgeRulesPreview(streamBadgeUiState),
                         onClick = viewModel::startStreamBadgeQrMode,
+                        onFocused = { focusedSection = LayoutSettingsSection.STREAMS }
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_stream_display_section),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = NuvioTheme.colors.TextSecondary
+                    )
+                    CompactToggleRow(
+                        title = stringResource(R.string.settings_stream_addon_logo_title),
+                        subtitle = stringResource(R.string.settings_stream_addon_logo_description),
+                        checked = streamBadgeUiState.showAddonLogo,
+                        onToggle = {
+                            viewModel.setShowAddonLogo(!streamBadgeUiState.showAddonLogo)
+                        },
                         onFocused = { focusedSection = LayoutSettingsSection.STREAMS }
                     )
                 }

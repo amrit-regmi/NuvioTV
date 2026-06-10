@@ -755,7 +755,7 @@ private fun RightStreamSection(
             ) {
                 when {
                     isLoading -> {
-                        LoadingState()
+                        LoadingState(showAddonLogo = showAddonLogo)
                     }
                     error != null -> {
                         ErrorState(
@@ -892,8 +892,8 @@ private fun AddonFilterChips(
 }
 
 @Composable
-private fun LoadingState() {
-    StreamsSkeletonList()
+private fun LoadingState(showAddonLogo: Boolean = true) {
+    StreamsSkeletonList(showAddonLogo = showAddonLogo)
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -1209,28 +1209,30 @@ private fun StreamCard(
                 }
             }
 
-            Column(
-                horizontalAlignment = Alignment.End
-            ) {
-                if (showAddonLogo && addonLogoModel != null) {
-                    AsyncImage(
-                        model = addonLogoModel,
-                        contentDescription = stream.addonName,
-                        modifier = Modifier
-                            .size(NuvioTheme.spacing.xxl)
-                            .clip(RoundedCornerShape(NuvioTheme.radii.xs)),
-                        contentScale = ContentScale.Fit
+            if (showAddonLogo) {
+                Column(
+                    horizontalAlignment = Alignment.End
+                ) {
+                    if (addonLogoModel != null) {
+                        AsyncImage(
+                            model = addonLogoModel,
+                            contentDescription = stream.addonName,
+                            modifier = Modifier
+                                .size(NuvioTheme.spacing.xxl)
+                                .clip(RoundedCornerShape(NuvioTheme.radii.xs)),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+
+                    Text(
+                        text = stream.addonName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = NuvioTheme.extendedColors.textTertiary,
+                        maxLines = 1
                     )
                 }
-
-                Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
-
-                Text(
-                    text = stream.addonName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = NuvioTheme.extendedColors.textTertiary,
-                    maxLines = 1
-                )
             }
         }
     }
