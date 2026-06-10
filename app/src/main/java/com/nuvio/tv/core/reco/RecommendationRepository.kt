@@ -25,6 +25,11 @@ data class RecoItem(
     val title: String,
     val year: Int? = null,
     val poster_path: String? = null,
+    val poster: String? = null,
+    val backdrop: String? = null,
+    val genres: List<String> = emptyList(),
+    val overview: String? = null,
+    val vote_average: Double? = null,
     val score: Double = 0.0,
 )
 

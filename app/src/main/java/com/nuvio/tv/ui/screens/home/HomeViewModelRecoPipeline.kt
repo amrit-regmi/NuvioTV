@@ -75,13 +75,13 @@ private fun RecoItem.toMetaPreview(): MetaPreview {
         type = type,
         rawType = kind,
         name = title,
-        poster = posterUrl,
+        poster = poster ?: posterUrl,
         posterShape = PosterShape.POSTER,
-        background = null,
+        background = backdrop,
         logo = null,
-        description = null,
+        description = overview,
         releaseInfo = year?.toString(),
-        imdbRating = score.takeIf { it > 0.0 }?.toFloat(),
-        genres = emptyList(),
+        imdbRating = vote_average?.toFloat() ?: score.takeIf { it > 0.0 }?.toFloat(),
+        genres = genres,
     )
 }

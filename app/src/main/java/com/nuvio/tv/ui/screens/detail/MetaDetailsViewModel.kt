@@ -1247,9 +1247,16 @@ class MetaDetailsViewModel @Inject constructor(
                 }
 
                 MoreLikeThisSource.RECO -> {
-                    val tmdbNumericId = meta.id.removePrefix("tmdb:").toIntOrNull()
-                        ?: itemId.removePrefix("tmdb:").toIntOrNull()
-                    if (tmdbNumericId == null) {
+                    fun normalizeId(raw: String): String? {
+                        return when {
+                            raw.startsWith("tt", ignoreCase = true) -> raw.lowercase()
+                            raw.startsWith("tmdb:", ignoreCase = true) -> raw.split(":").last().takeIf { it.toIntOrNull() != null }
+                            raw.toIntOrNull() != null -> raw
+                            else -> null
+                        }
+                    }
+                    val normalizedId = normalizeId(meta.id) ?: normalizeId(itemId)
+                    if (normalizedId == null) {
                         _uiState.update { it.copy(moreLikeThis = emptyList(), moreLikeThisSource = null) }
                         return@launch
                     }
@@ -1259,7 +1266,7 @@ class MetaDetailsViewModel @Inject constructor(
                         else -> "movie"
                     }
                     runCatching {
-                        recoMetadataService.fetchSimilar(kind, tmdbNumericId) ?: emptyList()
+                        recoMetadataService.fetchSimilar(kind, normalizedId) ?: emptyList()
                     }.getOrElse {
                         Log.w(TAG, "Failed to load reco similar titles for ${meta.id}: ${it.message}")
                         emptyList()

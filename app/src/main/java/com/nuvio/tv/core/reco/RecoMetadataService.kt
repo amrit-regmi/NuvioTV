@@ -35,10 +35,14 @@ internal data class RecoSimilarItem(
     val tmdb_id: Int?,
     val kind: String?,
     val title: String?,
+    val year: Int?,
     val poster_path: String?,
     val poster: String?,
+    val backdrop: String?,
+    val genres: List<String>?,
+    val overview: String?,
     val vote_average: Double?,
-    val year: Int?
+    val score: Double?,
 )
 
 internal data class RecoSimilarResponse(
@@ -169,35 +173,35 @@ class RecoMetadataService @Inject constructor(
     /**
      * Fetches similar titles from the reco engine.
      * @param kind "movie" or "tv"
-     * @param tmdbId numeric TMDB ID
+     * @param id TMDB numeric ID, IMDB ID (tt...), or bare integer string
      */
-    suspend fun fetchSimilar(kind: String, tmdbId: Int): List<MetaPreview>? = withContext(Dispatchers.IO) {
+    suspend fun fetchSimilar(kind: String, id: String): List<MetaPreview>? = withContext(Dispatchers.IO) {
         try {
-            val body = get("$base/reco/similar/$kind/$tmdbId") ?: return@withContext null
+            val body = get("$base/reco/similar/$kind/$id") ?: return@withContext null
             val resp = parseJson<RecoSimilarResponse>(body) ?: return@withContext null
             resp.items?.mapNotNull { item ->
-                val id = item.tmdb_id ?: return@mapNotNull null
+                val tmdbId = item.tmdb_id ?: return@mapNotNull null
                 val title = item.title ?: return@mapNotNull null
                 val contentType = when (item.kind?.lowercase()) {
                     "tv", "series" -> ContentType.SERIES
                     else -> ContentType.MOVIE
                 }
                 MetaPreview(
-                    id = "tmdb:$id",
+                    id = "tmdb:$tmdbId",
                     type = contentType,
                     name = title,
                     poster = item.poster ?: imageUrl(item.poster_path),
                     posterShape = PosterShape.POSTER,
-                    background = null,
+                    background = item.backdrop,
                     logo = null,
-                    description = null,
+                    description = item.overview,
                     releaseInfo = item.year?.toString(),
                     imdbRating = item.vote_average?.toFloat(),
-                    genres = emptyList()
+                    genres = item.genres ?: emptyList()
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "fetchSimilar failed for $kind/$tmdbId", e)
+            Log.e(TAG, "fetchSimilar failed for $kind/$id", e)
             null
         }
     }
