@@ -89,6 +89,7 @@ class PlayerRuntimeController(
     internal val subtitleWarmer: SubtitleWarmer,
     internal val playerPreWarmer: PlayerPreWarmer,
     internal val streamWarmer: com.nuvio.tv.core.stream.StreamWarmer,
+    internal val streamBadgePresentation: com.nuvio.tv.core.streams.StreamBadgePresentation,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
@@ -220,6 +221,7 @@ class PlayerRuntimeController(
     internal var currentVideoId: String? = videoId
     internal var currentSeason: Int? = initialSeason
     internal var currentEpisode: Int? = initialEpisode
+    @Volatile internal var isTraktCwActive: Boolean = false
     internal var currentEpisodeTitle: String? = initialEpisodeTitle
 
     internal val _uiState = MutableStateFlow(
@@ -290,8 +292,11 @@ class PlayerRuntimeController(
     internal var debridResolveJob: Job? = null
     internal var stillWatchingPromptJob: Job? = null
     internal var sourceStreamsJob: Job? = null
+    internal var sourceBadgeJob: Job? = null
+    internal var sourceBadgedAddonNames: Set<String> = emptySet()
     internal var sourceStreamsScope: kotlinx.coroutines.CoroutineScope? = null
     internal var episodeStreamsScope: kotlinx.coroutines.CoroutineScope? = null
+    internal var episodeBadgeJob: Job? = null
     internal var sourceChipErrorDismissJob: Job? = null
     internal var sourceStreamsCacheRequestKey: String? = null
     internal var sourceStreamsFetchCompleted: Boolean = false
@@ -300,6 +305,7 @@ class PlayerRuntimeController(
 
     internal var lastSavedPosition: Long = 0L
     internal val saveThresholdMs = 5000L
+    internal var hasMarkedCurrentEpisodeCompleted: Boolean = false
     internal var lastKnownDuration: Long = 0L
 
     internal var playbackStartedForParentalGuide = false
@@ -515,6 +521,7 @@ class PlayerRuntimeController(
         observeTorrentSettings()
         observeStreamBadgeSettings()
         observeDeviceLocalAspectMode()
+        scope.launch { isTraktCwActive = watchProgressRepository.isTraktProgressActive() }
     }
 
     private fun observeTorrentSettings() {

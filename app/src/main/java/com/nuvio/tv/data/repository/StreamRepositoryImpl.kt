@@ -8,8 +8,8 @@ import com.nuvio.tv.core.stream.StreamWarmer
 import com.nuvio.tv.core.network.safeApiCall
 import com.nuvio.tv.core.debrid.DebridStreamPresentation
 import com.nuvio.tv.core.debrid.LocalDebridAvailabilityService
-import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.streams.StreamBadgePresentation
+import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.mapper.toDomain
 import com.nuvio.tv.data.remote.api.AddonApi
@@ -295,8 +295,10 @@ class StreamRepositoryImpl @Inject constructor(
     }
 
     private suspend fun presentStreams(result: AddonStreams): AddonStreams {
-        val debridPresented = debridStreamPresentation.apply(listOf(result)).firstOrNull() ?: result
-        return streamBadgePresentation.apply(listOf(debridPresented)).firstOrNull() ?: debridPresented
+        return debridStreamPresentation.apply(
+            groups = listOf(result),
+            includeBadgeMatches = false
+        ).firstOrNull() ?: result
     }
 
     private fun mergeStreams(existing: List<Stream>, incoming: List<Stream>): List<Stream> {

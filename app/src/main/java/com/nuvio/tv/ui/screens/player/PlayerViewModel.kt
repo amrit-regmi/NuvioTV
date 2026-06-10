@@ -68,6 +68,7 @@ class PlayerViewModel @Inject constructor(
     private val subtitleWarmer: SubtitleWarmer,
     private val playerPreWarmer: PlayerPreWarmer,
     private val streamWarmer: StreamWarmer,
+    private val streamBadgePresentation: com.nuvio.tv.core.streams.StreamBadgePresentation,
     private val externalPlaybackTracker: com.nuvio.tv.core.player.ExternalPlaybackTracker,
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     savedStateHandle: SavedStateHandle
@@ -110,6 +111,7 @@ class PlayerViewModel @Inject constructor(
         subtitleWarmer = subtitleWarmer,
         playerPreWarmer = playerPreWarmer,
         streamWarmer = streamWarmer,
+        streamBadgePresentation = streamBadgePresentation,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )

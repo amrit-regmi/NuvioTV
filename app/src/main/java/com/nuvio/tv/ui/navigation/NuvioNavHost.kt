@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.navigation
 
+import com.nuvio.tv.ui.theme.NuvioMotion
+
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -93,7 +95,7 @@ fun NuvioNavHost(
             if (isStreamToPlayer(from, to) && isAutoPlayNav) {
                 EnterTransition.None
             } else {
-                fadeIn(animationSpec = tween(350))
+                fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.medium))
             }
         },
         exitTransition = {
@@ -105,7 +107,7 @@ fun NuvioNavHost(
             if (isStreamToPlayer(from, to) && isAutoPlayNav) {
                 ExitTransition.None
             } else {
-                fadeOut(animationSpec = tween(350))
+                fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.medium))
             }
         },
         popEnterTransition = {
@@ -117,7 +119,7 @@ fun NuvioNavHost(
             if (isPlayerToStream(from, to) && isAutoPlayNav) {
                 EnterTransition.None
             } else {
-                fadeIn(animationSpec = tween(350))
+                fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.medium))
             }
         },
         popExitTransition = {
@@ -129,7 +131,7 @@ fun NuvioNavHost(
             if (isPlayerToStream(from, to) && isAutoPlayNav) {
                 ExitTransition.None
             } else {
-                fadeOut(animationSpec = tween(350))
+                fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.medium))
             }
         }
     ) {
@@ -1032,7 +1034,15 @@ fun NuvioNavHost(
             SearchScreen(
                 viewModel = searchViewModel,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
-                    navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
+                    val heroBackdrop = HeroBackdropState.consumeAndClear()
+                    navController.navigate(
+                        Screen.Detail.createRoute(
+                            itemId = itemId,
+                            itemType = itemType,
+                            addonBaseUrl = addonBaseUrl,
+                            heroBackdropUrl = heroBackdrop
+                        )
+                    )
                 },
                 onNavigateToSeeAll = { catalogId, addonId, type ->
                     navController.navigate(
@@ -1047,7 +1057,15 @@ fun NuvioNavHost(
             DiscoverScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
-                    navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
+                    val heroBackdrop = HeroBackdropState.consumeAndClear()
+                    navController.navigate(
+                        Screen.Detail.createRoute(
+                            itemId = itemId,
+                            itemType = itemType,
+                            addonBaseUrl = addonBaseUrl,
+                            heroBackdropUrl = heroBackdrop
+                        )
+                    )
                 }
             )
         }
