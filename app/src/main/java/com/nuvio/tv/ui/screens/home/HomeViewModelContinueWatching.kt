@@ -1151,7 +1151,7 @@ private fun deduplicateInProgress(items: List<WatchProgress>): List<WatchProgres
 
 private fun shouldTreatAsInProgressForContinueWatching(progress: WatchProgress): Boolean {
     if (progress.isCompleted()) return false
-    if (progress.isInProgress() && progress.progressPercentage >= 0.05f && progress.progressPercentage < 0.90f) return true
+    if (progress.isInProgress() && progress.progressPercentage >= 0.02f) return true
 
     val hasStartedPlayback = progress.position > 0L ||
         progress.progressPercent?.let { it > 0f } == true
