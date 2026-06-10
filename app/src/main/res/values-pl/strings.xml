@@ -2534,6 +2534,9 @@
     <string name="settings_stream_badges_section">Styl Fusion</string>
     <string name="settings_stream_size_badges_title">Znaczniki rozmiaru</string>
     <string name="settings_stream_size_badges_description">Pokazuj znaczniki rozmiaru pliku w wynikach źródeł i panelach odtwarzacza.</string>
+    <string name="settings_stream_addon_logo_title">Logo dodatku</string>
+    <string name="settings_stream_addon_logo_description">Pokazuj logo i nazwę dodatku obok źródeł.</string>
+    <string name="settings_stream_display_section">Wyświetlanie</string>
     <string name="settings_stream_badge_urls_title">Adresy URL znaczników Fusion</string>
     <string name="settings_stream_badge_urls_description">Importuj do %1$d adresów URL ze znacznikami Fusion w formacie JSON. Każdy URL można osobno edytować lub usunąć.</string>
     <string name="settings_stream_badge_urls_search_description">Zarządzaj zaimportowanymi adresami URL znaczników Fusion.</string>
