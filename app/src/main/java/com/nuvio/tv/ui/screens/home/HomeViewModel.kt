@@ -85,6 +85,7 @@ class HomeViewModel @Inject constructor(
     internal val tvRecommendationManager: TvRecommendationManager,
     internal val authManager: AuthManager,
     internal val recommendationRepository: RecommendationRepository,
+    internal val recoMetadataService: com.nuvio.tv.core.reco.RecoMetadataService,
     private val streamWarmer: StreamWarmer
 ) : ViewModel() {
     companion object {

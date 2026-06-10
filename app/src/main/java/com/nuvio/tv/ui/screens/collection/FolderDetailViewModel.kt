@@ -36,6 +36,7 @@ import com.nuvio.tv.ui.screens.home.ModernHomePresentationInput
 import com.nuvio.tv.ui.screens.home.buildModernHomePresentation
 import com.nuvio.tv.ui.screens.home.homeItemStatusKey
 import com.nuvio.tv.domain.repository.CatalogRepository
+import com.nuvio.tv.BuildConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -757,6 +758,20 @@ class FolderDetailViewModel @Inject constructor(
     }
 
     private fun loadTmdbSourceForTab(tabIndex: Int, source: TmdbCollectionSource, page: Int, append: Boolean) {
+        // TMDB API is blocked in private mode; show an empty result rather than an error.
+        if (BuildConfig.RECO_MODE == "private") {
+            _uiState.update { s ->
+                val tabs = s.tabs.toMutableList()
+                val current = tabs.getOrNull(tabIndex)
+                if (current != null) {
+                    tabs[tabIndex] = current.copy(isLoading = false, error = null)
+                }
+                s.copy(tabs = tabs)
+            }
+            rebuildAllTab()
+            rebuildFollowLayoutState()
+            return
+        }
         if (append) {
             _uiState.update { s ->
                 val tabs = s.tabs.toMutableList()

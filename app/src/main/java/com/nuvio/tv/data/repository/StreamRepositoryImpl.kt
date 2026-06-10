@@ -70,16 +70,32 @@ class StreamRepositoryImpl @Inject constructor(
 
         try {
             val addons = addonRepository.getInstalledAddons().first().enabledAddons()
-            
+
+            // If videoId is a raw TMDB ID (e.g. "tmdb:1226863"), resolve it to an IMDB ID so
+            // that Stremio addons whose idPrefixes = ["tt"] (e.g. Torrentio) can match it.
+            val effectiveVideoId: String = if (videoId.startsWith("tmdb:", ignoreCase = true)) {
+                val numericId = videoId.removePrefix("tmdb:").removePrefix("TMDB:").toIntOrNull()
+                val imdbId = numericId?.let { tmdbService.tmdbToImdb(it, type) }
+                if (imdbId != null) {
+                    Log.d(TAG, "Resolved tmdb videoId $videoId -> $imdbId")
+                    imdbId
+                } else {
+                    Log.w(TAG, "Could not resolve tmdb videoId $videoId to IMDB ID, keeping original")
+                    videoId
+                }
+            } else {
+                videoId
+            }
+
             // Filter addons that support streams for this type and id
             val streamAddons = addons.filter { addon ->
-                addon.supportsStreamResource(type, videoId)
+                addon.supportsStreamResource(type, effectiveVideoId)
             }
 
             // Convert IMDB ID to TMDB ID if needed for plugins
-            val tmdbId = tmdbService.ensureTmdbId(videoId, type)
-            Log.d(TAG, "Video ID: $videoId -> TMDB ID: $tmdbId (type: $type)")
-            val pluginRequest = buildPluginRequest(tmdbId, type, videoId)
+            val tmdbId = tmdbService.ensureTmdbId(effectiveVideoId, type)
+            Log.d(TAG, "Video ID: $effectiveVideoId -> TMDB ID: $tmdbId (type: $type)")
+            val pluginRequest = buildPluginRequest(tmdbId, type, effectiveVideoId)
             val attemptedAddonNames = streamAddons.map { it.displayName }
             val attemptedFailures = java.util.Collections.synchronizedList(
                 mutableListOf<StreamAttemptFailure>()
@@ -101,7 +117,7 @@ class StreamRepositoryImpl @Inject constructor(
                 streamAddons.forEach { addon ->
                     launch {
                         try {
-                            val streamsResult = getStreamsFromAddon(addon.baseUrl, type, videoId)
+                            val streamsResult = getStreamsFromAddon(addon.baseUrl, type, effectiveVideoId)
                             when (streamsResult) {
                                 is NetworkResult.Success -> {
                                     if (streamsResult.data.isNotEmpty()) {
@@ -119,7 +135,7 @@ class StreamRepositoryImpl @Inject constructor(
                                         // Stream endpoint returned empty - try inline
                                         // streams from meta response as fallback.
                                         val inlineStreams = fetchInlineStreamsFromMeta(
-                                            addon, type, videoId
+                                            addon, type, effectiveVideoId
                                         )
                                         if (inlineStreams.isNotEmpty()) {
                                             resultChannel.send(
@@ -201,7 +217,7 @@ class StreamRepositoryImpl @Inject constructor(
             if (accumulatedResults.isEmpty()) {
                 val errorMessage = buildAggregateFailureMessage(
                     type = type,
-                    id = videoId,
+                    id = effectiveVideoId,
                     attemptedAddonNames = attemptedAddonNames,
                     failures = attemptedFailures.toList()
                 )

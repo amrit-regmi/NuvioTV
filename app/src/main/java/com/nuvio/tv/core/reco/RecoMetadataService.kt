@@ -82,6 +82,17 @@ class RecoMetadataService @Inject constructor(
     // In-memory cache for person details keyed by personId
     private val personDetailCache = ConcurrentHashMap<Int, PersonDetail>()
 
+    // In-memory cache for reco MetaPreview items keyed by id (e.g. "tmdb:123").
+    // Populated by HomeViewModel when reco rows are fetched; consumed by
+    // MetaDetailsViewModel to render a reco-sourced item without TMDB API access.
+    private val recoPreviewCache = ConcurrentHashMap<String, com.nuvio.tv.domain.model.MetaPreview>()
+
+    fun cacheRepoPreviews(previews: Collection<com.nuvio.tv.domain.model.MetaPreview>) {
+        previews.forEach { recoPreviewCache[it.id] = it }
+    }
+
+    fun getCachedPreview(id: String): com.nuvio.tv.domain.model.MetaPreview? = recoPreviewCache[id]
+
     fun imageUrl(path: String?): String? =
         path?.takeIf { it.isNotBlank() }?.let { "$base/image$it" }
 

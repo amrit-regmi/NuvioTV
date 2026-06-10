@@ -817,6 +817,47 @@ class MetaDetailsViewModel @Inject constructor(
             ?.toIntOrNull()
             ?: return false
         val type = ContentType.fromString(itemType)
+
+        // In private mode TMDB is blocked; try to build a minimal Meta from
+        // the reco preview cache (populated when the home screen fetched reco rows).
+        if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
+            val cached = recoMetadataService.getCachedPreview(itemId)
+            if (cached != null) {
+                val meta = Meta(
+                    id = itemId,
+                    type = type,
+                    rawType = itemType,
+                    name = cached.name,
+                    poster = cached.poster,
+                    posterShape = com.nuvio.tv.domain.model.PosterShape.POSTER,
+                    background = cached.background,
+                    logo = cached.logo,
+                    description = cached.description,
+                    releaseInfo = cached.releaseInfo,
+                    status = null,
+                    imdbRating = cached.imdbRating,
+                    genres = cached.genres,
+                    runtime = null,
+                    director = emptyList(),
+                    writer = emptyList(),
+                    cast = emptyList(),
+                    castMembers = emptyList(),
+                    videos = emptyList(),
+                    productionCompanies = emptyList(),
+                    networks = emptyList(),
+                    ageRating = null,
+                    country = null,
+                    awards = null,
+                    language = null,
+                    links = emptyList(),
+                    trailers = emptyList()
+                )
+                applyMetaWithEnrichment(meta)
+                return true
+            }
+            return false
+        }
+
         val settings = tmdbSettingsDataStore.settings.first()
         val enrichment = tmdbMetadataService.fetchEnrichment(
             tmdbId = tmdbId.toString(),
@@ -873,7 +914,10 @@ class MetaDetailsViewModel @Inject constructor(
             else -> null
         } ?: return raw
 
-        // Use a short timeout so a blocked TMDB API doesn't stall the detail screen.
+        // In private mode TMDB is blocked; skip the conversion entirely and use the
+        // tmdb: ID as-is. In normal mode use a short timeout so a slow TMDB API
+        // doesn't stall the detail screen.
+        if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") return raw
         return kotlinx.coroutines.withTimeoutOrNull(5_000L) {
             tmdbService.tmdbToImdb(tmdbNumericId, itemType)
         }
@@ -1335,6 +1379,11 @@ class MetaDetailsViewModel @Inject constructor(
         collectionJob?.cancel()
         collectionJob = viewModelScope.launch {
             if (!settings.enabled || !settings.useCollections) {
+                _uiState.update { it.copy(collection = emptyList(), collectionName = null) }
+                return@launch
+            }
+            // TMDB collection API is blocked in private mode; skip silently.
+            if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
                 _uiState.update { it.copy(collection = emptyList(), collectionName = null) }
                 return@launch
             }
