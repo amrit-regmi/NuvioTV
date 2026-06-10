@@ -28,34 +28,7 @@ internal fun HomeViewModel.observeRecoRows() {
             .collectLatest { account ->
                 val token = authManager.currentAccessToken() ?: return@collectLatest
                 val rows = recommendationRepository.fetchRows(account.userId, token)
-                val rawCatalogRows = rows.mapIndexed { index, row -> row.toCatalogRow(index) }
-
-                // Merge all actor-affinity rows into a single "More from Your Favourite Artists" row.
-                // Actor rows are identified by a reason_type that contains "actor".
-                val actorReasonTypes = setOf("actor", "watched_actor", "top_actor", "actor_affinity")
-                val actorRows = rawCatalogRows.filter { cr ->
-                    // catalogId is "${reason_type}_$index", so we check if the prefix matches
-                    actorReasonTypes.any { rt -> cr.catalogId.startsWith("${rt}_") }
-                }
-                val nonActorRows = rawCatalogRows.filter { cr ->
-                    actorReasonTypes.none { rt -> cr.catalogId.startsWith("${rt}_") }
-                }
-                val catalogRows = if (actorRows.size > 1) {
-                    // Deduplicate by id, sort by rating desc, build merged row
-                    val mergedItems = actorRows
-                        .flatMap { it.items }
-                        .distinctBy { it.id }
-                        .sortedByDescending { it.imdbRating ?: -1f }
-                    val firstActor = actorRows.first()
-                    val mergedRow = firstActor.copy(
-                        catalogId = "actor_affinity_merged",
-                        catalogName = "More from Your Favourite Artists",
-                        items = mergedItems
-                    )
-                    nonActorRows + mergedRow
-                } else {
-                    rawCatalogRows
-                }
+                val catalogRows = rows.mapIndexed { index, row -> row.toCatalogRow(index) }
                 _recoRows.value = catalogRows
 
                 // Pre-populate the enriched-previews map for reco items so that the hero

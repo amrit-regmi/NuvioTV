@@ -403,7 +403,7 @@ fun ClassicHomeContent(
                 },
             ),
         contentPadding = PaddingValues(top = if (heroVisible) 0.dp else 24.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
         if (heroVisible) {
             item(key = "hero_carousel", contentType = "hero") {
