@@ -382,6 +382,7 @@ object DirectDebridStreamFilter {
         return stream.clientResolve?.stream?.raw?.size
             ?: stream.behaviorHints?.videoSize
             ?: stream.debridCacheStatus?.cachedSize
+            ?: StreamTextSizeParser.sizeBytesFromStreamText(stream)
     }
 
     private fun streamSearchText(stream: Stream): String {
