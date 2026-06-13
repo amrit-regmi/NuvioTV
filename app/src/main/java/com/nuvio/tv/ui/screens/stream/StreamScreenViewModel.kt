@@ -1197,6 +1197,7 @@ class StreamScreenViewModel @Inject constructor(
     /** Set to true when external player is launched, reset on stop. */
     private var externalPlayerLaunched = false
     private var externalPlayerLaunchTimeMs = 0L
+    private var externalOverlayHideJob: kotlinx.coroutines.Job? = null
 
     fun stopExternalPlayerTracking() {
         if (!externalPlayerLaunched) return
@@ -1215,9 +1216,19 @@ class StreamScreenViewModel @Inject constructor(
         updateUiStateIfChanged {
             it.copy(
                 showDirectAutoPlayOverlay = false,
-                externalPlayerOverlayVisible = false,
                 directAutoPlayMessage = null
             )
+        }
+        // Keep the loading cover up for a short grace window after returning, so the tracker's
+        // auto-next loader (or its navigation) can take over seamlessly. Without this the
+        // episode list paints for a frame between this overlay hiding and the auto-next overlay
+        // appearing — the "episodes flash then loading screen" on the way back to Nuvio. If
+        // auto-next fires, navigation replaces this screen before the hide runs; on a plain
+        // user exit the cover simply lingers ~0.7s before the episode list shows.
+        externalOverlayHideJob?.cancel()
+        externalOverlayHideJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(700L)
+            updateUiStateIfChanged { it.copy(externalPlayerOverlayVisible = false) }
         }
     }
 
@@ -1309,6 +1320,7 @@ class StreamScreenViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        externalOverlayHideJob?.cancel()
         streamLoadScope?.cancel()
         streamLoadScope = null
         streamLoadJob = null
@@ -1347,6 +1359,7 @@ class StreamScreenViewModel @Inject constructor(
         autoLaunch: Boolean = false,
         context: android.content.Context
     ) {
+        externalOverlayHideJob?.cancel()
         updateUiStateIfChanged {
             it.copy(
                 showDirectAutoPlayOverlay = true,

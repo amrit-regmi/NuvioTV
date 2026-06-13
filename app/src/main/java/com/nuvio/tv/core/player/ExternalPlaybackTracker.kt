@@ -303,24 +303,101 @@ class ExternalPlaybackTracker @Inject constructor(
             Log.d(TAG, "onActivityResult recovered metadata from disk (process was recreated)")
         }
 
-        if (result != null) {
-            Log.d(TAG, "External player returned: pos=${result.positionMs}ms, dur=${result.durationMs}ms, endedByUser=${result.endedByUser}")
-            saveProgress(metadata, result.positionMs, result.durationMs)
-            // If the episode finished naturally, try to auto-advance to the next one.
-            if (isPlaybackCompleted(result)) {
-                maybeTriggerAutoNextEpisode(metadata)
-            }
-        } else {
+        if (result == null) {
             Log.d(TAG, "External player returned no progress data")
+            clearPersistedMetadata()
+            // On Zidoo, the monitor job handles progress - don't stop it prematurely.
+            if (!ZidooPlayerMonitor.isZidooDevice()) stopTracking()
+            return
+        }
+
+        Log.d(TAG, "External player returned: pos=${result.positionMs}ms, dur=${result.durationMs}ms, endedByUser=${result.endedByUser}")
+
+        // Some players (notably VLC on network streams) return a real position but no usable
+        // duration, so Nuvio can't compute a % and nothing is saved as resumable/watched.
+        // Backfill the duration (saved progress, else episode/movie runtime) off-thread, then
+        // process. Players that DO report a duration keep the synchronous path below unchanged.
+        if ((result.durationMs == null || result.durationMs <= 0L) && result.positionMs > 0L) {
+            scope.launch {
+                val fallback = resolveFallbackDurationMs(metadata)
+                val enriched = if (fallback > 0L) {
+                    Log.d(TAG, "Backfilled missing duration: ${fallback}ms")
+                    result.copy(durationMs = fallback)
+                } else {
+                    result
+                }
+                processResult(metadata, enriched)
+            }
+            return
+        }
+
+        processResult(metadata, result)
+    }
+
+    /** Completion check + save + auto-next + cleanup for a result with a resolved duration. */
+    private fun processResult(metadata: ExternalPlaybackMetadata, result: ExternalPlayerResult) {
+        if (isPlaybackCompleted(result)) {
+            // Mark watched even when the player returns no position/duration (e.g. Just
+            // Player sends only end_by=playback_completion). An explicit 100% forces
+            // WatchProgress.isCompleted(), which makes the repository flag the item watched
+            // (and sync it) regardless of the reported position/duration.
+            saveProgress(metadata, result.positionMs, result.durationMs, explicitPercent = 100f)
+            // Try to auto-advance to the next episode.
+            maybeTriggerAutoNextEpisode(metadata)
+        } else {
+            saveProgress(metadata, result.positionMs, result.durationMs)
         }
 
         // Result consumed — safe to drop the persisted copy now.
         clearPersistedMetadata()
+        stopTracking()
+    }
 
-        // On Zidoo, the monitor job handles progress - don't stop it prematurely
-        if (!ZidooPlayerMonitor.isZidooDevice() || result != null) {
-            stopTracking()
+    /**
+     * Best-effort duration (ms) for a player that returned a position but no usable duration.
+     * Tries the previously-saved duration for this item, then the runtime from meta
+     * (episode runtime for series, top-level runtime for movies). Returns 0 if unknown.
+     */
+    private suspend fun resolveFallbackDurationMs(metadata: ExternalPlaybackMetadata): Long {
+        val existing = currentSavedProgress(metadata)
+        if (existing != null && existing.duration > 0L) return existing.duration
+        return fetchRuntimeMsFromMeta(metadata)
+    }
+
+    private suspend fun currentSavedProgress(metadata: ExternalPlaybackMetadata): WatchProgress? {
+        val flow = if (metadata.season != null && metadata.episode != null) {
+            watchProgressRepository.getEpisodeProgress(metadata.contentId, metadata.season, metadata.episode)
+        } else {
+            watchProgressRepository.getProgress(metadata.contentId)
         }
+        return flow.firstOrNull()
+    }
+
+    private suspend fun fetchRuntimeMsFromMeta(metadata: ExternalPlaybackMetadata): Long {
+        val fetched = withTimeoutOrNull(META_FETCH_TIMEOUT_MS) {
+            metaRepository
+                .getMetaFromAllAddons(type = metadata.contentType, id = metadata.contentId)
+                .first { it !is NetworkResult.Loading }
+        }
+        val meta = (fetched as? NetworkResult.Success)?.data ?: return 0L
+        val season = metadata.season
+        val episode = metadata.episode
+        val minutes: Int? = if (season != null && episode != null) {
+            meta.videos.firstOrNull { it.season == season && it.episode == episode }?.runtime
+                ?: parseRuntimeMinutes(meta.runtime)
+        } else {
+            parseRuntimeMinutes(meta.runtime)
+        }
+        return (minutes ?: 0).toLong() * 60_000L
+    }
+
+    /** Parses "24 min", "120", or "1h 30m" style runtime strings into minutes. */
+    private fun parseRuntimeMinutes(runtime: String?): Int? {
+        if (runtime.isNullOrBlank()) return null
+        val hours = Regex("(\\d+)\\s*h").find(runtime)?.groupValues?.get(1)?.toIntOrNull()
+        val mins = Regex("(\\d+)\\s*m").find(runtime)?.groupValues?.get(1)?.toIntOrNull()
+        if (hours != null || mins != null) return (hours ?: 0) * 60 + (mins ?: 0)
+        return Regex("\\d+").find(runtime)?.value?.toIntOrNull()
     }
 
     // --- Disk persistence for pendingMetadata (survives process death) -------------
@@ -522,7 +599,12 @@ class ExternalPlaybackTracker @Inject constructor(
         }
     }
 
-    private fun saveProgress(metadata: ExternalPlaybackMetadata, positionMs: Long, durationMs: Long?) {
+    private fun saveProgress(
+        metadata: ExternalPlaybackMetadata,
+        positionMs: Long,
+        durationMs: Long?,
+        explicitPercent: Float? = null
+    ) {
         val effectiveDuration = durationMs ?: 0L
 
         scope.launch {
@@ -539,6 +621,7 @@ class ExternalPlaybackTracker @Inject constructor(
                 episodeTitle = metadata.episodeTitle,
                 position = positionMs,
                 duration = effectiveDuration,
+                progressPercent = explicitPercent,
                 lastWatched = System.currentTimeMillis()
             )
             Log.d(TAG, "Saving progress: pos=${positionMs}ms, dur=${effectiveDuration}ms, " +

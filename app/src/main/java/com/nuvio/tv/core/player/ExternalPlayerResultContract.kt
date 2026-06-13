@@ -68,6 +68,7 @@ class ExternalPlayerResultContract : ActivityResultContract<ExternalPlayerInput,
             // Resume position — supported by MX Player, VLC, Just Player, mpv-android, Vimu
             if (input.resumePositionMs > 0L) {
                 putExtra("position", input.resumePositionMs.toInt())  // MX Player / Just Player / mpv (Int ms)
+                putExtra("extra_position", input.resumePositionMs)    // VLC (Long ms)
                 putExtra("startfrom", input.resumePositionMs.toInt()) // Vimu Player (Int ms)
                 putExtra("forceresume", true)                         // Vimu: enable resume for network streams
                 putExtra("from_start", false)                         // VLC: don't force start from beginning
@@ -126,47 +127,68 @@ class ExternalPlayerResultContract : ActivityResultContract<ExternalPlayerInput,
         android.util.Log.d("ExtPlayerContract", "parseResult: resultCode=$resultCode, intent=$intent, extras=${intent?.extras?.keySet()?.toList()}")
         val data = intent ?: return null
 
-        val position = parsePosition(data) ?: return null
+        val position = parsePosition(data)
         val duration = parseDuration(data)
-        val endedByUser = parseEndReason(data)
+        // MX Player / Just Player / mpvNova report the end reason here (vanilla mpv-android and
+        // VLC do not).
+        val endBy = data.getStringExtra("end_by")
+        val completedByEndReason = endBy == "playback_completion"
+
+        // Vanilla mpv-android (is.xyz.mpv) includes a position only on a back-press exit; when a
+        // started playback reaches EOF it returns its result action with RESULT_OK and NO extras
+        // at all (no position, duration, or end_by). Treat that exact shape as a completion so it
+        // still auto-advances + marks watched. mpvNova (the fork) sends full data and never hits
+        // this branch.
+        val mpvFinishedWithNoData = resultCode == android.app.Activity.RESULT_OK &&
+            data.action == "is.xyz.mpv.MPVActivity.result" &&
+            position == null && duration == null && endBy == null
+
+        // Players that signal completion via end_by often reset the returned position to 0 at
+        // EOF — don't discard those, or the episode never marks watched / auto-advances. Only
+        // bail when there is genuinely nothing to act on: no position AND no completion signal.
+        if (position == null && !completedByEndReason && !mpvFinishedWithNoData) {
+            android.util.Log.d("ExtPlayerContract", "parseResult: no position and no completion signal; dropping")
+            return null
+        }
+
+        // On a bare completion signal with no/zero position, report the end position so the
+        // 90%-of-duration completion check passes and progress is saved as watched (not 0%).
+        val effectivePosition = position ?: duration ?: 0L
+        // Only an explicit "playback_completion" or the mpv EOF shape counts as a natural end.
+        // Absent end_by (VLC/Vimu) stays endedByUser=true and relies on the 90% rule, so a
+        // genuine mid-video user exit is NOT treated as a completion.
+        val endedByUser = !mpvFinishedWithNoData && endBy != "playback_completion"
+
         android.util.Log.d(
             "ExtPlayerContract",
-            "parseResult parsed position=${position}ms, duration=${duration}ms, " +
-                "end_by=${data.getStringExtra("end_by")}; endedByUser=$endedByUser"
+            "parseResult parsed position=${effectivePosition}ms, duration=${duration}ms, " +
+                "end_by=$endBy; endedByUser=$endedByUser"
         )
 
         return ExternalPlayerResult(
-            positionMs = position,
+            positionMs = effectivePosition,
             durationMs = duration,
             endedByUser = endedByUser
         )
     }
 
-    private fun parsePosition(data: Intent): Long? {
-        // VLC uses Long extras
-        val vlcPosition = data.getLongExtra("extra_position", -1L)
-        if (vlcPosition > 0) return vlcPosition
+    // Robust against key + type variants across players:
+    // - VLC: extra_position (Long)
+    // - MX Player / Just Player / mpv-android / Nova: position (Int)
+    private fun parsePosition(data: Intent): Long? =
+        firstPositiveExtra(data, "extra_position", "position")
 
-        // MX Player / Just Player / mpv use Int extras
-        val mxPosition = data.getIntExtra("position", -1)
-        if (mxPosition > 0) return mxPosition.toLong()
+    private fun parseDuration(data: Intent): Long? =
+        firstPositiveExtra(data, "extra_duration", "duration")
 
+    /** Reads the first key that holds a positive Long or Int value, trying both types. */
+    private fun firstPositiveExtra(data: Intent, vararg keys: String): Long? {
+        for (key in keys) {
+            val asLong = data.getLongExtra(key, -1L)
+            if (asLong > 0) return asLong
+            val asInt = data.getIntExtra(key, -1)
+            if (asInt > 0) return asInt.toLong()
+        }
         return null
-    }
-
-    private fun parseDuration(data: Intent): Long? {
-        val vlcDuration = data.getLongExtra("extra_duration", -1L)
-        if (vlcDuration > 0) return vlcDuration
-
-        val mxDuration = data.getIntExtra("duration", -1)
-        if (mxDuration > 0) return mxDuration.toLong()
-
-        return null
-    }
-
-    private fun parseEndReason(data: Intent): Boolean {
-        // MX Player returns "end_by" with values "user" or "playback_completion"
-        val endBy = data.getStringExtra("end_by")
-        return endBy != "playback_completion"
     }
 }
