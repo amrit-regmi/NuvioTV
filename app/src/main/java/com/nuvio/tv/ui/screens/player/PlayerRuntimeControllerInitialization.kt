@@ -1975,7 +1975,12 @@ private fun buildStableAudioCapabilities(context: Context, forceOpticalPassthrou
             }
         }
     }
-    return AudioCapabilities(supportedEncodings.toIntArray(), detected.maxChannelCount)
+    val maxChannelCount = if (forceOpticalPassthrough) {
+        maxOf(detected.maxChannelCount, 8)
+    } else {
+        detected.maxChannelCount
+    }
+    return AudioCapabilities(supportedEncodings.toIntArray(), maxChannelCount)
 }
 
 private class SafeBandwidthMeter(
