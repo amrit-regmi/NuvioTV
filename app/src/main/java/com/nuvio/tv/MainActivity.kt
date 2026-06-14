@@ -1021,10 +1021,7 @@ private fun LegacySidebarScaffold(
                                 val profileLabelStart = 60.dp
                                 val profileGapAfterAvatar =
                                     (profileLabelStart - profileLeadingInset - profileAvatarSize).coerceAtLeast(NuvioTheme.spacing.none)
-                                val profileBgColor by animateColorAsState(
-                                    targetValue = if (isProfileFocused) NuvioTheme.colors.FocusBackground else Color.Transparent,
-                                    label = "legacyProfileItemBg"
-                                )
+                                val profileBgColor = if (isProfileFocused) NuvioTheme.colors.FocusBackground else Color.Transparent
                                 Box(
                                     modifier = Modifier.fillMaxWidth(),
                                     contentAlignment = Alignment.Center
@@ -1046,7 +1043,8 @@ private fun LegacySidebarScaffold(
                                             name = activeProfileName,
                                             colorHex = activeProfileColorHex,
                                             size = profileAvatarSize,
-                                            avatarImageUrl = activeProfileAvatarImageUrl
+                                            avatarImageUrl = activeProfileAvatarImageUrl,
+                                            imageCrossfade = false
                                         )
                                         Spacer(modifier = Modifier.width(profileGapAfterAvatar))
                                         Text(
