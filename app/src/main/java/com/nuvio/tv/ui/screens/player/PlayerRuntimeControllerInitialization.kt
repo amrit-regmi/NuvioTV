@@ -686,7 +686,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                     renderer?.applyDownmixSettings(
                         downmixEnabled = playerSettings.downmixEnabled,
                         audioOutputChannels = playerSettings.audioOutputChannels,
-                        downmixNormalizationEnabled = !playerSettings.maintainOriginalAudioOnDownmix
+                        downmixNormalizationEnabled = !playerSettings.maintainOriginalAudioOnDownmix,
+                        forceOpticalPassthrough = playerSettings.forceOpticalPassthrough
                     )
                     applyCenterMixLevel(_uiState.value.centerMixLevelDb)
                     updateAudioControlAvailability()
@@ -1664,7 +1665,8 @@ private class SubtitleOffsetRenderersFactory(
             renderer.applyDownmixSettings(
                 downmixEnabled = downmixEnabled,
                 audioOutputChannels = audioOutputChannels,
-                downmixNormalizationEnabled = downmixNormalizationEnabled
+                downmixNormalizationEnabled = downmixNormalizationEnabled,
+                forceOpticalPassthrough = forceOpticalPassthrough
             )
         }
         onFfmpegAudioRendererChanged(ffmpegRenderers.firstOrNull())
@@ -1673,8 +1675,10 @@ private class SubtitleOffsetRenderersFactory(
 private fun FfmpegAudioRenderer.applyDownmixSettings(
     downmixEnabled: Boolean,
     audioOutputChannels: com.nuvio.tv.data.local.AudioOutputChannels,
-    downmixNormalizationEnabled: Boolean
+    downmixNormalizationEnabled: Boolean,
+    forceOpticalPassthrough: Boolean
 ) {
+    setForceOpticalPassthrough(forceOpticalPassthrough)
     if (downmixEnabled) {
         setAudioOutputChannels(
             audioOutputChannels.ffmpegLayoutName,

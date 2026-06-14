@@ -254,7 +254,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
             )
         }
 
-        if (isExoEngine) {
+        if (isExoEngine || isMpvEngine) {
             item(key = "audio_force_optical_passthrough") {
                 ToggleSettingsItem(
                     icon = Icons.Default.VolumeUp,
