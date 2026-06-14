@@ -660,7 +660,7 @@ internal fun PlayerRuntimeController.initializePlayer(
             val vc1SoftwareFallbackActive = vc1SoftwarePreferredStreamUrls.contains(url)
             isVc1SoftwareFallbackActiveForCurrentPlayback = vc1SoftwareFallbackActive
             val isForcePassthroughActive = playerSettings.forceOpticalPassthrough && playerSettings.decoderPriority != 0
-            val effectiveDecoderPriority = if (vc1SoftwareFallbackActive || hasTriedAudioPcmFallback) {
+            val effectiveDecoderPriority = if (vc1SoftwareFallbackActive || hasTriedAudioPcmFallback || isForcePassthroughActive) {
                 DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
             } else {
                 playerSettings.decoderPriority

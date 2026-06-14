@@ -131,21 +131,26 @@ public final class FfmpegAudioRenderer extends DecoderAudioRenderer<FfmpegAudioD
     if (!FfmpegLibrary.supportsFormat(mimeType)) {
       return C.FORMAT_UNSUPPORTED_SUBTYPE;
     }
-    if (format.channelCount <= 0 || format.sampleRate <= 0) {
+    boolean isDtsOrTrueHd = MimeTypes.AUDIO_DTS.equals(mimeType)
+        || MimeTypes.AUDIO_DTS_HD.equals(mimeType)
+        || MimeTypes.AUDIO_TRUEHD.equals(mimeType);
+    boolean transcodeToAc3 = forceOpticalPassthrough &&
+        !MimeTypes.AUDIO_AC3.equals(mimeType) &&
+        (format.channelCount > 2 || format.channelCount <= 0 || isDtsOrTrueHd);
+
+    if (!transcodeToAc3 && (format.channelCount <= 0 || format.sampleRate <= 0)) {
       return format.cryptoType == C.CRYPTO_TYPE_NONE
           ? C.FORMAT_HANDLED
           : C.FORMAT_UNSUPPORTED_DRM;
     }
-    boolean transcodeToAc3 = forceOpticalPassthrough &&
-        format.channelCount > 2 &&
-        !MimeTypes.AUDIO_AC3.equals(format.sampleMimeType);
     boolean supportsConfiguredOutput;
     if (transcodeToAc3) {
+      int sampleRate = format.sampleRate > 0 ? format.sampleRate : 48000;
       supportsConfiguredOutput = sinkSupportsFormat(
           new Format.Builder()
               .setSampleMimeType(MimeTypes.AUDIO_AC3)
               .setChannelCount(6)
-              .setSampleRate(format.sampleRate)
+              .setSampleRate(sampleRate)
               .build());
     } else {
       int outputChannelCount = resolveOutputChannelCount(format.channelCount);
@@ -172,9 +177,13 @@ public final class FfmpegAudioRenderer extends DecoderAudioRenderer<FfmpegAudioD
   protected FfmpegAudioDecoder createDecoder(Format format, @Nullable CryptoConfig cryptoConfig)
       throws FfmpegDecoderException {
     TraceUtil.beginSection("createFfmpegAudioDecoder");
+    String mimeType = checkNotNull(format.sampleMimeType);
+    boolean isDtsOrTrueHd = MimeTypes.AUDIO_DTS.equals(mimeType)
+        || MimeTypes.AUDIO_DTS_HD.equals(mimeType)
+        || MimeTypes.AUDIO_TRUEHD.equals(mimeType);
     boolean transcodeToAc3 = forceOpticalPassthrough &&
-        format.channelCount > 2 &&
-        !MimeTypes.AUDIO_AC3.equals(format.sampleMimeType);
+        !MimeTypes.AUDIO_AC3.equals(mimeType) &&
+        (format.channelCount > 2 || format.channelCount <= 0 || isDtsOrTrueHd);
     int initialInputBufferSize =
         format.maxInputSize != Format.NO_VALUE ? format.maxInputSize : DEFAULT_INPUT_BUFFER_SIZE;
     @C.PcmEncoding int outputEncoding;
