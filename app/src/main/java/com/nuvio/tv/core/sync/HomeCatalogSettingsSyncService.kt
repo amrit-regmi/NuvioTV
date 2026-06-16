@@ -26,7 +26,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "HomeCatalogSettingsSyncService"
-private const val SETTINGS_SYNC_PLATFORM = "tv"
 private const val PAYLOAD_SAMPLE_LIMIT = 5
 
 @Serializable
@@ -112,7 +111,6 @@ class HomeCatalogSettingsSyncService @Inject constructor(
 
             val params = buildJsonObject {
                 put("p_profile_id", profileId)
-                put("p_platform", SETTINGS_SYNC_PLATFORM)
             }
 
             val response = withJwtRefreshRetry {
@@ -178,7 +176,6 @@ class HomeCatalogSettingsSyncService @Inject constructor(
         val params = buildJsonObject {
             put("p_profile_id", profileId)
             put("p_settings_json", jsonElement)
-            put("p_platform", SETTINGS_SYNC_PLATFORM)
         }
 
         withJwtRefreshRetry {

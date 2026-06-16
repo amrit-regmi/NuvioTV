@@ -16,6 +16,10 @@ import com.nuvio.tv.core.server.DebridFormatterConfigServer
 import com.nuvio.tv.core.server.DebridFormatterSettings
 import com.nuvio.tv.core.server.DeviceIpAddress
 import com.nuvio.tv.data.local.DebridSettingsDataStore
+import com.nuvio.tv.data.local.DeviceProfileDataStore
+import com.nuvio.tv.data.remote.api.CatalogAddonApi
+import com.nuvio.tv.data.remote.api.DeviceProfileDto
+import com.nuvio.tv.data.remote.api.DeviceProfileUpdateDto
 import com.nuvio.tv.data.remote.dto.PremiumizeDeviceTokenDto
 import com.nuvio.tv.data.remote.dto.TorboxDeviceTokenDto
 import com.nuvio.tv.data.remote.dto.TorboxDeviceTokenRequestDto
@@ -47,7 +51,9 @@ class DebridSettingsViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val dataStore: DebridSettingsDataStore,
     private val torboxApi: TorboxApi,
-    private val premiumizeApi: PremiumizeApi
+    private val premiumizeApi: PremiumizeApi,
+    private val deviceProfileDataStore: DeviceProfileDataStore,
+    private val catalogAddonApi: CatalogAddonApi
 ) : ViewModel() {
     private var formatterServer: DebridFormatterConfigServer? = null
     private var logoBytes: ByteArray? = null
@@ -61,11 +67,35 @@ class DebridSettingsViewModel @Inject constructor(
     private val _validationError = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val validationError: SharedFlow<String> = _validationError.asSharedFlow()
 
+    private val _profileSaveResult = MutableSharedFlow<Boolean>(extraBufferCapacity = 1)
+    val profileSaveResult: SharedFlow<Boolean> = _profileSaveResult.asSharedFlow()
+
     init {
         loadLogoBytes()
         viewModelScope.launch {
             dataStore.settings.collectLatest { settings ->
                 _uiState.update { it.fromSettings(settings) }
+            }
+        }
+        viewModelScope.launch {
+            deviceProfileDataStore.isStreamEngineEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(streamEngineEnabled = enabled) }
+                if (enabled) {
+                    try {
+                        val deviceId = deviceProfileDataStore.getOrCreateDeviceId()
+                        val response = catalogAddonApi.getDeviceProfile(deviceId)
+                        if (response.isSuccessful) {
+                            val profile = response.body()
+                            _uiState.update { it.copy(deviceProfile = profile).withDeviceProfile(profile) }
+                        } else {
+                            // Backend has no profile yet — pre-fill with best-known detected defaults
+                            // so the user can review and tap Save to register.
+                            _uiState.update { it.withDetectedDefaults() }
+                        }
+                    } catch (_: Exception) {
+                        _uiState.update { it.withDetectedDefaults() }
+                    }
+                }
             }
         }
     }
@@ -82,6 +112,89 @@ class DebridSettingsViewModel @Inject constructor(
             is DebridSettingsEvent.ToggleEnabled -> {
                 if (event.enabled && !_uiState.value.hasResolverProvider) return
                 update { dataStore.setEnabled(event.enabled) }
+            }
+            is DebridSettingsEvent.SetProfileResolution -> {
+                _uiState.update { it.copy(editMaxResolution = event.resolution) }
+            }
+            is DebridSettingsEvent.ToggleProfileHdrType -> {
+                _uiState.update { state ->
+                    val updated = if (event.type in state.editHdrTypes) {
+                        state.editHdrTypes - event.type
+                    } else {
+                        state.editHdrTypes + event.type
+                    }
+                    state.copy(editHdrTypes = updated)
+                }
+            }
+            is DebridSettingsEvent.SetProfileHdrTypes -> {
+                _uiState.update { it.copy(editHdrTypes = event.types) }
+            }
+            is DebridSettingsEvent.ToggleProfileCodec -> {
+                _uiState.update { state ->
+                    val updated = if (event.codec in state.editCodecs) {
+                        state.editCodecs - event.codec
+                    } else {
+                        state.editCodecs + event.codec
+                    }
+                    state.copy(editCodecs = updated)
+                }
+            }
+            is DebridSettingsEvent.SetProfileCodecs -> {
+                _uiState.update { it.copy(editCodecs = event.codecs) }
+            }
+            is DebridSettingsEvent.ToggleProfileAudioFormat -> {
+                _uiState.update { state ->
+                    val updated = if (event.format in state.editAudioFormats) {
+                        state.editAudioFormats - event.format
+                    } else {
+                        state.editAudioFormats + event.format
+                    }
+                    state.copy(editAudioFormats = updated)
+                }
+            }
+            is DebridSettingsEvent.SetProfileAudioFormats -> {
+                _uiState.update { it.copy(editAudioFormats = event.formats) }
+            }
+            is DebridSettingsEvent.SetProfileAudioChannels -> {
+                _uiState.update { it.copy(editMaxAudioChannels = event.channels) }
+            }
+            is DebridSettingsEvent.ToggleStreamEngine -> {
+                viewModelScope.launch {
+                    deviceProfileDataStore.setStreamEngineEnabled(event.enabled)
+                }
+            }
+            is DebridSettingsEvent.SaveDeviceProfile -> {
+                viewModelScope.launch {
+                    try {
+                        val deviceId = deviceProfileDataStore.getOrCreateDeviceId()
+                        val state = _uiState.value
+                        val body = DeviceProfileUpdateDto(
+                            deviceId = deviceId,
+                            deviceName = android.os.Build.MODEL,
+                            maxResolution = state.editMaxResolution,
+                            hdrTypesSupported = state.editHdrTypes.toList(),
+                            supportedCodecs = state.editCodecs.toList(),
+                            preferredAudioFormats = state.editAudioFormats.toList(),
+                            maxAudioChannels = state.editMaxAudioChannels,
+                            downloadSpeedMbps = state.deviceProfile?.downloadSpeedMbps ?: 0.0,
+                            maxSizeGb = 0
+                        )
+                        val response = catalogAddonApi.updateDeviceProfile(body)
+                        if (response.isSuccessful) {
+                            // Refresh profile from backend
+                            val refreshed = catalogAddonApi.getDeviceProfile(deviceId)
+                            if (refreshed.isSuccessful) {
+                                val profile = refreshed.body()
+                                _uiState.update { it.copy(deviceProfile = profile).withDeviceProfile(profile) }
+                            }
+                            _profileSaveResult.tryEmit(true)
+                        } else {
+                            _profileSaveResult.tryEmit(false)
+                        }
+                    } catch (_: Exception) {
+                        _profileSaveResult.tryEmit(false)
+                    }
+                }
             }
         }
     }
@@ -401,8 +514,36 @@ data class DebridSettingsUiState(
     val isFormatterQrModeActive: Boolean = false,
     val formatterQrCodeBitmap: Bitmap? = null,
     val formatterServerUrl: String? = null,
-    val serverError: String? = null
+    val serverError: String? = null,
+    val streamEngineEnabled: Boolean = false,
+    val deviceProfile: DeviceProfileDto? = null,
+    val editMaxResolution: String = "2160p",
+    val editHdrTypes: Set<String> = emptySet(),
+    val editCodecs: Set<String> = emptySet(),
+    val editAudioFormats: Set<String> = emptySet(),
+    val editMaxAudioChannels: String = "7.1"
 ) {
+    fun withDeviceProfile(profile: DeviceProfileDto?): DebridSettingsUiState {
+        if (profile == null) return this
+        return copy(
+            editMaxResolution = profile.maxResolution ?: editMaxResolution,
+            editHdrTypes = profile.hdrTypesSupported?.toSet() ?: editHdrTypes,
+            editCodecs = profile.supportedCodecs?.toSet() ?: editCodecs,
+            editAudioFormats = profile.preferredAudioFormats?.toSet() ?: editAudioFormats,
+            editMaxAudioChannels = profile.maxAudioChannels ?: editMaxAudioChannels
+        )
+    }
+
+    // Pre-fill with best-guess detected defaults when no backend profile exists yet.
+    // Assumes a modern 4K Android TV — the user can correct and Save.
+    fun withDetectedDefaults(): DebridSettingsUiState = copy(
+        editMaxResolution = "2160p",
+        editHdrTypes = setOf("HDR10", "DolbyVision", "HLG"),
+        editCodecs = setOf("H.265", "AV1", "H.264"),
+        editAudioFormats = setOf("Dolby Atmos", "DTS:X", "AAC"),
+        editMaxAudioChannels = "7.1"
+    )
+
     val providerApiKeys: Map<String, String>
         get() = mapOf(
             DebridProviders.TORBOX_ID to torboxApiKey,
@@ -469,4 +610,14 @@ data class DebridSettingsUiState(
 
 sealed class DebridSettingsEvent {
     data class ToggleEnabled(val enabled: Boolean) : DebridSettingsEvent()
+    data class SetProfileResolution(val resolution: String) : DebridSettingsEvent()
+    data class ToggleProfileHdrType(val type: String) : DebridSettingsEvent()
+    data class SetProfileHdrTypes(val types: Set<String>) : DebridSettingsEvent()
+    data class ToggleProfileCodec(val codec: String) : DebridSettingsEvent()
+    data class SetProfileCodecs(val codecs: Set<String>) : DebridSettingsEvent()
+    data class ToggleProfileAudioFormat(val format: String) : DebridSettingsEvent()
+    data class SetProfileAudioFormats(val formats: Set<String>) : DebridSettingsEvent()
+    data class SetProfileAudioChannels(val channels: String) : DebridSettingsEvent()
+    data object SaveDeviceProfile : DebridSettingsEvent()
+    data class ToggleStreamEngine(val enabled: Boolean) : DebridSettingsEvent()
 }

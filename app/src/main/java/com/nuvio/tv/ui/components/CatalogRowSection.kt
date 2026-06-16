@@ -59,8 +59,10 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.compose.ui.graphics.graphicsLayer
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.model.StreamStatus
 import com.nuvio.tv.ui.util.formatAddonTypeLabel
 import com.nuvio.tv.ui.util.localizedContentType
 import androidx.compose.ui.platform.LocalContext
@@ -337,6 +339,7 @@ fun CatalogRowSection(
                     onClick = onItemClickStable,
                     onLongPress = onItemLongPressStable,
                     modifier = Modifier
+                        .graphicsLayer { alpha = if (item.streamStatus == StreamStatus.UNAVAILABLE) 0.5f else 1f }
                         .then(directionalFocusModifier)
                         .then(
                             if (isEntryTarget) Modifier.focusRequester(entryFocusRequester!!) else Modifier

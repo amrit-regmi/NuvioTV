@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.sync.LocalHomeCatalogSettingsState
 import com.nuvio.tv.core.sync.SyncHomeCatalogPayload
@@ -286,7 +287,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val preferExternalMetaAddonDetail: Flow<Boolean> = profileFlow { prefs ->
-        prefs[preferExternalMetaAddonDetailKey] ?: true
+        prefs[preferExternalMetaAddonDetailKey] ?: (BuildConfig.RECO_MODE != "private")
     }
 
     val hideUnreleasedContent: Flow<Boolean> = profileFlow { prefs ->

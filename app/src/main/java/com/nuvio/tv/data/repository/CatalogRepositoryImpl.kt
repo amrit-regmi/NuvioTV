@@ -2,6 +2,7 @@ package com.nuvio.tv.data.repository
 
 import android.content.Context
 import android.util.Log
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.network.safeApiCall
 import com.nuvio.tv.data.mapper.toDomain
@@ -15,6 +16,8 @@ import kotlinx.coroutines.flow.flow
 import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val BACKEND_ADDON_HOST = "recoengine.regmig.com"
 
 @Singleton
 class CatalogRepositoryImpl @Inject constructor(
@@ -45,7 +48,7 @@ class CatalogRepositoryImpl @Inject constructor(
             "Fetching catalog addonId=$addonId addonName=$addonName type=$type catalogId=$catalogId skip=$skip skipStep=$skipStep supportsSkip=$supportsSkip url=$url"
         )
 
-        when (val result = safeApiCall(context) { api.getCatalog(url) }) {
+        when (val result = safeApiCall(context) { api.getCatalog(url, catalogAuth(addonBaseUrl)) }) {
             is NetworkResult.Success -> {
                 val items = result.data.metas.map { it.toDomain() }.distinctBy { it.id }
                 Log.d(
@@ -85,6 +88,17 @@ class CatalogRepositoryImpl @Inject constructor(
             }
             NetworkResult.Loading -> { /* Already emitted */ }
         }
+    }
+
+    private fun catalogAuth(baseUrl: String): String? {
+        val secret = BuildConfig.CATALOG_SECRET.trim()
+        if (secret.isBlank()) return null
+        val lower = baseUrl.lowercase()
+        val catalogBase = BuildConfig.CATALOG_ADDON_BASE_URL.trim().lowercase()
+        return if (lower.contains(BACKEND_ADDON_HOST) ||
+                   (catalogBase.isNotBlank() && lower.contains(catalogBase))) {
+            "Bearer $secret"
+        } else null
     }
 
     private fun buildCatalogUrl(

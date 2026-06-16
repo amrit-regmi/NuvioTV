@@ -77,21 +77,23 @@ fun TmdbSettingsContent(
                 contentPadding = PaddingValues(bottom = NuvioTheme.spacing.sm),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item(key = "tmdb_enabled") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_enable_title),
-                        subtitle = stringResource(R.string.tmdb_enable_subtitle),
-                        checked = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEnabled(!uiState.enabled)) },
-                        modifier = Modifier
-                            .padding(top = NuvioTheme.spacing.xxs)
-                            .then(
-                                if (initialFocusRequester != null) {
-                                    Modifier.focusRequester(initialFocusRequester)
-                                } else {
-                                    Modifier
-                                })
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_enabled") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_enable_title),
+                            subtitle = stringResource(R.string.tmdb_enable_subtitle),
+                            checked = uiState.enabled,
+                            onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEnabled(!uiState.enabled)) },
+                            modifier = Modifier
+                                .padding(top = NuvioTheme.spacing.xxs)
+                                .then(
+                                    if (initialFocusRequester != null) {
+                                        Modifier.focusRequester(initialFocusRequester)
+                                    } else {
+                                        Modifier
+                                    })
+                        )
+                    }
                 }
 
                 item(key = "tmdb_modern_home_enabled") {
@@ -108,18 +110,20 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item(key = "tmdb_enrich_continue_watching") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_enrich_continue_watching_title),
-                        subtitle = stringResource(R.string.tmdb_enrich_continue_watching_subtitle),
-                        checked = uiState.enrichContinueWatching,
-                        enabled = uiState.enabled,
-                        onToggle = {
-                            viewModel.onEvent(
-                                TmdbSettingsEvent.ToggleEnrichContinueWatching(!uiState.enrichContinueWatching)
-                            )
-                        }
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_enrich_continue_watching") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_enrich_continue_watching_title),
+                            subtitle = stringResource(R.string.tmdb_enrich_continue_watching_subtitle),
+                            checked = uiState.enrichContinueWatching,
+                            enabled = uiState.enabled,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    TmdbSettingsEvent.ToggleEnrichContinueWatching(!uiState.enrichContinueWatching)
+                                )
+                            }
+                        )
+                    }
                 }
 
                 item(key = "tmdb_language") {
@@ -136,87 +140,103 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item(key = "tmdb_artwork") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_artwork_title),
-                        subtitle = stringResource(R.string.tmdb_artwork_subtitle),
-                        checked = uiState.useArtwork,
-                        enabled = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleArtwork(!uiState.useArtwork)) }
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_artwork") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_artwork_title),
+                            subtitle = stringResource(R.string.tmdb_artwork_subtitle),
+                            checked = uiState.useArtwork,
+                            enabled = uiState.enabled,
+                            onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleArtwork(!uiState.useArtwork)) }
+                        )
+                    }
                 }
 
-                item(key = "tmdb_basic_info") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_basic_info_title),
-                        subtitle = stringResource(R.string.tmdb_basic_info_subtitle),
-                        checked = uiState.useBasicInfo,
-                        enabled = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleBasicInfo(!uiState.useBasicInfo)) }
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_basic_info") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_basic_info_title),
+                            subtitle = stringResource(R.string.tmdb_basic_info_subtitle),
+                            checked = uiState.useBasicInfo,
+                            enabled = uiState.enabled,
+                            onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleBasicInfo(!uiState.useBasicInfo)) }
+                        )
+                    }
                 }
 
-                item(key = "tmdb_details") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_details_title),
-                        subtitle = stringResource(R.string.tmdb_details_subtitle),
-                        checked = uiState.useDetails,
-                        enabled = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleDetails(!uiState.useDetails)) }
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_details") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_details_title),
+                            subtitle = stringResource(R.string.tmdb_details_subtitle),
+                            checked = uiState.useDetails,
+                            enabled = uiState.enabled,
+                            onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleDetails(!uiState.useDetails)) }
+                        )
+                    }
                 }
 
-                item(key = "tmdb_release_dates") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_release_dates_title),
-                        subtitle = stringResource(R.string.tmdb_release_dates_subtitle),
-                        checked = uiState.useReleaseDates,
-                        enabled = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleReleaseDates(!uiState.useReleaseDates)) }
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_release_dates") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_release_dates_title),
+                            subtitle = stringResource(R.string.tmdb_release_dates_subtitle),
+                            checked = uiState.useReleaseDates,
+                            enabled = uiState.enabled,
+                            onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleReleaseDates(!uiState.useReleaseDates)) }
+                        )
+                    }
                 }
 
-                item(key = "tmdb_credits") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_credits_title),
-                        subtitle = stringResource(R.string.tmdb_credits_subtitle),
-                        checked = uiState.useCredits,
-                        enabled = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleCredits(!uiState.useCredits)) }
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_credits") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_credits_title),
+                            subtitle = stringResource(R.string.tmdb_credits_subtitle),
+                            checked = uiState.useCredits,
+                            enabled = uiState.enabled,
+                            onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleCredits(!uiState.useCredits)) }
+                        )
+                    }
                 }
 
-                item(key = "tmdb_productions") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_productions_title),
-                        subtitle = stringResource(R.string.tmdb_productions_subtitle),
-                        checked = uiState.useProductions,
-                        enabled = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleProductions(!uiState.useProductions)) }
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_productions") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_productions_title),
+                            subtitle = stringResource(R.string.tmdb_productions_subtitle),
+                            checked = uiState.useProductions,
+                            enabled = uiState.enabled,
+                            onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleProductions(!uiState.useProductions)) }
+                        )
+                    }
                 }
 
-                item(key = "tmdb_networks") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_networks_title),
-                        subtitle = stringResource(R.string.tmdb_networks_subtitle),
-                        checked = uiState.useNetworks,
-                        enabled = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleNetworks(!uiState.useNetworks)) }
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_networks") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_networks_title),
+                            subtitle = stringResource(R.string.tmdb_networks_subtitle),
+                            checked = uiState.useNetworks,
+                            enabled = uiState.enabled,
+                            onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleNetworks(!uiState.useNetworks)) }
+                        )
+                    }
                 }
 
-                item(key = "tmdb_episodes") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_episodes_title),
-                        subtitle = stringResource(R.string.tmdb_episodes_subtitle),
-                        checked = uiState.useEpisodes,
-                        enabled = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEpisodes(!uiState.useEpisodes)) }
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_episodes") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_episodes_title),
+                            subtitle = stringResource(R.string.tmdb_episodes_subtitle),
+                            checked = uiState.useEpisodes,
+                            enabled = uiState.enabled,
+                            onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEpisodes(!uiState.useEpisodes)) }
+                        )
+                    }
                 }
 
-                if (AppFeaturePolicy.inAppTrailerPlaybackEnabled) {
+                if (AppFeaturePolicy.inAppTrailerPlaybackEnabled && com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
                     item(key = "tmdb_trailers") {
                         SettingsToggleRow(
                             title = stringResource(R.string.tmdb_trailers_title),
@@ -232,32 +252,36 @@ fun TmdbSettingsContent(
                     }
                 }
 
-                item(key = "tmdb_more_like_this") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_more_like_this_title),
-                        subtitle = stringResource(R.string.tmdb_more_like_this_subtitle),
-                        checked = uiState.useMoreLikeThis,
-                        enabled = uiState.enabled,
-                        onToggle = {
-                            viewModel.onEvent(
-                                TmdbSettingsEvent.ToggleMoreLikeThis(!uiState.useMoreLikeThis)
-                            )
-                        }
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_more_like_this") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_more_like_this_title),
+                            subtitle = stringResource(R.string.tmdb_more_like_this_subtitle),
+                            checked = uiState.useMoreLikeThis,
+                            enabled = uiState.enabled,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    TmdbSettingsEvent.ToggleMoreLikeThis(!uiState.useMoreLikeThis)
+                                )
+                            }
+                        )
+                    }
                 }
 
-                item(key = "tmdb_collections") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_collections_title),
-                        subtitle = stringResource(R.string.tmdb_collections_subtitle),
-                        checked = uiState.useCollections,
-                        enabled = uiState.enabled,
-                        onToggle = {
-                            viewModel.onEvent(
-                                TmdbSettingsEvent.ToggleCollections(!uiState.useCollections)
-                            )
-                        }
-                    )
+                if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") {
+                    item(key = "tmdb_collections") {
+                        SettingsToggleRow(
+                            title = stringResource(R.string.tmdb_collections_title),
+                            subtitle = stringResource(R.string.tmdb_collections_subtitle),
+                            checked = uiState.useCollections,
+                            enabled = uiState.enabled,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    TmdbSettingsEvent.ToggleCollections(!uiState.useCollections)
+                                )
+                            }
+                        )
+                    }
                 }
 
             }

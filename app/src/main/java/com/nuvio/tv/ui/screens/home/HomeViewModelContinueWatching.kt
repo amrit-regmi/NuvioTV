@@ -1046,9 +1046,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 )
 
                 _uiState.update { state ->
-                    // Don't overwrite cached CW with empty data while sources are still loading.
                     if (normalItems.isEmpty() && state.continueWatchingItems.isNotEmpty()) {
-                        state
+                        // Keep stale data only while remote hasn't responded (prevents initial flicker).
+                        // Once remote confirms empty, clear it — avoids cross-profile contamination.
+                        if (!snapshot.hasLoadedRemoteProgress) state
+                        else state.copy(continueWatchingItems = emptyList())
                     } else if (state.continueWatchingItems == normalItems) {
                         state
                     } else {
@@ -1069,8 +1071,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
 
                 // Save lightweight CW snapshot to disk immediately so cache stays fresh
                 // even if enrichment is cancelled by collectLatest.
+                // Use normalItems when remote confirmed empty so stale data isn't re-written.
+                val _snapshotItems = if (normalItems.isEmpty() && snapshot.hasLoadedRemoteProgress)
+                    emptyList() else _uiState.value.continueWatchingItems
                 viewModelScope.launch(Dispatchers.IO) {
-                    val currentItems = _uiState.value.continueWatchingItems
+                    val currentItems = _snapshotItems
                     val brokenUrls = com.nuvio.tv.ui.components.brokenImageUrls
                     val nextUpSnap = currentItems.mapNotNull { item ->
                         val nu = item as? ContinueWatchingItem.NextUp ?: return@mapNotNull null
@@ -1125,6 +1130,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 val enrichStartMs = SystemClock.elapsedRealtime()
                 val changed = enrichVisibleContinueWatchingItems(
                     finalItems = normalItems,
+                    pipelineProfileId = pipelineProfileId,
                     debug = debug
                 )
                 debug.recordEnrichmentComplete(
@@ -1469,6 +1475,7 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
 
 private suspend fun HomeViewModel.enrichVisibleContinueWatchingItems(
     finalItems: List<ContinueWatchingItem>,
+    pipelineProfileId: Int,
     debug: CwDebugSession? = null
 ): Boolean = coroutineScope {
     if (finalItems.isEmpty()) return@coroutineScope false
@@ -1534,7 +1541,8 @@ private suspend fun HomeViewModel.enrichVisibleContinueWatchingItems(
     }
     persistLocalContinueWatchingMetadata(
         originalItems = finalItems,
-        enrichedItems = sortedEnrichedItems
+        enrichedItems = sortedEnrichedItems,
+        pipelineProfileId = pipelineProfileId
     )
     true
 }
@@ -2347,7 +2355,8 @@ private fun buildNextUpSeedCacheKey(
 
 private fun HomeViewModel.persistLocalContinueWatchingMetadata(
     originalItems: List<ContinueWatchingItem>,
-    enrichedItems: List<ContinueWatchingItem>
+    enrichedItems: List<ContinueWatchingItem>,
+    pipelineProfileId: Int = profileManager.activeProfileId.value
 ) {
     val localItems = enrichedItems.indices.mapNotNull { index ->
         val original = originalItems.getOrNull(index) as? ContinueWatchingItem.InProgress ?: return@mapNotNull null
@@ -2422,12 +2431,13 @@ private fun HomeViewModel.persistLocalContinueWatchingMetadata(
     }
 
     viewModelScope.launch(Dispatchers.IO) {
-        if (nextUpSnapshot.isNotEmpty()) {
-            runCatching { cwEnrichmentCache.saveNextUpSnapshot(nextUpSnapshot, force = true) }
-        }
-        if (inProgressSnapshot.isNotEmpty()) {
-            runCatching { cwEnrichmentCache.saveInProgressSnapshot(inProgressSnapshot, force = true) }
-        }
+        // Guard: abort if the profile changed since the pipeline started — writing here
+        // would corrupt another profile's disk cache with stale CW data.
+        if (profileManager.activeProfileId.value != pipelineProfileId) return@launch
+        // Always write the snapshot (even empty) so stale data from a previous profile
+        // contamination run gets cleared rather than persisting indefinitely.
+        runCatching { cwEnrichmentCache.saveNextUpSnapshot(nextUpSnapshot, force = true) }
+        runCatching { cwEnrichmentCache.saveInProgressSnapshot(inProgressSnapshot, force = true) }
         val persistable = localItems.filter { it.hasRenderableMetadata() }
         if (persistable.isEmpty()) return@launch
         runCatching {

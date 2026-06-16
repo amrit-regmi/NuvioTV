@@ -42,7 +42,7 @@ class TmdbSettingsDataStore @Inject constructor(
     val settings: Flow<TmdbSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
             TmdbSettings(
-                enabled = prefs[enabledKey] ?: false,
+                enabled = if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") false else (prefs[enabledKey] ?: false),
                 modernHomeEnabled = prefs[modernHomeEnabledKey] ?: false,
                 enrichContinueWatching = prefs[enrichContinueWatchingKey] ?: true,
                 language = prefs[languageKey] ?: "en",

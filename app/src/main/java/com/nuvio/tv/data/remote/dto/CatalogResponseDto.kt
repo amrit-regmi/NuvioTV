@@ -35,5 +35,6 @@ data class MetaPreviewDto(
     @Json(name = "links") val links: List<MetaLinkDto>? = null,
     @Json(name = "trailers") val trailers: List<MetaTrailerDto>? = null,
     @Json(name = "behaviorHints") val behaviorHints: MetaBehaviorHintsDto? = null,
-    @Json(name = "trailerStreams") val trailerStreams: List<TrailerStreamDto>? = null
+    @Json(name = "trailerStreams") val trailerStreams: List<TrailerStreamDto>? = null,
+    @Json(name = "streamStatus") val streamStatus: String? = null
 )

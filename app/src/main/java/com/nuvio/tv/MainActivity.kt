@@ -113,9 +113,17 @@ import androidx.tv.material3.rememberDrawerState
 import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import com.nuvio.tv.R
+import android.hardware.display.DisplayManager
+import android.view.Display
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.core.device.DeviceCapabilityDetector
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.data.local.DeviceProfileDataStore
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import com.nuvio.tv.core.sync.ProfileSettingsSyncService
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
@@ -156,7 +164,9 @@ import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 val LocalSidebarExpanded = compositionLocalOf { false }
@@ -230,6 +240,15 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var avatarRepository: AvatarRepository
+
+    @Inject
+    lateinit var deviceCapabilityDetector: DeviceCapabilityDetector
+
+    @Inject
+    lateinit var deviceProfileDataStore: DeviceProfileDataStore
+
+    @Inject
+    lateinit var httpClient: OkHttpClient
 
     @Inject
     lateinit var trailerPlayerPool: com.nuvio.tv.core.player.TrailerPlayerPool
@@ -813,6 +832,16 @@ class MainActivity : ComponentActivity() {
             if (isFirstResumeAfterCreate) {
                 isFirstResumeAfterCreate = false
                 traktProgressService.invalidateAndRefresh()
+                val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+                val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY)
+                val snapshot = deviceCapabilityDetector.detect(display)
+                deviceProfileDataStore.applyDetectedIfNotOverridden(snapshot.suggestedProfileId())
+                val streamEngineEnabled = deviceProfileDataStore.isStreamEngineEnabled.first()
+                if (streamEngineEnabled) {
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        registerDeviceCapabilities(snapshot)
+                    }
+                }
             } else {
                 traktProgressService.refreshNow()
             }
@@ -840,6 +869,57 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         PluginRuntimeHooks.onActivityDestroy()
+    }
+
+    private suspend fun registerDeviceCapabilities(snapshot: com.nuvio.tv.core.device.DeviceCapabilityDetector.Snapshot) {
+        try {
+            val deviceId = deviceProfileDataStore.getOrCreateDeviceId()
+            val maxResolution = when {
+                snapshot.supports4k -> "2160p"
+                snapshot.supports1080p -> "1080p"
+                else -> "720p"
+            }
+            val hdrTypes = buildList {
+                if (snapshot.supportsHdr10) add("HDR10")
+                if (snapshot.supportsDolbyVision) add("DolbyVision")
+                if (snapshot.supportsHlg) add("HLG")
+            }
+            val codecs = buildList {
+                if (snapshot.supportsHevc) add("H.265")
+                if (snapshot.supportsAv1) add("AV1")
+                add("H.264")
+            }
+            // Always re-register so backend stays current even when URL or
+            // build config changes between installs.
+            val hash = "$deviceId|$maxResolution|${hdrTypes.sorted()}|${codecs.sorted()}|${BuildConfig.CATALOG_ADDON_BASE_URL}"
+            deviceProfileDataStore.updateCapabilitiesHashIfChanged(hash)  // update stored hash but don't gate on it
+            val downloadSpeedMbps = deviceProfileDataStore.estimateDownloadSpeedMbps()
+            val userId = (authManager.authState.value as? AuthState.FullAccount)?.userId ?: ""
+            val body = buildString {
+                append("{")
+                append("\"device_id\":\"$deviceId\",")
+                append("\"user_id\":\"$userId\",")
+                append("\"device_name\":\"${android.os.Build.MODEL}\",")
+                append("\"max_resolution\":\"$maxResolution\",")
+                append("\"hdr_types_supported\":${hdrTypes.joinToString(",", "[", "]") { "\"$it\"" }},")
+                append("\"max_audio_channels\":\"7.1\",")
+                append("\"preferred_audio_formats\":[\"Dolby Atmos\",\"DTS:X\",\"AAC\"],")
+                append("\"supported_codecs\":${codecs.joinToString(",", "[", "]") { "\"$it\"" }},")
+                append("\"max_size_gb\":0,")
+                append("\"download_speed_mbps\":$downloadSpeedMbps")
+                append("}")
+            }
+            val request = Request.Builder()
+                .url("${BuildConfig.CATALOG_ADDON_BASE_URL}device-profile")
+                .header("Authorization", "Bearer ${BuildConfig.CATALOG_SECRET}")
+                .put(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                Log.d("MainActivity", "Device capability registration: ${response.code}")
+            }
+        } catch (e: Exception) {
+            Log.w("MainActivity", "Device capability registration failed", e)
+        }
     }
 }
 

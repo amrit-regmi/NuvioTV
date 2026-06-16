@@ -130,6 +130,29 @@ class HomeViewModel @Inject constructor(
     private val _scrollToTopTrigger = MutableStateFlow(0)
     val scrollToTopTrigger: StateFlow<Int> = _scrollToTopTrigger.asStateFlow()
 
+    /** Tracks the D-pad focused index in the Continue Watching row. */
+    private val _cwFocusedItemIndex = MutableStateFlow(0)
+
+    /** Called from ContinueWatchingSection when a card gains D-pad focus. */
+    fun onCwItemFocused(index: Int) {
+        _cwFocusedItemIndex.value = index
+    }
+
+    private fun warmCwItem(item: ContinueWatchingItem?) {
+        when (item) {
+            is ContinueWatchingItem.NextUp ->
+                streamWarmer.warm(item.info.contentType, item.info.videoId)
+            is ContinueWatchingItem.InProgress ->
+                streamWarmer.warm(
+                    item.progress.contentType,
+                    item.progress.videoId,
+                    resumePositionMs = item.progress.position,
+                    durationMs = item.progress.duration
+                )
+            else -> Unit
+        }
+    }
+
     internal val _currentLocaleTag = MutableStateFlow(LocaleCache.localeTag)
 
     fun notifyLocaleChanged() {
@@ -320,39 +343,47 @@ class HomeViewModel @Inject constructor(
                     }
             }
 
-            // Pre-warm streams for the top 3 CW items whenever the list updates.
-            // NextUp items are series "next episodes" — most valuable to warm.
-            // InProgress items may be mid-episode resume — also worth warming.
+            // Pre-warm streams for the 3-item window around the user's D-pad focus in the
+            // Continue Watching row: focused item + 1 ahead + 1 behind.
+            // On CW list load (first emission), immediately warm index 0 so content is ready
+            // before the user moves focus. On subsequent focus changes, react to the debounced
+            // focused index and re-warm the window.
             viewModelScope.launch {
+                // Initial warm: fire once when the CW list first populates.
                 _uiState
-                    .map { state ->
-                        state.continueWatchingItems.take(3).mapNotNull { item ->
-                            when (item) {
-                                is ContinueWatchingItem.NextUp -> item.info.contentType to item.info.videoId
-                                is ContinueWatchingItem.InProgress -> item.progress.contentType to item.progress.videoId
-                                else -> null
-                            }
+                    .map { it.continueWatchingItems.isNotEmpty() }
+                    .distinctUntilChanged()
+                    .collect { hasItems ->
+                        if (!hasItems) return@collect
+                        val allItems = _uiState.value.continueWatchingItems
+                        val focusIdx = _cwFocusedItemIndex.value
+                        val windowIndices = listOf(
+                            (focusIdx - 1).coerceAtLeast(0),
+                            focusIdx,
+                            (focusIdx + 1).coerceAtMost(allItems.lastIndex)
+                        ).distinct()
+                        windowIndices.forEachIndexed { i, idx ->
+                            if (i > 0) delay(2_000L)
+                            warmCwItem(allItems.getOrNull(idx))
                         }
                     }
+            }
+            viewModelScope.launch {
+                // Focus-change warm: debounce D-pad movement and re-warm the window around new focus.
+                _cwFocusedItemIndex
+                    .debounce(400L)
                     .distinctUntilChanged()
-                    .collect { _ ->
-                        // Re-read items from current state to get position/duration for InProgress.
-                        val items = _uiState.value.continueWatchingItems.take(3)
-                        // Stagger warms by 2s to avoid bursting TorBox with concurrent Range probes.
-                        items.forEachIndexed { index, item ->
-                            if (index > 0) delay(2_000L)
-                            when (item) {
-                                is ContinueWatchingItem.NextUp ->
-                                    streamWarmer.warm(item.info.contentType, item.info.videoId)
-                                is ContinueWatchingItem.InProgress ->
-                                    streamWarmer.warm(
-                                        item.progress.contentType,
-                                        item.progress.videoId,
-                                        resumePositionMs = item.progress.position,
-                                        durationMs = item.progress.duration
-                                    )
-                                else -> {}
-                            }
+                    .collect { focusIdx ->
+                        val allItems = _uiState.value.continueWatchingItems
+                        if (allItems.isEmpty()) return@collect
+                        val windowIndices = listOf(
+                            (focusIdx - 1).coerceAtLeast(0),
+                            focusIdx,
+                            (focusIdx + 1).coerceAtMost(allItems.lastIndex)
+                        ).distinct()
+                        windowIndices.forEachIndexed { i, idx ->
+                            if (i > 0) delay(2_000L)
+                            warmCwItem(allItems.getOrNull(idx))
                         }
                     }
             }
@@ -380,7 +411,10 @@ class HomeViewModel @Inject constructor(
                     cwEnrichedInProgressOverlay.clear()
                     cwLastBadgeEpisodeKeys = emptySet()
                     _uiState.update {
-                        it.copy(layoutPreferencesReady = false)
+                        it.copy(
+                            layoutPreferencesReady = false,
+                            continueWatchingItems = emptyList(),
+                        )
                     }
                     clearFocusState()
                     _gridFocusState.value = HomeScreenFocusState()

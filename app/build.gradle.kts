@@ -89,7 +89,7 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 1021
-        versionName = "0.7.4-beta"
+        versionName = "0.7.5-beta"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -121,6 +121,8 @@ android {
         buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", "")}\"")
         buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", "")}\"")
         buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
+        buildConfigField("String", "CATALOG_ADDON_BASE_URL", "\"${localProperties.getProperty("CATALOG_ADDON_BASE_URL", "")}\"")
+        buildConfigField("String", "CATALOG_SECRET", "\"${localProperties.getProperty("CATALOG_SECRET", "")}\"")
 
         // In-app updater (GitHub Releases)
         buildConfigField("String", "GITHUB_OWNER", "\"tapframe\"")
@@ -188,6 +190,8 @@ android {
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${devProperties.getProperty("AVATAR_PUBLIC_BASE_URL", localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", ""))}\"")
             buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${devProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", ""))}\"")
             buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${devProperties.getProperty("PREMIUMIZE_CLIENT_ID", localProperties.getProperty("PREMIUMIZE_CLIENT_ID", ""))}\"")
+            buildConfigField("String", "CATALOG_ADDON_BASE_URL", "\"${devProperties.getProperty("CATALOG_ADDON_BASE_URL", localProperties.getProperty("CATALOG_ADDON_BASE_URL", ""))}\"")
+            buildConfigField("String", "CATALOG_SECRET", "\"${devProperties.getProperty("CATALOG_SECRET", localProperties.getProperty("CATALOG_SECRET", ""))}\"")
             buildConfigField("String", "RECO_API_BASE_URL",
                 "\"${localProperties.getProperty("RECO_API_BASE_URL", "https://recoengine.regmig.com")}\"")
             buildConfigField("String", "RECO_MODE",

@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.stream
 
+import com.nuvio.tv.core.debrid.DebridDownloadState
 import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.components.SourceChipItem
@@ -35,7 +36,13 @@ data class StreamScreenUiState(
     val autoPlayStream: Stream? = null,
     val autoPlayPlaybackInfo: StreamPlaybackInfo? = null,
     val error: String? = null,
-    val playbackErrorMessage: String? = null
+    val playbackErrorMessage: String? = null,
+    val streamQueuedMessage: String? = null,
+    // Active non-cached download state (null = no active download)
+    val activeDownload: DebridDownloadState? = null,
+    // Set of stream stable keys for direct-debrid streams that are already
+    // pre-resolved in StreamWarmer's resolvedUrlCache (⚡ Instant tier).
+    val instantStreamKeys: Set<String> = emptySet()
 ) {
     val isEpisode: Boolean get() = season != null && episode != null
 }

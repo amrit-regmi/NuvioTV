@@ -66,6 +66,8 @@ internal data class RecoCompanyInfo(
     val origin_country: String?
 )
 
+internal data class RecoResolveResponse(val imdb_id: String?)
+
 internal data class RecoCompanyResponse(
     val company: RecoCompanyInfo?,
     val items: List<RecoCompanyItem>?,
@@ -177,6 +179,22 @@ class RecoMetadataService @Inject constructor(
             buildRecoCredits(resp)
         } catch (e: Exception) {
             Log.e(TAG, "fetchTvCredits failed for $tmdbId", e)
+            null
+        }
+    }
+
+    /**
+     * Resolves a TMDB numeric ID to an IMDB ID via the reco backend.
+     * @param kind "movie" or "tv"
+     * @param tmdbId TMDB numeric ID
+     * @return IMDB ID (e.g. "tt0903747"), or null if not found / on error
+     */
+    suspend fun resolveImdbId(kind: String, tmdbId: Int): String? = withContext(Dispatchers.IO) {
+        try {
+            val body = get("$base/titles/resolve/$kind/$tmdbId") ?: return@withContext null
+            parseJson<RecoResolveResponse>(body)?.imdb_id?.takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
+            Log.w(TAG, "resolveImdbId failed for $kind/$tmdbId", e)
             null
         }
     }

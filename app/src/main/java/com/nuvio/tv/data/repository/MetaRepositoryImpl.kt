@@ -156,6 +156,8 @@ class MetaRepositoryImpl @Inject constructor(
                     addon.resources.any { it.name == "meta" }
             }
 
+            val isFallbackSeriesType = requestedType.lowercase() in setOf("series", "tv")
+            var bestFallbackMeta: Meta? = null
             for (addon in fallbackAddons) {
                 attemptedAddonNames += addon.displayName
                 val url = buildMetaUrl(addon.baseUrl, requestedType, id)
@@ -165,10 +167,21 @@ class MetaRepositoryImpl @Inject constructor(
                         if (metaDto != null) {
                             val episodeLabel = context.getString(R.string.episodes_episode)
                             val meta = metaDto.toDomain(episodeLabel)
-                            addonMetaCache[cacheKey] = meta
-                            metaCache[cacheKey] = meta
-                            emit(NetworkResult.Success(meta))
-                            return@flow
+                            if (isFallbackSeriesType) {
+                                if (bestFallbackMeta == null) bestFallbackMeta = meta
+                                if (meta.videos.isNotEmpty()) {
+                                    addonMetaCache[cacheKey] = meta
+                                    metaCache[cacheKey] = meta
+                                    emit(NetworkResult.Success(meta))
+                                    return@flow
+                                }
+                                // No videos yet — keep trying
+                            } else {
+                                addonMetaCache[cacheKey] = meta
+                                metaCache[cacheKey] = meta
+                                emit(NetworkResult.Success(meta))
+                                return@flow
+                            }
                         } else {
                             attemptedFailures += buildMissingMetaFailure(addon)
                         }
@@ -178,6 +191,13 @@ class MetaRepositoryImpl @Inject constructor(
                     }
                     NetworkResult.Loading -> { /* Try next addon */ }
                 }
+            }
+            // For series fallback: emit best result found even if no videos
+            if (bestFallbackMeta != null) {
+                addonMetaCache[cacheKey] = bestFallbackMeta
+                metaCache[cacheKey] = bestFallbackMeta
+                emit(NetworkResult.Success(bestFallbackMeta))
+                return@flow
             }
 
             val fallbackMessage = if (fallbackAddons.isEmpty()) {
@@ -197,6 +217,8 @@ class MetaRepositoryImpl @Inject constructor(
         val deferred = inFlightAddonMeta.getOrPut(cacheKey) {
             repositoryScope.async {
                 try {
+                    val isSeriesType = requestedType.lowercase() in setOf("series", "tv")
+                    var bestMeta: Meta? = null
                     for ((addon, candidateType) in prioritizedCandidates) {
                         val url = buildMetaUrl(addon.baseUrl, candidateType, id)
                         Log.d(TAG, "Trying meta addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$id url=$url")
@@ -205,12 +227,25 @@ class MetaRepositoryImpl @Inject constructor(
                                 val metaDto = result.data.meta
                                 if (metaDto != null) {
                                     val meta = metaDto.toDomain(context.getString(R.string.episodes_episode))
-                                    addonMetaCache[cacheKey] = meta
-                                    metaCache[cacheKey] = meta
-                                    Log.d(TAG, "Meta fetch success addonId=${addon.id} type=$candidateType id=$id")
-                                    return@async meta
+                                    Log.d(TAG, "Meta fetch success addonId=${addon.id} type=$candidateType id=$id videos=${meta.videos.size}")
+                                    if (isSeriesType) {
+                                        if (bestMeta == null) bestMeta = meta
+                                        if (meta.videos.isNotEmpty()) {
+                                            // Found episodes — use this response
+                                            addonMetaCache[cacheKey] = meta
+                                            metaCache[cacheKey] = meta
+                                            return@async meta
+                                        }
+                                        // No videos yet — keep trying but remember this as fallback
+                                        Log.d(TAG, "Meta has no videos, continuing to next addon addonId=${addon.id}")
+                                    } else {
+                                        addonMetaCache[cacheKey] = meta
+                                        metaCache[cacheKey] = meta
+                                        return@async meta
+                                    }
+                                } else {
+                                    Log.d(TAG, "Meta response was null addonId=${addon.id} type=$candidateType id=$id")
                                 }
-                                Log.d(TAG, "Meta response was null addonId=${addon.id} type=$candidateType id=$id")
                             }
                             is NetworkResult.Error -> {
                                 /* try next */
@@ -218,7 +253,12 @@ class MetaRepositoryImpl @Inject constructor(
                             NetworkResult.Loading -> { /* try next */ }
                         }
                     }
-                    null
+                    // For series: all addons exhausted — return best non-null result found
+                    bestMeta?.let {
+                        addonMetaCache[cacheKey] = it
+                        metaCache[cacheKey] = it
+                    }
+                    bestMeta
                 } finally {
                     inFlightAddonMeta.remove(cacheKey)
                 }

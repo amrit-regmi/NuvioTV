@@ -65,6 +65,8 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.stream.StreamWarmer
 import dagger.hilt.android.qualifiers.ApplicationContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.Locale
 import javax.inject.Inject
 
@@ -96,6 +98,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val traktRatingService: com.nuvio.tv.data.repository.TraktRatingService,
     private val recoRatingService: com.nuvio.tv.core.reco.RecoRatingService,
     private val recoMetadataService: com.nuvio.tv.core.reco.RecoMetadataService,
+    private val httpClient: okhttp3.OkHttpClient,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -361,6 +364,7 @@ class MetaDetailsViewModel @Inject constructor(
             is MetaDetailsEvent.OnRatingSelected -> _uiState.update { it.copy(ratingPickerDefault = event.rating) }
             MetaDetailsEvent.OnDismissRatingPicker -> _uiState.update { it.copy(showRatingPicker = false) }
             MetaDetailsEvent.OnSubmitRating -> submitRating()
+            MetaDetailsEvent.OnPrepareStream -> handlePrepareStream()
         }
     }
 
@@ -818,46 +822,6 @@ class MetaDetailsViewModel @Inject constructor(
             ?: return false
         val type = ContentType.fromString(itemType)
 
-        // In private mode TMDB is blocked; try to build a minimal Meta from
-        // the reco preview cache (populated when the home screen fetched reco rows).
-        if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
-            val cached = recoMetadataService.getCachedPreview(itemId)
-            if (cached != null) {
-                val meta = Meta(
-                    id = itemId,
-                    type = type,
-                    rawType = itemType,
-                    name = cached.name,
-                    poster = cached.poster,
-                    posterShape = com.nuvio.tv.domain.model.PosterShape.POSTER,
-                    background = cached.background,
-                    logo = cached.logo,
-                    description = cached.description,
-                    releaseInfo = cached.releaseInfo,
-                    status = null,
-                    imdbRating = cached.imdbRating,
-                    genres = cached.genres,
-                    runtime = null,
-                    director = emptyList(),
-                    writer = emptyList(),
-                    cast = emptyList(),
-                    castMembers = emptyList(),
-                    videos = emptyList(),
-                    productionCompanies = emptyList(),
-                    networks = emptyList(),
-                    ageRating = null,
-                    country = null,
-                    awards = null,
-                    language = null,
-                    links = emptyList(),
-                    trailers = emptyList()
-                )
-                applyMetaWithEnrichment(meta)
-                return true
-            }
-            return false
-        }
-
         val settings = tmdbSettingsDataStore.settings.first()
         val enrichment = tmdbMetadataService.fetchEnrichment(
             tmdbId = tmdbId.toString(),
@@ -904,6 +868,10 @@ class MetaDetailsViewModel @Inject constructor(
 
     private suspend fun resolveMetaLookupId(itemId: String, itemType: String): String {
         val raw = itemId.trim()
+        // If the ID is already an IMDB ID (e.g. "tt0903747"), no resolution needed.
+        // The reco engine now returns imdb_id directly on every item, so this is the
+        // common case in private mode and avoids an unnecessary resolveImdbId() call.
+        if (raw.startsWith("tt", ignoreCase = true)) return raw
         if (!raw.startsWith("tmdb:", ignoreCase = true)) return raw
 
         // Handle "tmdb:12345", "tmdb:movie:12345", "tmdb:series:12345"
@@ -914,10 +882,6 @@ class MetaDetailsViewModel @Inject constructor(
             else -> null
         } ?: return raw
 
-        // In private mode TMDB is blocked; skip the conversion entirely and use the
-        // tmdb: ID as-is. In normal mode use a short timeout so a slow TMDB API
-        // doesn't stall the detail screen.
-        if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") return raw
         return kotlinx.coroutines.withTimeoutOrNull(5_000L) {
             tmdbService.tmdbToImdb(tmdbNumericId, itemType)
         }
@@ -1379,11 +1343,6 @@ class MetaDetailsViewModel @Inject constructor(
         collectionJob?.cancel()
         collectionJob = viewModelScope.launch {
             if (!settings.enabled || !settings.useCollections) {
-                _uiState.update { it.copy(collection = emptyList(), collectionName = null) }
-                return@launch
-            }
-            // TMDB collection API is blocked in private mode; skip silently.
-            if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
                 _uiState.update { it.copy(collection = emptyList(), collectionName = null) }
                 return@launch
             }
@@ -2581,6 +2540,34 @@ class MetaDetailsViewModel @Inject constructor(
                 state
             } else {
                 state.copy(userMessage = null, userMessageIsError = false)
+            }
+        }
+    }
+
+    private fun handlePrepareStream() {
+        val meta = _uiState.value.meta ?: return
+        val imdbId = extractImdbId(meta.imdbId) ?: extractImdbId(meta.id) ?: run {
+            showMessage("No IMDB ID available", isError = true)
+            return
+        }
+        val type = meta.apiType
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val url = "${com.nuvio.tv.BuildConfig.RECO_API_BASE_URL}/catalog-addon/stream/$type/$imdbId/prepare"
+                val request = okhttp3.Request.Builder()
+                    .url(url)
+                    .post("{}".toRequestBody("application/json".toMediaType()))
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        showMessage("Stream queued — ready in ~60 min")
+                    } else {
+                        showMessage("Failed to queue stream (${response.code})", isError = true)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "handlePrepareStream failed", e)
+                showMessage("Failed to queue stream", isError = true)
             }
         }
     }

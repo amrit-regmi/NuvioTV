@@ -43,10 +43,22 @@ class AddonRepositoryImpl @Inject constructor(
     companion object {
         private const val TAG = "AddonRepository"
         private const val MANIFEST_CACHE_PREFS = "addon_manifest_cache"
-        private const val MANIFEST_CACHE_KEY = "manifests_v2"
+        private const val MANIFEST_CACHE_KEY = "manifests_v3"
         private const val LEGACY_MANIFEST_CACHE_KEY = "manifests"
         private const val MANIFEST_SUFFIX = "/manifest.json"
-        private const val MANIFEST_CACHE_TTL_MS = 6 * 60 * 60 * 1000L 
+        private const val MANIFEST_CACHE_TTL_MS = 6 * 60 * 60 * 1000L
+        private const val BACKEND_ADDON_HOST = "recoengine.regmig.com"
+    }
+
+    private fun catalogAuthHeader(url: String): String? {
+        val secret = BuildConfig.CATALOG_SECRET.trim()
+        if (secret.isBlank()) return null
+        val lower = url.lowercase()
+        val catalogBase = BuildConfig.CATALOG_ADDON_BASE_URL.trim().lowercase()
+        return if (lower.contains(BACKEND_ADDON_HOST) ||
+                   (catalogBase.isNotBlank() && lower.contains(catalogBase))) {
+            "Bearer $secret"
+        } else null
     }
 
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -120,8 +132,9 @@ class AddonRepositoryImpl @Inject constructor(
     private suspend fun loadManifestCacheFromDisk() = kotlinx.coroutines.withContext(Dispatchers.IO) {
         try {
             val prefs = context.getSharedPreferences(MANIFEST_CACHE_PREFS, Context.MODE_PRIVATE)
-            if (prefs.contains(LEGACY_MANIFEST_CACHE_KEY)) {
-                prefs.edit().remove(LEGACY_MANIFEST_CACHE_KEY).apply()
+            val staleKeys = listOf(LEGACY_MANIFEST_CACHE_KEY, "manifests_v2").filter { prefs.contains(it) }
+            if (staleKeys.isNotEmpty()) {
+                prefs.edit().also { editor -> staleKeys.forEach { editor.remove(it) } }.apply()
             }
             val json = prefs.getString(MANIFEST_CACHE_KEY, null) ?: return@withContext
             val type = object : TypeToken<Map<String, Addon>>() {}.type
@@ -153,33 +166,45 @@ class AddonRepositoryImpl @Inject constructor(
         ) { urls, names, enabledStates -> Triple(urls, names, enabledStates) }
         .flatMapLatest { (urls, userNames, enabledStates) ->
             flow {
-                if (urls.isEmpty()) {
+                val enabledByUrl = enabledStates.mapKeys { (url, _) -> canonicalizeUrl(url) }
+
+                // In private mode, the catalog-addon is always-on regardless of user preferences.
+                val effectiveUrls = if (BuildConfig.RECO_MODE == "private") {
+                    val catalogCanonical = canonicalizeUrl("https://recoengine.regmig.com/catalog-addon")
+                    if (urls.none { canonicalizeUrl(it) == catalogCanonical }) listOf(catalogCanonical) + urls
+                    else urls
+                } else urls
+                val effectiveEnabledByUrl = if (BuildConfig.RECO_MODE == "private") {
+                    val catalogCanonical = canonicalizeUrl("https://recoengine.regmig.com/catalog-addon")
+                    enabledByUrl + mapOf(catalogCanonical to true)
+                } else enabledByUrl
+
+                if (effectiveUrls.isEmpty()) {
                     emit(emptyList())
                     return@flow
                 }
 
-                val enabledByUrl = enabledStates.mapKeys { (url, _) -> canonicalizeUrl(url) }
-                val cached = urls.mapNotNull { url ->
+                val cached = effectiveUrls.mapNotNull { url ->
                     val canonical = canonicalizeUrl(url)
-                    val enabled = enabledByUrl[canonical] ?: true
+                    val enabled = effectiveEnabledByUrl[canonical] ?: true
                     manifestCache[canonical]
                         ?.copy(enabled = enabled)
                         ?: if (!enabled) placeholderAddon(canonical, userNames, enabled) else null
                 }
                 if (cached.isNotEmpty()) {
-                    emit(applyDisplayNames(cached, userNames, enabledByUrl))
+                    emit(applyDisplayNames(cached, userNames, effectiveEnabledByUrl))
                 }
 
-                val hasCacheMiss = urls.any { url ->
+                val hasCacheMiss = effectiveUrls.any { url ->
                     val canonical = canonicalizeUrl(url)
-                    (enabledByUrl[canonical] ?: true) && manifestCache[canonical] == null
+                    (effectiveEnabledByUrl[canonical] ?: true) && manifestCache[canonical] == null
                 }
                 if (hasCacheMiss) {
                     val fresh = coroutineScope {
-                        urls.map { url ->
+                        effectiveUrls.map { url ->
                             async {
                                 val canonical = canonicalizeUrl(url)
-                                val enabled = enabledByUrl[canonical] ?: true
+                                val enabled = effectiveEnabledByUrl[canonical] ?: true
                                 if (!enabled) {
                                     return@async manifestCache[canonical]
                                         ?.copy(enabled = false)
@@ -194,11 +219,11 @@ class AddonRepositoryImpl @Inject constructor(
                     }
 
                     if (fresh != cached) {
-                        emit(applyDisplayNames(fresh, userNames, enabledByUrl))
+                        emit(applyDisplayNames(fresh, userNames, effectiveEnabledByUrl))
                     }
-                } else if (isCacheStale() && urls.isNotEmpty()) {
+                } else if (isCacheStale() && effectiveUrls.isNotEmpty()) {
                     scheduleManifestRefresh(
-                        urls.filter { url -> enabledByUrl[canonicalizeUrl(url)] ?: true }
+                        effectiveUrls.filter { url -> effectiveEnabledByUrl[canonicalizeUrl(url)] ?: true }
                     )
                 }
             }.flowOn(Dispatchers.IO)
@@ -211,7 +236,7 @@ class AddonRepositoryImpl @Inject constructor(
         val baseQuery = if (queryStart >= 0) cleanBaseUrl.substring(queryStart) else ""
         val manifestUrl = "$basePath/manifest.json$baseQuery"
 
-        return when (val result = safeApiCall(context) { api.getManifest(manifestUrl) }) {
+        return when (val result = safeApiCall(context) { api.getManifest(manifestUrl, catalogAuthHeader(manifestUrl)) }) {
             is NetworkResult.Success -> {
                 val addon = result.data.toDomain(cleanBaseUrl)
                 manifestCache[cleanBaseUrl] = addon

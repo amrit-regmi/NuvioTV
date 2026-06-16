@@ -147,7 +147,7 @@ fun AddonManagerScreen(
     val installButtonFocusRequester = remember { FocusRequester() }
     val textFieldFocusRequester = remember { FocusRequester() }
     var isEditing by remember { mutableStateOf(false) }
-    val hasHomeVisibleCatalogs = remember(uiState.installedAddons) {
+    val hasHomeVisibleCatalogs = com.nuvio.tv.BuildConfig.RECO_MODE == "private" || remember(uiState.installedAddons) {
         uiState.installedAddons.any { addon ->
             addon.enabled && addon.catalogs.any { catalog -> !catalog.isSearchOnlyCatalog() }
         }

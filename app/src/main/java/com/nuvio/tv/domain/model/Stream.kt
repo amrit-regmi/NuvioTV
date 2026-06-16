@@ -58,6 +58,23 @@ data class Stream(
     }
 
     /**
+     * Returns true if this stream has clientResolve data but is not yet cached
+     * on the debrid service (isCached != true). These streams require a download
+     * to be queued before they can be played — the UI should show a download icon.
+     */
+    fun isNonCachedDebridStream(): Boolean {
+        val resolve = clientResolve ?: return false
+        if (resolve.service.isNullOrBlank()) return false
+        if (isDirectDebrid()) return false
+        if (getStreamUrl() != null) return false
+        if (isTorrent()) return false
+        val hasIdentity = !resolve.infoHash.isNullOrBlank() ||
+            !resolve.magnetUri.isNullOrBlank() ||
+            !resolve.torrentName.isNullOrBlank()
+        return hasIdentity
+    }
+
+    /**
      * Returns true if this is a YouTube stream
      */
     fun isYouTube(): Boolean = ytId != null
@@ -156,6 +173,7 @@ data class StreamClientResolve(
     val serviceIndex: Int?,
     val serviceExtension: String?,
     val isCached: Boolean?,
+    val torrentId: Int? = null,
     val stream: StreamClientResolveStream? = null
 )
 

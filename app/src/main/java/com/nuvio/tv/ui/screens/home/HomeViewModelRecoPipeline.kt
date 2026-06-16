@@ -12,6 +12,7 @@ import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.launch
@@ -22,14 +23,27 @@ internal fun HomeViewModel.observeRecoRows() {
     if (BuildConfig.RECO_MODE != "private") return
 
     viewModelScope.launch {
-        authManager.authState
-            .filterIsInstance<AuthState.FullAccount>()
+        combine(
+            authManager.authState.filterIsInstance<AuthState.FullAccount>(),
+            profileManager.activeProfileId,
+        ) { account, profileId -> account to profileId }
             .distinctUntilChanged()
-            .collectLatest { account ->
+            .collectLatest { (account, profileId) ->
                 val token = authManager.currentAccessToken() ?: return@collectLatest
-                val rows = recommendationRepository.fetchRows(account.userId, token)
+                val rows = recommendationRepository.fetchRows(account.userId, token, profileId.toString())
                 val catalogRows = rows.mapIndexed { index, row -> row.toCatalogRow(index) }
                 _recoRows.value = catalogRows
+
+                // Pre-populate IMDB↔TMDB mapping cache so MetaDetailsViewModel can resolve
+                // TMDB IDs from tt-format IDs without network calls in private mode.
+                rows.forEach { row ->
+                    row.items.forEach { item ->
+                        val imdbId = item.imdb_id
+                        if (imdbId != null) {
+                            tmdbService.preCacheMapping(imdbId, item.tmdb_id)
+                        }
+                    }
+                }
 
                 // Pre-populate the enriched-previews map for reco items so that the hero
                 // panel never enters the "enrichment pending" blank state for items that
@@ -92,15 +106,22 @@ private fun RecoItem.toMetaPreview(): MetaPreview {
             else -> "$TMDB_POSTER_BASE$it"
         }
     }
+    val logoUrl = logo_path?.let {
+        when {
+            it.startsWith("http") -> it
+            BuildConfig.RECO_MODE == "private" -> "${BuildConfig.RECO_API_BASE_URL}/image$it"
+            else -> "$TMDB_POSTER_BASE$it"
+        }
+    }
     return MetaPreview(
-        id = "tmdb:$tmdb_id",
+        id = imdb_id ?: "tmdb:$tmdb_id",
         type = type,
         rawType = kind,
         name = title,
         poster = poster ?: posterUrl,
         posterShape = PosterShape.POSTER,
         background = backdrop,
-        logo = null,
+        logo = logoUrl,
         description = overview,
         releaseInfo = year?.toString(),
         imdbRating = vote_average?.toFloat() ?: score.takeIf { it > 0.0 }?.toFloat(),

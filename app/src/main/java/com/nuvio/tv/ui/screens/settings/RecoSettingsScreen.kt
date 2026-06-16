@@ -84,7 +84,7 @@ internal fun RecoSettingsContent(
                         if (uiState.qrBitmap != null) {
                             Image(
                                 bitmap = uiState.qrBitmap!!.asImageBitmap(),
-                                contentDescription = "Watchly configuration QR code",
+                                contentDescription = "Reco engine QR code",
                                 modifier = Modifier
                                     .size(200.dp)
                                     .background(Color.White, RoundedCornerShape(12.dp)),
@@ -120,7 +120,7 @@ internal fun RecoSettingsContent(
 
                     else -> {
                         Text(
-                            text = "Open the Watchly config UI on your phone or laptop by scanning a QR code. The key expires after 15 minutes.",
+                            text = "Open the Reco engine UI on your phone or laptop by scanning the QR code. The key expires after 15 minutes.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = NuvioColors.TextSecondary,
                             textAlign = TextAlign.Center

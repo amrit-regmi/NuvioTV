@@ -125,6 +125,7 @@ sealed class MetaDetailsEvent {
     data class OnRatingSelected(val rating: Int) : MetaDetailsEvent()
     data object OnDismissRatingPicker : MetaDetailsEvent()
     data object OnSubmitRating : MetaDetailsEvent()
+    data object OnPrepareStream : MetaDetailsEvent()
 }
 
 enum class TraktReaction(val defaultRating: Int) {

@@ -6,6 +6,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
+import com.nuvio.tv.core.debrid.DebridDownloadManager
+import com.nuvio.tv.core.debrid.DebridDownloadStatus
 import com.nuvio.tv.core.debrid.DebridStreamPresentation
 import com.nuvio.tv.core.debrid.DirectDebridResolveResult
 import com.nuvio.tv.core.debrid.DirectDebridResolver
@@ -13,6 +15,7 @@ import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.subtitle.SubtitleWarmer
+import com.nuvio.tv.core.stream.StreamWarmer
 import com.nuvio.tv.core.torrent.TorrentSettings
 import com.nuvio.tv.core.player.StreamAutoPlayPolicy
 import com.nuvio.tv.core.player.StreamAutoPlaySelector
@@ -84,9 +87,11 @@ class StreamScreenViewModel @Inject constructor(
     private val directDebridStreamPreparer: DirectDebridStreamPreparer,
     private val subtitleWarmer: SubtitleWarmer,
     private val debridStreamPresentation: DebridStreamPresentation,
+    private val debridDownloadManager: DebridDownloadManager,
     private val externalPlaybackTracker: com.nuvio.tv.core.player.ExternalPlaybackTracker,
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
+    private val streamWarmer: StreamWarmer,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -158,6 +163,8 @@ class StreamScreenViewModel @Inject constructor(
     val p2pEnabled = torrentSettings.settings
         .map { it.p2pEnabled }
         .distinctUntilChanged()
+
+    val activeDownload = debridDownloadManager.activeDownload
 
     fun enableP2p() = torrentSettings.setP2pEnabled(true)
 
@@ -241,6 +248,39 @@ class StreamScreenViewModel @Inject constructor(
         }
         loadMissingMetaDetailsIfNeeded()
         loadStreams()
+        observeDownloadState()
+        pollInstantStreams()
+    }
+
+    private fun observeDownloadState() {
+        viewModelScope.launch {
+            debridDownloadManager.activeDownload.collectLatest { downloadState ->
+                updateUiStateIfChanged { it.copy(activeDownload = downloadState) }
+            }
+        }
+    }
+
+    /**
+     * Polls StreamWarmer's resolvedUrlCache every 2 seconds for up to 2 minutes.
+     * Any direct-debrid stream whose CDN URL is already resolved gets its stableKey
+     * added to [StreamScreenUiState.instantStreamKeys] so the UI can show ⚡ Instant.
+     */
+    private fun pollInstantStreams() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            repeat(60) {
+                delay(2_000L)
+                val streams = _uiState.value.allStreams
+                if (streams.isEmpty()) return@repeat
+                val instant = streams
+                    .filter { it.isDirectDebrid() && streamWarmer.getCachedResolvedUrl(it) != null }
+                    .map { it.stableKey() }
+                    .toSet()
+                val current = _uiState.value.instantStreamKeys
+                if (instant != current) {
+                    updateUiStateIfChanged { it.copy(instantStreamKeys = instant) }
+                }
+            }
+        }
     }
 
     private fun SavedStateHandle.getOptionalString(key: String): String? {
@@ -1099,6 +1139,27 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     suspend fun resolveStreamForPlayback(stream: Stream): StreamPlaybackInfo? {
+        // Check if stream is already the active download and is now ready
+        val currentDownload = debridDownloadManager.activeDownload.value
+        if (currentDownload != null &&
+            debridDownloadManager.isActiveDownload(stream) &&
+            currentDownload.status == DebridDownloadStatus.READY
+        ) {
+            // Download finished — refresh streams so user can pick the cached version
+            debridDownloadManager.cancel()
+            loadStreams()
+            return null
+        }
+
+        // Non-cached debrid stream: queue for download instead of silent null
+        if (stream.isNonCachedDebridStream()) {
+            debridDownloadManager.queue(stream, contentType, videoId)
+            updateUiStateIfChanged {
+                it.copy(streamQueuedMessage = context.getString(R.string.stream_queued_toast))
+            }
+            return null
+        }
+
         if (!directDebridResolver.shouldResolveToPlayableStream(stream)) {
             return getStreamForPlayback(stream)
         }
@@ -1165,7 +1226,20 @@ class StreamScreenViewModel @Inject constructor(
                 null
             }
             DirectDebridResolveResult.NotCached -> {
-                showDirectDebridPlaybackError(context.getString(R.string.debrid_not_cached), refreshStreams = false)
+                // Queue stream for background download on the shared Torbox account
+                directAutoPlayFlowEnabledForSession = false
+                updateUiStateIfChanged {
+                    it.copy(
+                        isDirectAutoPlayFlow = false,
+                        showDirectAutoPlayOverlay = false,
+                        directAutoPlayMessage = null,
+                        autoPlayStream = null
+                    )
+                }
+                debridDownloadManager.queue(stream, contentType, videoId)
+                updateUiStateIfChanged {
+                    it.copy(streamQueuedMessage = context.getString(R.string.stream_queued_toast))
+                }
                 null
             }
             DirectDebridResolveResult.RateLimited -> {
@@ -1186,6 +1260,16 @@ class StreamScreenViewModel @Inject constructor(
     fun onPlaybackErrorShown() {
         updateUiStateIfChanged { it.copy(playbackErrorMessage = null) }
     }
+
+    fun onStreamQueuedMessageShown() {
+        updateUiStateIfChanged { it.copy(streamQueuedMessage = null) }
+    }
+
+    fun cancelDownload() {
+        debridDownloadManager.cancel()
+    }
+
+    fun isActiveDownload(stream: Stream): Boolean = debridDownloadManager.isActiveDownload(stream)
 
     fun onInternalPlayerLaunching() {
         updateUiStateIfChanged {

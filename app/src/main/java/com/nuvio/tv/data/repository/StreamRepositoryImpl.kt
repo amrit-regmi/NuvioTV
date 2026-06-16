@@ -11,6 +11,7 @@ import com.nuvio.tv.core.debrid.LocalDebridAvailabilityService
 import com.nuvio.tv.core.streams.StreamBadgePresentation
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.tmdb.TmdbService
+import com.nuvio.tv.data.local.DeviceProfileDataStore
 import com.nuvio.tv.data.mapper.toDomain
 import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.Addon
@@ -35,8 +36,10 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import javax.inject.Inject
+import com.nuvio.tv.BuildConfig
 
 private const val TAG = "StreamRepositoryImpl"
+private const val BACKEND_ADDON_HOST = "recoengine.regmig.com"
 
 class StreamRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -47,7 +50,8 @@ class StreamRepositoryImpl @Inject constructor(
     private val debridStreamPresentation: DebridStreamPresentation,
     private val streamBadgePresentation: StreamBadgePresentation,
     private val localDebridAvailabilityService: LocalDebridAvailabilityService,
-    private val streamWarmer: StreamWarmer
+    private val streamWarmer: StreamWarmer,
+    private val deviceProfileDataStore: DeviceProfileDataStore
 ) : StreamRepository {
     private enum class StreamFailureKind {
         MISSING,
@@ -447,6 +451,21 @@ class StreamRepositoryImpl @Inject constructor(
         }
     }
 
+    /**
+     * Returns "Bearer <secret>" when the addon URL belongs to our backend, null otherwise.
+     * Mirrors the same helper in StreamWarmer and AddonRepositoryImpl.
+     */
+    private fun catalogAuth(baseUrl: String): String? {
+        val secret = BuildConfig.CATALOG_SECRET.trim()
+        if (secret.isBlank()) return null
+        val lower = baseUrl.lowercase()
+        val catalogBase = BuildConfig.CATALOG_ADDON_BASE_URL.trim().lowercase()
+        return if (lower.contains(BACKEND_ADDON_HOST) ||
+                   (catalogBase.isNotBlank() && lower.contains(catalogBase))) {
+            "Bearer $secret"
+        } else null
+    }
+
     override suspend fun getStreamsFromAddon(
         baseUrl: String,
         type: String,
@@ -458,7 +477,13 @@ class StreamRepositoryImpl @Inject constructor(
         val baseQuery = if (queryStart >= 0) cleanBaseUrl.substring(queryStart) else ""
         val encodedType = encodePathSegment(type)
         val encodedVideoId = encodePathSegment(videoId)
-        val streamUrl = "$basePath/stream/$encodedType/$encodedVideoId.json$baseQuery"
+        val streamUrl = if (baseUrl.contains("recoengine")) {
+            val profileId = deviceProfileDataStore.selectedProfileId.first()
+            val profileParam = if (baseQuery.isEmpty()) "?profile=$profileId" else "&profile=$profileId"
+            "$basePath/stream/$encodedType/$encodedVideoId.json$baseQuery$profileParam"
+        } else {
+            "$basePath/stream/$encodedType/$encodedVideoId.json$baseQuery"
+        }
         Log.d(TAG, "Fetching streams type=$type videoId=$videoId url=$streamUrl")
 
         // First, get addon info for name and logo
@@ -477,7 +502,7 @@ class StreamRepositoryImpl @Inject constructor(
             return NetworkResult.Success(cached)
         }
 
-        return when (val result = safeApiCall(context) { api.getStreams(streamUrl) }) {
+        return when (val result = safeApiCall(context) { api.getStreams(streamUrl, catalogAuth(baseUrl)) }) {
             is NetworkResult.Success -> {
                 val streams = result.data.streams?.map {
                     it.toDomain(addonName, addonLogo)

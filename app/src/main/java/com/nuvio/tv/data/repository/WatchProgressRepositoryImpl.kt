@@ -764,7 +764,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val kind = if (progress.contentType.lowercase() in setOf("series", "tv")) "tv" else "movie"
         val token = authManager.currentAccessToken() ?: return
         syncScope.launch(NonCancellable) {
-            recommendationRepository.reportWatched(token, tmdbId, kind, fraction, progress.season, progress.episode)
+            recommendationRepository.reportWatched(token, tmdbId, kind, fraction, profileManager.activeProfileId.value.toString(), progress.season, progress.episode)
         }
     }
 

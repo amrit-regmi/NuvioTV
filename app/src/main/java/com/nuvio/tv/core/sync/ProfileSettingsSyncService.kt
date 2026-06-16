@@ -58,7 +58,6 @@ private const val TAG = "ProfileSettingsSyncService"
 private const val SETTINGS_PUSH_DEBOUNCE_MS = 1500L
 private const val FOREGROUND_PULL_DELAY_MS = 2500L
 private const val FOREGROUND_PULL_MIN_INTERVAL_MS = 60_000L
-private const val SETTINGS_SYNC_PLATFORM = "tv"
 private const val PLAYER_SETTINGS_FEATURE = "player_settings"
 
 private val catalogKeysExcludedFromProfileSettingsBlob = setOf(
@@ -194,7 +193,6 @@ class ProfileSettingsSyncService @Inject constructor(
                 val params = buildJsonObject {
                     put("p_profile_id", profileId)
                     put("p_settings_json", settingsJson)
-                    put("p_platform", SETTINGS_SYNC_PLATFORM)
                 }
 
                 withJwtRefreshRetry {
@@ -216,7 +214,6 @@ class ProfileSettingsSyncService @Inject constructor(
                 val profileId = profileManager.activeProfileId.value
                 val params = buildJsonObject {
                     put("p_profile_id", profileId)
-                    put("p_platform", SETTINGS_SYNC_PLATFORM)
                 }
 
                 val response = withJwtRefreshRetry {

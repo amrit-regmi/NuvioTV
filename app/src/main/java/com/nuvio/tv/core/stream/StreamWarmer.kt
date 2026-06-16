@@ -2,6 +2,12 @@ package com.nuvio.tv.core.stream
 
 import android.content.Context
 import android.util.Log
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+import com.nuvio.tv.BuildConfig
+import com.nuvio.tv.core.debrid.DirectDebridResolveResult
+import com.nuvio.tv.core.debrid.TorboxDirectDebridResolver
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.network.safeApiCall
 import com.nuvio.tv.core.player.FrameRateUtils
@@ -11,6 +17,7 @@ import com.nuvio.tv.data.mapper.toDomain
 import com.nuvio.tv.core.subtitle.SubtitleWarmer
 import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.Stream
+import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.ui.screens.player.PlayerPlaybackNetworking
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,6 +41,10 @@ import javax.inject.Singleton
 private const val TAG = "StreamWarmer"
 private const val MAX_CACHE_SIZE = 50
 private const val CACHE_TTL_MS = 15 * 60 * 1000L
+// Resolved Torbox CDN URLs expire in ~2 hours. We use 60-min TTL so we never serve
+// an expired link, and invalidate everything older than 90 min on app resume.
+private const val RESOLVED_URL_TTL_MS = 60 * 60 * 1000L
+private const val RESOLVED_URL_RESUME_INVALIDATE_MS = 90 * 60 * 1000L
 private const val PROBE_TIMEOUT_MS = 2_000L
 // Background warms probe fewer streams to limit CDN burst on startup.
 // User-initiated stream loading still uses the full streamMaxResults setting.
@@ -41,6 +52,9 @@ private const val BACKGROUND_PROBE_COUNT = 3
 // Stub/error videos served by Comet and similar proxies for uncached content are tiny (< 1 MB).
 // Real video files are always larger. Any Content-Range total below this threshold is a stub.
 private const val MIN_REAL_VIDEO_BYTES = 1L * 1024 * 1024
+// The backend catalog-addon host is always placed first in addon ordering.
+// This mirrors the default entry in AddonPreferences (recoengine.regmig.com/catalog-addon).
+private const val BACKEND_ADDON_HOST = "recoengine.regmig.com"
 
 @Singleton
 class StreamWarmer @Inject constructor(
@@ -50,9 +64,45 @@ class StreamWarmer @Inject constructor(
     private val subtitleWarmer: SubtitleWarmer,
     private val debridSettingsDataStore: DebridSettingsDataStore,
     private val playerPreWarmer: PlayerPreWarmer,
+    private val torboxResolver: TorboxDirectDebridResolver,
     okHttpClient: OkHttpClient
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Cache of Torbox-resolved CDN URLs produced during background warm.
+    // Keyed by stream preparationKey (infoHash|fileIdx). Stored with timestamp
+    // so entries older than RESOLVED_URL_TTL_MS (60 min) are never served.
+    private data class ResolvedUrlEntry(val url: String, val filename: String?, val videoSize: Long?, val resolvedAt: Long)
+    private val resolvedUrlCache: MutableMap<String, ResolvedUrlEntry> = Collections.synchronizedMap(
+        object : LinkedHashMap<String, ResolvedUrlEntry>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: Map.Entry<String, ResolvedUrlEntry>) = size > 200
+        }
+    )
+
+    init {
+        // On app resume from background/sleep, invalidate resolved CDN URL entries older than
+        // 90 minutes. Torbox CDN URLs expire in ~2 hours; this prevents stale URLs from being
+        // served to a detail page opened after long standby.
+        val lifecycleObserver = object : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) {
+                val cutoff = System.currentTimeMillis() - RESOLVED_URL_RESUME_INVALIDATE_MS
+                val staleBefore = cutoff
+                synchronized(resolvedUrlCache) {
+                    val staleKeys = resolvedUrlCache.entries
+                        .filter { it.value.resolvedAt < staleBefore }
+                        .map { it.key }
+                    staleKeys.forEach { resolvedUrlCache.remove(it) }
+                    if (staleKeys.isNotEmpty()) {
+                        Log.d(TAG, "onResume: evicted ${staleKeys.size} stale resolved URL entries (>90 min old)")
+                    }
+                }
+            }
+        }
+        // Register on main thread — ProcessLifecycleOwner requires main thread access
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
+        }
+    }
 
     // Short-timeout client for probing — separate from the main client to avoid affecting it
     private val probeClient = okHttpClient.newBuilder()
@@ -142,7 +192,8 @@ class StreamWarmer @Inject constructor(
         return try {
             val url = buildStreamUrl(baseUrl, type, videoId)
             Log.d(TAG, "Pre-fetching streams: $url")
-            when (val result = safeApiCall(context) { api.getStreams(url) }) {
+            val auth = catalogAuth(baseUrl)
+            when (val result = safeApiCall(context) { api.getStreams(url, auth) }) {
                 is NetworkResult.Success -> {
                     val streams = result.data.streams?.map { it.toDomain(addonName, addonLogo) } ?: emptyList()
                     Log.d(TAG, "Fetched ${streams.size} streams for addon=$addonName type=$type videoId=$videoId")
@@ -362,6 +413,42 @@ class StreamWarmer @Inject constructor(
                     }
                 }
             }
+
+            // Tier 2: resolve clientResolve (direct-debrid) streams in the background.
+            // The resolved CDN URL is stored in resolvedUrlCache with a 60-min TTL so that
+            // the detail panel can display "⚡ Instant" (already resolved) immediately.
+            val tier2Candidates = reordered.filter { it.isDirectDebrid() && it.getStreamUrl() == null }
+            if (tier2Candidates.isNotEmpty()) {
+                scope.launch(Dispatchers.IO) {
+                    for (stream in tier2Candidates) {
+                        val key = stream.resolvedUrlCacheKey() ?: continue
+                        val existing = resolvedUrlCache[key]
+                        if (existing != null && System.currentTimeMillis() - existing.resolvedAt < RESOLVED_URL_TTL_MS) continue
+                        try {
+                            when (val result = torboxResolver.resolve(stream, stream.clientResolve?.season, stream.clientResolve?.episode)) {
+                                is DirectDebridResolveResult.Success -> {
+                                    resolvedUrlCache[key] = ResolvedUrlEntry(
+                                        url = result.url,
+                                        filename = result.filename,
+                                        videoSize = result.videoSize,
+                                        resolvedAt = System.currentTimeMillis()
+                                    )
+                                    Log.d(TAG, "Tier2 warm resolved: key=$key url=${result.url.take(60)}…")
+                                }
+                                DirectDebridResolveResult.RateLimited -> {
+                                    Log.w(TAG, "Tier2 warm: rate-limited, stopping")
+                                    break
+                                }
+                                else -> Log.d(TAG, "Tier2 warm: resolve result=$result for key=$key")
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Tier2 warm: exception resolving key=$key", e)
+                        }
+                    }
+                }
+            }
         } else {
             fpsJob?.cancel()
             // All probed streams are stubs or unreachable. Evict both caches so the next
@@ -378,7 +465,23 @@ class StreamWarmer @Inject constructor(
 
     private suspend fun findAllStreamAddons() =
         addonRepository.getInstalledAddons().first()
+            .enabledAddons()
             .filter { addon -> addon.resources.any { it.name.equals("stream", ignoreCase = true) } }
+            .sortedWith(compareBy { if (it.baseUrl.contains(BACKEND_ADDON_HOST, ignoreCase = true)) 0 else 1 })
+
+    // Returns "Bearer <secret>" when the addon URL belongs to our backend, null otherwise.
+    // Retrofit's @Header skips null values, so non-catalog addons get no auth header.
+    private fun catalogAuth(baseUrl: String): String? {
+        val secret = BuildConfig.CATALOG_SECRET.trim()
+        if (secret.isBlank()) return null
+        val lower = baseUrl.lowercase()
+        val localHost = try {
+            java.net.URL(BuildConfig.CATALOG_ADDON_BASE_URL).host.lowercase()
+        } catch (_: Exception) { "" }
+        return if (lower.contains(localHost) || lower.contains(BACKEND_ADDON_HOST.lowercase())) {
+            "Bearer $secret"
+        } else null
+    }
 
     private fun buildStreamUrl(baseUrl: String, type: String, videoId: String): String {
         val clean = baseUrl.trim().trimEnd('/')
@@ -400,6 +503,25 @@ class StreamWarmer @Inject constructor(
     // Returns true if this URL was confirmed to serve a stub/error video during probing.
     // Used by NuvioNavHost to guard the two-phase fast-path against known-bad streams.
     fun isKnownStub(url: String?) = url != null && stubUrls.contains(url)
+
+    /**
+     * Returns a pre-resolved CDN URL for a direct-debrid stream if it was warmed in the
+     * background and is still within the 60-min TTL. Returns null if not cached or expired.
+     */
+    fun getCachedResolvedUrl(stream: Stream): String? {
+        val key = stream.resolvedUrlCacheKey() ?: return null
+        val entry = resolvedUrlCache[key] ?: return null
+        return if (System.currentTimeMillis() - entry.resolvedAt < RESOLVED_URL_TTL_MS) entry.url else null
+    }
+
+    /**
+     * Evicts the resolved URL cache entry for a stream (e.g. after a CDN 4xx/5xx during playback).
+     */
+    fun evictResolvedUrl(stream: Stream) {
+        val key = stream.resolvedUrlCacheKey() ?: return
+        resolvedUrlCache.remove(key)
+        Log.d(TAG, "Evicted resolved URL cache entry: key=$key")
+    }
 
     // Maps a raw Content-Type header value or file extension to a canonical MIME string.
     // Covers the formats TorBox and AIOStreams actually serve — not exhaustive.
@@ -424,4 +546,19 @@ class StreamWarmer @Inject constructor(
 @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
 interface StreamWarmerEntryPoint {
     fun streamWarmer(): StreamWarmer
+}
+
+/**
+ * Stable key for the resolved-URL cache. Mirrors DirectDebridStreamPreparer.preparationKey()
+ * but only uses the debrid-resolver fields that identify a unique file on TorBox.
+ */
+private fun Stream.resolvedUrlCacheKey(): String? {
+    val resolve = clientResolve ?: return null
+    if (!isDirectDebrid()) return null
+    return listOf(
+        resolve.service.orEmpty().lowercase(),
+        resolve.infoHash.orEmpty().lowercase(),
+        resolve.fileIdx?.toString().orEmpty(),
+        resolve.torrentId?.toString().orEmpty()
+    ).joinToString("|")
 }

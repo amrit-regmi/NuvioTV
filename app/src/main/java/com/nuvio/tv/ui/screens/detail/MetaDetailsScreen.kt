@@ -680,7 +680,8 @@ fun MetaDetailsScreen(
                     onReactionSelected = { viewModel.onEvent(MetaDetailsEvent.OnReactionSelected(it)) },
                     onRatingSelected = { viewModel.onEvent(MetaDetailsEvent.OnRatingSelected(it)) },
                     onDismissRatingPicker = { viewModel.onEvent(MetaDetailsEvent.OnDismissRatingPicker) },
-                    onSubmitRating = { viewModel.onEvent(MetaDetailsEvent.OnSubmitRating) }
+                    onSubmitRating = { viewModel.onEvent(MetaDetailsEvent.OnSubmitRating) },
+                    onPrepareStream = { viewModel.onEvent(MetaDetailsEvent.OnPrepareStream) }
                 )
             }
         }
@@ -865,7 +866,8 @@ private fun MetaDetailsContent(
     onReactionSelected: (TraktReaction) -> Unit = {},
     onRatingSelected: (Int) -> Unit = {},
     onDismissRatingPicker: () -> Unit = {},
-    onSubmitRating: () -> Unit = {}
+    onSubmitRating: () -> Unit = {},
+    onPrepareStream: () -> Unit = {}
 ) {
     val canLoadMoreComments = commentsCurrentPage in 1 until commentsPageCount
     val selectedCommentIndex = remember(comments, selectedComment?.id) {
@@ -1614,7 +1616,8 @@ private fun MetaDetailsContent(
                         onReactionSelected = onReactionSelected,
                         onRatingSelected = onRatingSelected,
                         onDismissRatingPicker = onDismissRatingPicker,
-                        onSubmitRating = onSubmitRating
+                        onSubmitRating = onSubmitRating,
+                        onPrepareStream = onPrepareStream
                     )
                 }
             }

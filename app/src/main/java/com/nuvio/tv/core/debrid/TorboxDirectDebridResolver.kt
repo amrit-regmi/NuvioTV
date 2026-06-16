@@ -23,7 +23,8 @@ private const val RATE_LIMIT_COOLDOWN_MS = 60_000L
 class TorboxDirectDebridResolver @Inject constructor(
     private val dataStore: DebridSettingsDataStore,
     private val api: TorboxApi,
-    private val fileSelector: TorboxFileSelector
+    private val fileSelector: TorboxFileSelector,
+    private val sharedTorboxKeyService: SharedTorboxKeyService
 ) {
     private val rateLimitedUntilMs = AtomicLong(0L)
 
@@ -34,6 +35,17 @@ class TorboxDirectDebridResolver @Inject constructor(
         Log.w(TORBOX_RESOLVER_TAG, "TorBox API returned 429 — backing off for ${RATE_LIMIT_COOLDOWN_MS / 1000}s")
     }
 
+    /**
+     * Resolves the effective Torbox API key: user's own key takes priority,
+     * falls back to the shared key fetched from the catalog-addon backend.
+     * Returns null if no key is available.
+     */
+    private suspend fun resolveApiKey(): String? {
+        val userKey = dataStore.settings.first().torboxApiKey.trim()
+        if (userKey.isNotBlank()) return userKey
+        return sharedTorboxKeyService.getKey()
+    }
+
     suspend fun resolve(
         stream: Stream,
         season: Int?,
@@ -41,21 +53,54 @@ class TorboxDirectDebridResolver @Inject constructor(
     ): DirectDebridResolveResult {
         if (isRateLimited()) return DirectDebridResolveResult.RateLimited
         val resolve = stream.clientResolve ?: return DirectDebridResolveResult.Error
-        val apiKey = dataStore.settings.first().torboxApiKey.trim()
-        if (apiKey.isBlank()) return DirectDebridResolveResult.MissingApiKey
-        val magnet = resolve.magnetUri?.takeIf { it.isNotBlank() }
-            ?: buildMagnetUri(resolve)
-            ?: return DirectDebridResolveResult.Stale
+        val apiKey = resolveApiKey() ?: return DirectDebridResolveResult.MissingApiKey
         val authorization = "Bearer $apiKey"
 
         return try {
-            val create = api.createTorrent(
-                authorization = authorization,
-                magnet = magnet.toTextPart(),
-                addOnlyIfCached = "true".toTextPart(),
-                allowZip = "false".toTextPart()
-            )
-            val torrentId = create.extractTorrentId() ?: return create.toFailureForCreate()
+            // Fast path: if torrentId is already known, skip createTorrent entirely
+            val knownTorrentId = resolve.torrentId
+
+            val torrentId: Int
+            if (knownTorrentId != null) {
+                torrentId = knownTorrentId
+                Log.d(TORBOX_RESOLVER_TAG, "Using pre-known torrentId=$torrentId, skipping createTorrent")
+            } else {
+                // Slow path: create/find torrent by magnet URI
+                val magnet = resolve.magnetUri?.takeIf { it.isNotBlank() }
+                    ?: buildMagnetUri(resolve)
+                    ?: return DirectDebridResolveResult.Stale
+                val create = api.createTorrent(
+                    authorization = authorization,
+                    magnet = magnet.toTextPart(),
+                    addOnlyIfCached = "true".toTextPart(),
+                    allowZip = "false".toTextPart()
+                )
+                torrentId = create.extractTorrentId() ?: return create.toFailureForCreate()
+            }
+
+            // If fileIdx is already known and torrentId was pre-known, we can skip getTorrent
+            val knownFileIdx = resolve.fileIdx
+            if (knownTorrentId != null && knownFileIdx != null) {
+                Log.d(TORBOX_RESOLVER_TAG, "Using pre-known fileIdx=$knownFileIdx, skipping getTorrent")
+                val link = api.requestDownloadLink(
+                    authorization = authorization,
+                    token = apiKey,
+                    torrentId = torrentId,
+                    fileId = knownFileIdx,
+                    zipLink = false,
+                    redirect = false,
+                    appendName = false
+                )
+                if (link.code() == 429) { triggerCooldown(); return DirectDebridResolveResult.RateLimited }
+                if (!link.isSuccessful) return DirectDebridResolveResult.Stale
+                val url = link.body()?.data?.takeIf { it.isNotBlank() }
+                    ?: return DirectDebridResolveResult.Stale
+                return DirectDebridResolveResult.Success(
+                    url = url,
+                    filename = resolve.filename,
+                    videoSize = stream.behaviorHints?.videoSize
+                )
+            }
 
             val torrent = api.getTorrent(
                 authorization = authorization,

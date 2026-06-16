@@ -77,12 +77,14 @@ import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MDBListRatings
+import com.nuvio.tv.domain.model.StreamStatus
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -141,7 +143,8 @@ fun HeroContentSection(
     onReactionSelected: (TraktReaction) -> Unit = {},
     onRatingSelected: (Int) -> Unit = {},
     onDismissRatingPicker: () -> Unit = {},
-    onSubmitRating: () -> Unit = {}
+    onSubmitRating: () -> Unit = {},
+    onPrepareStream: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val isSeriesApi = remember(meta.apiType) {
@@ -323,6 +326,15 @@ fun HeroContentSection(
                                 painter = trailerPainter,
                                 contentDescription = stringResource(R.string.hero_play_trailer),
                                 onClick = onTrailerClick,
+                                onFocused = onHeroActionFocused
+                            )
+                        }
+
+                        if (meta.streamStatus == StreamStatus.QUEUEABLE && onPrepareStream != null) {
+                            ActionIconButton(
+                                icon = Icons.Default.CloudDownload,
+                                contentDescription = "Prepare Stream",
+                                onClick = onPrepareStream,
                                 onFocused = onHeroActionFocused
                             )
                         }

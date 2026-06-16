@@ -25,6 +25,9 @@ class ProfileManager @Inject constructor(
 ) {
     companion object {
         const val MAX_PROFILES = 5
+        // Updated whenever the active profile changes; read by the global OkHttp interceptor
+        // so every request (reco, events, streams) carries the correct profile identity.
+        @Volatile var currentProfileId: Int = 1
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -59,6 +62,7 @@ class ProfileManager @Inject constructor(
     suspend fun setActiveProfile(id: Int) {
         val exists = profiles.value.any { it.id == id }
         if (exists) {
+            currentProfileId = id
             profileDataStore.setActiveProfile(id)
         }
     }

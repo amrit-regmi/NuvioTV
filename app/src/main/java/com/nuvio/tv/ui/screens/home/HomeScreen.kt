@@ -520,6 +520,9 @@ private fun ClassicHomeRoute(
         },
         onRequestLazyCatalogLoad = remember(viewModel) {
             { catalogKey: String -> viewModel.requestLazyCatalogLoad(catalogKey) }
+        },
+        onCwItemFocused = remember(viewModel) {
+            { index: Int -> viewModel.onCwItemFocused(index) }
         }
     )
 }
@@ -645,6 +648,9 @@ private fun ModernHomeRoute(
         onSaveFocusState = saveModernFocusState,
         onRequestLazyCatalogLoad = remember(viewModel) {
             { catalogKey: String -> viewModel.requestLazyCatalogLoad(catalogKey) }
+        },
+        onCwItemFocused = remember(viewModel) {
+            { index: Int -> viewModel.onCwItemFocused(index) }
         }
     )
 }

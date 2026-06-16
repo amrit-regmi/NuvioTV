@@ -4,6 +4,7 @@ import com.nuvio.tv.data.remote.dto.MetaPreviewDto
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
+import com.nuvio.tv.domain.model.StreamStatus
 
 fun MetaPreviewDto.toDomain(): MetaPreview {
     return MetaPreview(
@@ -32,6 +33,7 @@ fun MetaPreviewDto.toDomain(): MetaPreview {
         links = links?.mapNotNull { it.toDomain() } ?: emptyList(),
         behaviorHints = mapBehaviorHints(behaviorHints),
         trailers = mapTrailers(trailers, trailerStreams),
-        trailerYtIds = collectTrailerYtIds(trailers, trailerStreams)
+        trailerYtIds = collectTrailerYtIds(trailers, trailerStreams),
+        streamStatus = StreamStatus.fromString(streamStatus)
     )
 }

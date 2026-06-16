@@ -46,6 +46,7 @@ import com.nuvio.tv.domain.model.TmdbCollectionSource
 import com.nuvio.tv.domain.model.TmdbCollectionSourceType
 import com.nuvio.tv.domain.model.TraktCollectionSource
 import com.nuvio.tv.domain.model.enabledAddons
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -210,12 +211,20 @@ class AddonManagerViewModel @Inject constructor(
     }
 
     fun removeAddon(baseUrl: String) {
+        if (BuildConfig.RECO_MODE == "private" &&
+                baseUrl.contains("recoengine.regmig.com/catalog-addon", ignoreCase = true)) {
+            return
+        }
         viewModelScope.launch {
             addonRepository.removeAddon(baseUrl)
         }
     }
 
     fun setAddonEnabled(baseUrl: String, enabled: Boolean) {
+        if (BuildConfig.RECO_MODE == "private" &&
+                baseUrl.contains("recoengine.regmig.com/catalog-addon", ignoreCase = true)) {
+            return
+        }
         viewModelScope.launch {
             addonRepository.setAddonEnabled(baseUrl, enabled)
         }

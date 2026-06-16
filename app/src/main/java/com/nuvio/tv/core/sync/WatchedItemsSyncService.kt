@@ -108,7 +108,8 @@ class WatchedItemsSyncService @Inject constructor(
             put("p_limit", WATCHED_ITEMS_DELTA_PAGE_SIZE)
         }
         return withJwtRefreshRetry {
-            postgrest.rpc("sync_pull_watched_items_delta", params).decodeList<SupabaseWatchedItemEvent>()
+            postgrest.rpc("sync_pull_watched_items_delta", params)
+                .let { resp -> runCatching { resp.decodeList<SupabaseWatchedItemEvent>() }.getOrDefault(emptyList()) }
         }.also { events ->
             val firstEvent = events.firstOrNull()?.eventId
             val lastEvent = events.lastOrNull()?.eventId
@@ -190,7 +191,7 @@ class WatchedItemsSyncService @Inject constructor(
                 val response = withJwtRefreshRetry {
                     postgrest.rpc("sync_pull_watched_items", params)
                 }
-                val remote = response.decodeList<SupabaseWatchedItem>()
+                val remote = runCatching { response.decodeList<SupabaseWatchedItem>() }.getOrDefault(emptyList())
 
                 Log.d(TAG, "pullFromRemote: page $page fetched ${remote.size} watched items for profile $profileId")
 

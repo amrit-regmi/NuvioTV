@@ -23,7 +23,8 @@ class DirectDebridResolver @Inject constructor(
     private val torboxResolver: TorboxDirectDebridResolver,
     private val realDebridResolver: RealDebridDirectDebridResolver,
     private val premiumizeResolver: PremiumizeDirectDebridResolver,
-    private val localDebridService: LocalDebridService
+    private val localDebridService: LocalDebridService,
+    private val sharedTorboxKeyService: SharedTorboxKeyService
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutex = Mutex()
@@ -119,14 +120,31 @@ class DirectDebridResolver @Inject constructor(
 
     suspend fun shouldResolveToPlayableStream(stream: Stream): Boolean {
         val settings = dataStore.settings.first()
-        if (!settings.canResolvePlayableLinks) return false
+
+        // Check for local debrid resolve first (torrents without URL)
         if (stream.needsLocalDebridResolve()) {
+            if (!settings.canResolvePlayableLinks) return false
             return localTorrentResolveCredential(settings) != null
         }
+
         if (!stream.isDirectDebrid() || stream.getStreamUrl() != null) return false
         val providerId = DebridProviders.byId(stream.clientResolve?.service)?.id ?: return false
-        return providerId == settings.activeResolverProviderId &&
+
+        // Check if user has their own API key for this provider
+        if (settings.canResolvePlayableLinks &&
+            providerId == settings.activeResolverProviderId &&
             settings.apiKeyFor(providerId).isNotBlank()
+        ) {
+            return true
+        }
+
+        // Fallback: if stream is for Torbox and a shared key is configured, allow resolution
+        // even if the user has no personal Torbox key.
+        if (providerId == DebridProviders.TORBOX_ID && sharedTorboxKeyService.isConfigured()) {
+            return true
+        }
+
+        return false
     }
 
     private suspend fun getCachedResult(cacheKey: String): DirectDebridResolveResult.Success? =
@@ -178,8 +196,15 @@ class DirectDebridResolver @Inject constructor(
         val resolve = clientResolve ?: return null
         val providerId = DebridProviders.byId(resolve.service)?.id ?: return null
         val settings = dataStore.settings.first()
-        if (!settings.canResolvePlayableLinks || providerId != settings.activeResolverProviderId) return null
-        val apiKey = settings.apiKeyFor(providerId).trim().takeIf { it.isNotBlank() } ?: return null
+
+        // Determine effective API key: user's own key, or a marker for shared key
+        val apiKey: String = settings.apiKeyFor(providerId).trim().let { userKey ->
+            if (userKey.isNotBlank()) userKey
+            else if (providerId == DebridProviders.TORBOX_ID && sharedTorboxKeyService.isConfigured()) {
+                "shared" // stable marker — actual key is resolved at resolve time
+            } else return null
+        }
+
         val identity = resolve.infoHash
             ?: resolve.magnetUri
             ?: resolve.torrentName

@@ -86,7 +86,8 @@ private enum class IntegrationSettingsSection {
     Tmdb,
     MdbList,
     AnimeSkip,
-    Reco
+    Reco,
+    BuiltInProviders,
 }
 
 internal enum class SettingsSectionDestination {
@@ -244,6 +245,7 @@ fun SettingsScreen(
                 SettingsCategory.PLUGINS -> AppFeaturePolicy.pluginsEnabled && !isEssentialMode
                 SettingsCategory.INTEGRATION -> true
                 SettingsCategory.ADVANCED -> true
+                SettingsCategory.TRAKT -> BuildConfig.RECO_MODE != "private"
                 else -> true
             }
         }
@@ -276,6 +278,7 @@ fun SettingsScreen(
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
     val integrationRecoFocusRequester = remember { FocusRequester() }
+    val integrationBuiltInProvidersFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
@@ -505,6 +508,7 @@ fun SettingsScreen(
                             mdbListFocusRequester = integrationMdbListFocusRequester,
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                             recoFocusRequester = integrationRecoFocusRequester,
+                            builtInProvidersFocusRequester = integrationBuiltInProvidersFocusRequester,
                             autoFocusEnabled = allowDetailAutofocus
                         )
                         SettingsCategory.ABOUT -> AboutSettingsContent(
@@ -634,6 +638,7 @@ private fun IntegrationSettingsContent(
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
     recoFocusRequester: FocusRequester,
+    builtInProvidersFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
@@ -650,6 +655,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
             IntegrationSettingsSection.Reco -> recoFocusRequester
+            IntegrationSettingsSection.BuiltInProviders -> builtInProvidersFocusRequester
         }
         runCatching { requester.requestFocus() }
     }
@@ -676,6 +682,15 @@ private fun IntegrationSettingsContent(
                             state = integrationHubState,
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
+                                item(key = "integration_hub_builtin_providers") {
+                                    SettingsActionRow(
+                                        title = "Built-in providers",
+                                        subtitle = "Catalog and recommendation engine",
+                                        onClick = { onSelectSection(IntegrationSettingsSection.BuiltInProviders) }
+                                    )
+                                }
+                            }
                             item(key = "integration_hub_debrid") {
                                 SettingsActionRow(
                                     title = stringResource(R.string.debrid_title),
@@ -746,6 +761,13 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.Reco -> {
             RecoSettingsContent(
                 initialFocusRequester = recoFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.BuiltInProviders -> {
+            BuiltInProvidersSettingsContent(
+                initialFocusRequester = builtInProvidersFocusRequester,
+                onConfigureOnAnotherDevice = { onSelectSection(IntegrationSettingsSection.Reco) }
             )
         }
     }

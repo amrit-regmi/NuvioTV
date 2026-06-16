@@ -79,6 +79,7 @@ import com.nuvio.tv.domain.model.DebridStreamSortCriterion
 import com.nuvio.tv.domain.model.DebridStreamSortDirection
 import com.nuvio.tv.domain.model.DebridStreamSortKey
 import com.nuvio.tv.domain.model.DebridStreamVisualTag
+import com.nuvio.tv.data.remote.api.DeviceProfileDto
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.screens.addon.QrCodeOverlay
 import kotlinx.coroutines.CancellationException
@@ -95,12 +96,24 @@ fun DebridSettingsContent(
     var activeStreamPicker by remember { mutableStateOf<DebridStreamPicker?>(null) }
     var showResolverPicker by remember { mutableStateOf(false) }
     var showPrepareCountDialog by remember { mutableStateOf(false) }
+    var showProfileResolutionPicker by remember { mutableStateOf(false) }
+    var showProfileHdrDialog by remember { mutableStateOf(false) }
+    var showProfileCodecDialog by remember { mutableStateOf(false) }
+    var showProfileAudioFormatDialog by remember { mutableStateOf(false) }
+    var showProfileAudioChannelsPicker by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activeResolverProvider = uiState.activeResolverProvider
 
     LaunchedEffect(uiState.serverError) {
         val error = uiState.serverError ?: return@LaunchedEffect
         Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.profileSaveResult.collect { success ->
+            val message = if (success) "Profile saved" else "Failed to save profile"
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     Column(
@@ -205,7 +218,101 @@ fun DebridSettingsContent(
                         }
                     }
 
-                    if (uiState.canResolvePlayableLinks) {
+                    item(key = "debrid_stream_engine_section") {
+                        DebridSectionLabel(text = "Stream Engine")
+                    }
+
+                    item(key = "debrid_stream_engine_toggle") {
+                        SettingsToggleRow(
+                            title = "Use Stream Engine",
+                            subtitle = "Backend selects the best stream for this device automatically. Device profile replaces manual quality filters.",
+                            checked = uiState.streamEngineEnabled,
+                            onToggle = { viewModel.onEvent(DebridSettingsEvent.ToggleStreamEngine(!uiState.streamEngineEnabled)) },
+                            enabled = uiState.canResolvePlayableLinks
+                        )
+                    }
+
+                    if (uiState.streamEngineEnabled) {
+                        item(key = "debrid_device_profile_section") {
+                            DebridSectionLabel(text = "Device Profile")
+                        }
+
+                        item(key = "debrid_device_profile_info") {
+                            DebridInfoText(text = "Stream filtering is handled by the backend based on this profile. Edit and save to update your device capabilities.")
+                        }
+
+                        item(key = "debrid_device_profile_resolution") {
+                            SettingsActionRow(
+                                title = "Max Resolution",
+                                subtitle = null,
+                                value = uiState.editMaxResolution,
+                                onClick = { showProfileResolutionPicker = true },
+                                enabled = true
+                            )
+                        }
+
+                        item(key = "debrid_device_profile_hdr") {
+                            SettingsActionRow(
+                                title = "HDR Types",
+                                subtitle = null,
+                                value = uiState.editHdrTypes.joinToString(", ").ifBlank { "None" },
+                                onClick = { showProfileHdrDialog = true },
+                                enabled = true
+                            )
+                        }
+
+                        item(key = "debrid_device_profile_codecs") {
+                            SettingsActionRow(
+                                title = "Codecs",
+                                subtitle = null,
+                                value = uiState.editCodecs.joinToString(", ").ifBlank { "None" },
+                                onClick = { showProfileCodecDialog = true },
+                                enabled = true
+                            )
+                        }
+
+                        item(key = "debrid_device_profile_audio_formats") {
+                            SettingsActionRow(
+                                title = "Audio Formats",
+                                subtitle = null,
+                                value = uiState.editAudioFormats.joinToString(", ").ifBlank { "None" },
+                                onClick = { showProfileAudioFormatDialog = true },
+                                enabled = true
+                            )
+                        }
+
+                        item(key = "debrid_device_profile_audio_channels") {
+                            SettingsActionRow(
+                                title = "Max Audio Channels",
+                                subtitle = null,
+                                value = uiState.editMaxAudioChannels,
+                                onClick = { showProfileAudioChannelsPicker = true },
+                                enabled = true
+                            )
+                        }
+
+                        item(key = "debrid_device_profile_speed") {
+                            SettingsActionRow(
+                                title = "Download Speed",
+                                subtitle = null,
+                                value = uiState.deviceProfile?.downloadSpeedMbps?.let { "${it.toInt()} Mbps (auto-detected)" } ?: "Not registered",
+                                onClick = {},
+                                enabled = false
+                            )
+                        }
+
+                        item(key = "debrid_device_profile_save") {
+                            SettingsActionRow(
+                                title = "Save Device Profile",
+                                subtitle = null,
+                                value = "↑ Save",
+                                onClick = { viewModel.onEvent(DebridSettingsEvent.SaveDeviceProfile) },
+                                enabled = true
+                            )
+                        }
+                    }
+
+                    if (uiState.canResolvePlayableLinks && !uiState.streamEngineEnabled) {
                         item(key = "debrid_instant_section") {
                             DebridSectionLabel(text = stringResource(R.string.debrid_section_instant_playback))
                         }
@@ -258,7 +365,7 @@ fun DebridSettingsContent(
                         )
                     }
 
-                    if (uiState.canResolvePlayableLinks) {
+                    if (uiState.canResolvePlayableLinks && !uiState.streamEngineEnabled) {
                         item(key = "debrid_filters_section") {
                             DebridSectionLabel(text = stringResource(R.string.debrid_section_filters))
                         }
@@ -679,6 +786,73 @@ fun DebridSettingsContent(
         )
     }
 
+    if (showProfileResolutionPicker) {
+        DebridProfileResolutionDialog(
+            selectedValue = uiState.editMaxResolution,
+            onSelected = { resolution ->
+                viewModel.onEvent(DebridSettingsEvent.SetProfileResolution(resolution))
+                showProfileResolutionPicker = false
+            },
+            onDismiss = { showProfileResolutionPicker = false }
+        )
+    }
+
+    if (showProfileHdrDialog) {
+        val hdrOptions = listOf("HDR10", "HDR10+", "DolbyVision", "HLG")
+        DebridMultiChoiceDialog(
+            title = "HDR Types",
+            selectedValues = uiState.editHdrTypes.toList(),
+            values = hdrOptions,
+            label = { it },
+            onSelected = { selected ->
+                viewModel.onEvent(DebridSettingsEvent.SetProfileHdrTypes(selected.toSet()))
+                showProfileHdrDialog = false
+            },
+            onDismiss = { showProfileHdrDialog = false }
+        )
+    }
+
+    if (showProfileCodecDialog) {
+        val codecOptions = listOf("H.265", "AV1", "H.264")
+        DebridMultiChoiceDialog(
+            title = "Codecs",
+            selectedValues = uiState.editCodecs.toList(),
+            values = codecOptions,
+            label = { it },
+            onSelected = { selected ->
+                viewModel.onEvent(DebridSettingsEvent.SetProfileCodecs(selected.toSet()))
+                showProfileCodecDialog = false
+            },
+            onDismiss = { showProfileCodecDialog = false }
+        )
+    }
+
+    if (showProfileAudioFormatDialog) {
+        val audioFormatOptions = listOf("Dolby Atmos", "DTS:X", "DTS-HD", "AAC")
+        DebridMultiChoiceDialog(
+            title = "Audio Formats",
+            selectedValues = uiState.editAudioFormats.toList(),
+            values = audioFormatOptions,
+            label = { it },
+            onSelected = { selected ->
+                viewModel.onEvent(DebridSettingsEvent.SetProfileAudioFormats(selected.toSet()))
+                showProfileAudioFormatDialog = false
+            },
+            onDismiss = { showProfileAudioFormatDialog = false }
+        )
+    }
+
+    if (showProfileAudioChannelsPicker) {
+        DebridProfileAudioChannelsDialog(
+            selectedValue = uiState.editMaxAudioChannels,
+            onSelected = { channels ->
+                viewModel.onEvent(DebridSettingsEvent.SetProfileAudioChannels(channels))
+                showProfileAudioChannelsPicker = false
+            },
+            onDismiss = { showProfileAudioChannelsPicker = false }
+        )
+    }
+
     if (uiState.isFormatterQrModeActive) {
         QrCodeOverlay(
             qrBitmap = uiState.formatterQrCodeBitmap,
@@ -736,6 +910,49 @@ private fun DebridPrepareCountDialog(
         },
         selectedValue = selectedLimit,
         onOptionSelected = onLimitSelected,
+        onDismiss = onDismiss,
+        width = 420.dp,
+        maxHeight = 280.dp
+    )
+}
+
+@Composable
+private fun DebridProfileResolutionDialog(
+    selectedValue: String,
+    onSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf("2160p", "1080p", "720p")
+    val labels = mapOf("2160p" to "2160p (4K)", "1080p" to "1080p", "720p" to "720p")
+
+    SettingsSingleChoiceDialog(
+        title = "Max Resolution",
+        options = options.map { value ->
+            SettingsPickerOption(value, labels[value] ?: value)
+        },
+        selectedValue = selectedValue,
+        onOptionSelected = onSelected,
+        onDismiss = onDismiss,
+        width = 420.dp,
+        maxHeight = 280.dp
+    )
+}
+
+@Composable
+private fun DebridProfileAudioChannelsDialog(
+    selectedValue: String,
+    onSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf("7.1", "5.1", "2.0")
+
+    SettingsSingleChoiceDialog(
+        title = "Max Audio Channels",
+        options = options.map { value ->
+            SettingsPickerOption(value, value)
+        },
+        selectedValue = selectedValue,
+        onOptionSelected = onSelected,
         onDismiss = onDismiss,
         width = 420.dp,
         maxHeight = 280.dp

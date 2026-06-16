@@ -43,6 +43,7 @@ data class StreamClientResolveDto(
     @Json(name = "serviceIndex") val serviceIndex: Int? = null,
     @Json(name = "serviceExtension") val serviceExtension: String? = null,
     @Json(name = "isCached") val isCached: Boolean? = null,
+    @Json(name = "torrentId") val torrentId: Int? = null,
     @Json(name = "stream") val stream: StreamClientResolveStreamDto? = null
 )
 
