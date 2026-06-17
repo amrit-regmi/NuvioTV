@@ -403,6 +403,7 @@ fun StreamScreen(
                     sourceChips = uiState.sourceChips,
                     selectedAddonFilter = uiState.selectedAddonFilter,
                     showFileSizeBadges = streamBadgeSettings.showFileSizeBadges,
+                    showAddonLogo = streamBadgeSettings.showAddonLogo,
                     badgePlacement = streamBadgeSettings.badgePlacement,
                     hasBadgeRules = streamBadgeSettings.rules.hasImport,
                     onAddonFilterSelected = { viewModel.onEvent(StreamScreenEvent.OnAddonFilterSelected(it)) },
@@ -692,6 +693,7 @@ private fun RightStreamSection(
     sourceChips: List<SourceChipItem>,
     selectedAddonFilter: String?,
     showFileSizeBadges: Boolean,
+    showAddonLogo: Boolean,
     badgePlacement: StreamBadgePlacement,
     hasBadgeRules: Boolean = false,
     onAddonFilterSelected: (String?) -> Unit,
@@ -787,7 +789,7 @@ private fun RightStreamSection(
             ) {
                 when {
                     isLoading -> {
-                        LoadingState()
+                        LoadingState(showAddonLogo = showAddonLogo)
                     }
                     error != null -> {
                         ErrorState(
@@ -810,6 +812,7 @@ private fun RightStreamSection(
                             availableAddons = availableAddons,
                             selectedAddonFilter = selectedAddonFilter,
                             showFileSizeBadges = showFileSizeBadges,
+                            showAddonLogo = showAddonLogo,
                             badgePlacement = badgePlacement,
                             hasBadgeRules = hasBadgeRules,
                             onAddonFilterSelected = { onAddonFilterSelectedGuarded(it) },
@@ -925,8 +928,8 @@ private fun AddonFilterChips(
 }
 
 @Composable
-private fun LoadingState() {
-    StreamsSkeletonList()
+private fun LoadingState(showAddonLogo: Boolean = true) {
+    StreamsSkeletonList(showAddonLogo = showAddonLogo)
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -1023,6 +1026,7 @@ private fun StreamsList(
     availableAddons: List<String> = emptyList(),
     selectedAddonFilter: String? = null,
     showFileSizeBadges: Boolean = true,
+    showAddonLogo: Boolean = true,
     badgePlacement: StreamBadgePlacement = StreamBadgePlacement.BOTTOM,
     hasBadgeRules: Boolean = false,
     onAddonFilterSelected: (String?) -> Unit = {},
@@ -1109,6 +1113,7 @@ private fun StreamsList(
                 StreamCard(
                     stream = stream,
                     showFileSizeBadges = showFileSizeBadges,
+                    showAddonLogo = showAddonLogo,
                     badgePlacement = badgePlacement,
                     reserveBadgeSpace = hasBadgeRules && stream.badges.isEmpty(),
                     isActiveDownload = activeDownloadKey != null &&
@@ -1139,6 +1144,7 @@ private fun StreamsList(
 private fun StreamCard(
     stream: Stream,
     showFileSizeBadges: Boolean,
+    showAddonLogo: Boolean,
     badgePlacement: StreamBadgePlacement,
     reserveBadgeSpace: Boolean = false,
     isActiveDownload: Boolean = false,
@@ -1150,9 +1156,10 @@ private fun StreamCard(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val streamName = remember(stream, isInstant) {
-        if (isInstant) stream.getDisplayName().replace("🟢 Cached", "⚡ Instant")
-        else stream.getDisplayName()
+    val unknownStreamLabel = stringResource(R.string.stream_unknown)
+    val streamName = remember(stream, isInstant, unknownStreamLabel) {
+        val name = stream.getDisplayNameOrNull() ?: unknownStreamLabel
+        if (isInstant) name.replace("🟢 Cached", "⚡ Instant") else name
     }
     val streamDescription = remember(stream) { stream.getDisplayDescription() }
     val hasBadges = stream.badges.isNotEmpty() || (showFileSizeBadges && stream.behaviorHints?.videoSize != null) || reserveBadgeSpace
@@ -1227,7 +1234,7 @@ private fun StreamCard(
                 )
 
                 streamDescription?.let { description ->
-                    if (description != streamName) {
+                    if (description.isNotBlank() && description != streamName) {
                         Text(
                             text = description,
                             style = MaterialTheme.typography.bodySmall,
@@ -1251,17 +1258,28 @@ private fun StreamCard(
                 }
             }
 
-            Column(
-                horizontalAlignment = Alignment.End
-            ) {
-                if (addonLogoModel != null) {
-                    AsyncImage(
-                        model = addonLogoModel,
-                        contentDescription = stream.addonName,
-                        modifier = Modifier
-                            .size(NuvioTheme.spacing.xxl)
-                            .clip(RoundedCornerShape(NuvioTheme.radii.xs)),
-                        contentScale = ContentScale.Fit
+            if (showAddonLogo) {
+                Column(
+                    horizontalAlignment = Alignment.End
+                ) {
+                    if (addonLogoModel != null) {
+                        AsyncImage(
+                            model = addonLogoModel,
+                            contentDescription = stream.addonName,
+                            modifier = Modifier
+                                .size(NuvioTheme.spacing.xxl)
+                                .clip(RoundedCornerShape(NuvioTheme.radii.xs)),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+
+                    Text(
+                        text = stream.addonName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = NuvioTheme.extendedColors.textTertiary,
+                        maxLines = 1
                     )
                 }
 
@@ -1282,7 +1300,6 @@ private fun StreamCard(
                         strokeWidth = 2.dp
                     )
                 } else if (isInstant) {
-                    // ⚡ Instant: CDN URL already pre-resolved by StreamWarmer
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
                     Text(
                         text = "⚡ Instant",
@@ -1290,7 +1307,6 @@ private fun StreamCard(
                         color = NuvioTheme.colors.Primary
                     )
                 } else if (isNonCachedDebrid) {
-                    // Download icon: stream needs to be queued before it can play
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
                     Icon(
                         imageVector = Icons.Default.FileDownload,

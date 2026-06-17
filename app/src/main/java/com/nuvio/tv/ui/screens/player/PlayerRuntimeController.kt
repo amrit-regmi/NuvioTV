@@ -538,6 +538,7 @@ class PlayerRuntimeController(
                 _uiState.update {
                     it.copy(
                         showFileSizeBadges = settings.showFileSizeBadges,
+                        showAddonLogo = settings.showAddonLogo,
                         streamBadgePlacement = settings.badgePlacement
                     )
                 }

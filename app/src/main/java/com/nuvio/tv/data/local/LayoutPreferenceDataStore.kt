@@ -689,6 +689,7 @@ class LayoutPreferenceDataStore @Inject constructor(
         }.filterValues { it.isNotBlank() }
 
         store().edit { prefs ->
+            prefs[hideUnreleasedContentKey] = payload.hideUnreleasedContent
             if (orderKeys.isNotEmpty()) {
                 prefs[homeCatalogOrderKeysKey] = gson.toJson(orderKeys)
             } else {
@@ -711,7 +712,8 @@ class LayoutPreferenceDataStore @Inject constructor(
         return LocalHomeCatalogSettingsState(
             orderKeys = parseCatalogKeys(prefs[homeCatalogOrderKeysKey]),
             disabledKeys = parseCatalogKeys(prefs[disabledHomeCatalogKeysKey]).toSet(),
-            customTitles = parseCustomTitles(prefs[customCatalogTitlesKey])
+            customTitles = parseCustomTitles(prefs[customCatalogTitlesKey]),
+            hideUnreleasedContent = prefs[hideUnreleasedContentKey] ?: false
         )
     }
 }

@@ -542,6 +542,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             state
                         } else if (state.continueWatchingItems == initialItems) {
                             state
+                        } else if (!snapshot.hasLoadedRemoteProgress && state.continueWatchingItems.isNotEmpty() && initialItems.size < state.continueWatchingItems.size) {
+                            state
                         } else {
                             state.copy(continueWatchingItems = initialItems)
                         }
@@ -1046,11 +1048,17 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 )
 
                 _uiState.update { state ->
-                    if (normalItems.isEmpty() && state.continueWatchingItems.isNotEmpty()) {
-                        // Keep stale data only while remote hasn't responded (prevents initial flicker).
-                        // Once remote confirms empty, clear it — avoids cross-profile contamination.
-                        if (!snapshot.hasLoadedRemoteProgress) state
-                        else state.copy(continueWatchingItems = emptyList())
+                    // Don't overwrite cached CW with empty data while sources are still loading.
+                    // Once remote progress is confirmed loaded (Nuvio Sync completed or Trakt
+                    // responded), trust the empty result — items may have been deleted remotely.
+                    val shouldProtectCache = normalItems.isEmpty() &&
+                        state.continueWatchingItems.isNotEmpty() &&
+                        !snapshot.hasLoadedRemoteProgress
+                    val shouldPreventShrink = !snapshot.hasLoadedRemoteProgress &&
+                        state.continueWatchingItems.isNotEmpty() &&
+                        normalItems.size < state.continueWatchingItems.size
+                    if (shouldProtectCache || shouldPreventShrink) {
+                        state
                     } else if (state.continueWatchingItems == normalItems) {
                         state
                     } else {
@@ -2440,8 +2448,19 @@ private fun HomeViewModel.persistLocalContinueWatchingMetadata(
         runCatching { cwEnrichmentCache.saveInProgressSnapshot(inProgressSnapshot, force = true) }
         val persistable = localItems.filter { it.hasRenderableMetadata() }
         if (persistable.isEmpty()) return@launch
+        // Only persist metadata for entries still visible in CW. Between the start
+        // of this pipeline cycle and now the user may have removed items — writing
+        // them back would resurrect them on next launch.
+        val visibleContentIds = _uiState.value.continueWatchingItems.mapNotNullTo(mutableSetOf()) { item ->
+            when (item) {
+                is ContinueWatchingItem.InProgress -> item.progress.contentId
+                is ContinueWatchingItem.NextUp -> item.info.contentId
+            }
+        }
+        val stillVisible = persistable.filter { it.contentId in visibleContentIds }
+        if (stillVisible.isEmpty()) return@launch
         runCatching {
-            watchProgressRepository.saveProgressBatch(persistable, syncRemote = false)
+            watchProgressRepository.saveProgressBatch(stillVisible, syncRemote = false)
         }
     }
 }

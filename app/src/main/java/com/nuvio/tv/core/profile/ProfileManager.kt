@@ -1,6 +1,7 @@
 package com.nuvio.tv.core.profile
 
 import android.content.Context
+import com.nuvio.tv.R
 import com.nuvio.tv.data.local.ProfileDataStore
 import com.nuvio.tv.data.local.ProfileDataStoreFactory
 import com.nuvio.tv.domain.model.UserProfile
@@ -47,7 +48,7 @@ class ProfileManager @Inject constructor(
 
     val profiles: StateFlow<List<UserProfile>> = profileDataStore.profilesList
         .stateIn(scope, SharingStarted.Eagerly, listOf(
-            UserProfile(id = 1, name = "Profile 1", avatarColorHex = "#1E88E5")
+            UserProfile(id = 1, name = context.getString(R.string.profile_default_name, 1), avatarColorHex = "#1E88E5")
         ))
 
     val activeProfile: UserProfile?
@@ -86,7 +87,7 @@ class ProfileManager @Inject constructor(
 
         val profile = UserProfile(
             id = nextId,
-            name = name.trim().ifEmpty { "Profile $nextId" },
+            name = name.trim().ifEmpty { context.getString(R.string.profile_default_name, nextId) },
             avatarColorHex = avatarColorHex,
             usesPrimaryAddons = usesPrimaryAddons,
             usesPrimaryPlugins = usesPrimaryPlugins,

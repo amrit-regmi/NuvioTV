@@ -53,7 +53,9 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
         )
     }
 
-    val probeHeaders = headers.filterKeys { !it.equals("Range", ignoreCase = true) }
+    val probeHeaders = headers.filterKeys { !it.equals("Range", ignoreCase = true) }.toMutableMap().apply {
+        put("Connection", "close")
+    }
 
     try {
         // Use frame rate pre-detected during stream warming — avoids a blocking HTTP probe
@@ -109,7 +111,7 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
             )
         }
 
-        val prefer23976ProbeBias = detection.raw in 23.95f..23.988f
+        val prefer23976ProbeBias = detection.raw in 23.95f..24.12f
         val targetFrameRate = FrameRateUtils.refineFrameRateForDisplay(
             activity = activity,
             detectedFps = detection.snapped,

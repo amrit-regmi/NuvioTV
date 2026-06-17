@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -80,6 +81,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -128,8 +130,10 @@ import com.nuvio.tv.core.sync.ProfileSettingsSyncService
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.data.local.AppOnboardingDataStore
+import com.nuvio.tv.data.local.AuthSessionNoticeDataStore
 import com.nuvio.tv.data.local.ExperienceModeDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
+import com.nuvio.tv.data.local.StartupAuthNotice
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.remote.supabase.AvatarRepository
 import com.nuvio.tv.data.repository.TraktProgressService
@@ -236,6 +240,9 @@ class MainActivity : ComponentActivity() {
     lateinit var authManager: AuthManager
 
     @Inject
+    lateinit var authSessionNoticeDataStore: AuthSessionNoticeDataStore
+
+    @Inject
     lateinit var appOnboardingDataStore: AppOnboardingDataStore
 
     @Inject
@@ -317,6 +324,20 @@ class MainActivity : ComponentActivity() {
             }
             val hasSeenAuthQrOnFirstLaunch by hasSeenAuthQrFlow.collectAsState(initial = null)
             val authState by authManager.authState.collectAsState()
+            val context = LocalContext.current
+
+            LaunchedEffect(authSessionNoticeDataStore, context) {
+                authSessionNoticeDataStore.pendingNotice.collect { notice ->
+                    if (notice == StartupAuthNotice.NUVIO) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.auth_notice_nuvio_logged_out),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        authSessionNoticeDataStore.consumeNotice(notice)
+                    }
+                }
+            }
 
             LaunchedEffect(hasSeenAuthQrOnFirstLaunch, authState) {
                 if (hasSeenAuthQrOnFirstLaunch == false && authState is AuthState.FullAccount) {
@@ -463,6 +484,15 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     if (hasSeenAuthQrOnFirstLaunch == null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(NuvioTheme.colors.Background)
+                        )
+                        return@Surface
+                    }
+
+                    if (authState is AuthState.Loading) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -660,7 +690,6 @@ class MainActivity : ComponentActivity() {
                             add(Screen.Search.route)
                             add(Screen.Library.route)
                             add(Screen.Settings.route)
-                            add(Screen.AddonManager.route)
                             if (discoverLocation == DiscoverLocation.IN_SIDEBAR) {
                                 add(Screen.Discover.route)
                             }
@@ -671,14 +700,12 @@ class MainActivity : ComponentActivity() {
                     val strNavDiscover = stringResource(R.string.nav_discover)
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
-                    val strNavAddons = stringResource(R.string.nav_addons)
                     val strNavSettings = stringResource(R.string.nav_settings)
                     val drawerItems = remember(
                         strNavHome,
                         strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
-                        strNavAddons,
                         strNavSettings,
                         discoverLocation
                     ) {
@@ -711,13 +738,6 @@ class MainActivity : ComponentActivity() {
                                     route = Screen.Library.route,
                                     label = strNavLibrary,
                                     iconRes = R.raw.sidebar_library
-                                )
-                            )
-                            add(
-                                DrawerItem(
-                                    route = Screen.AddonManager.route,
-                                    label = strNavAddons,
-                                    iconRes = R.raw.sidebar_plugin
                                 )
                             )
                             add(
@@ -854,6 +874,11 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStart() {
+        // Returning from an external player: raise the auto-next loader before the player's
+        // result is dispatched and before the window repaints, so the transition shows the
+        // loader instantly with no episode-list flash. No-op unless a series episode is being
+        // tracked; onActivityResult keeps it for a completion or dismisses it otherwise.
+        externalPlaybackTracker.raiseAutoNextOverlayOnReturn()
         super.onStart()
         profileSettingsSyncService.requestForegroundPull()
         androidTvChannelSyncService.onForegroundChanged(true)
@@ -1076,10 +1101,7 @@ private fun LegacySidebarScaffold(
                                 val profileLabelStart = 60.dp
                                 val profileGapAfterAvatar =
                                     (profileLabelStart - profileLeadingInset - profileAvatarSize).coerceAtLeast(NuvioTheme.spacing.none)
-                                val profileBgColor by animateColorAsState(
-                                    targetValue = if (isProfileFocused) NuvioTheme.colors.FocusBackground else Color.Transparent,
-                                    label = "legacyProfileItemBg"
-                                )
+                                val profileBgColor = if (isProfileFocused) NuvioTheme.colors.FocusBackground else Color.Transparent
                                 Box(
                                     modifier = Modifier.fillMaxWidth(),
                                     contentAlignment = Alignment.Center
@@ -1101,7 +1123,8 @@ private fun LegacySidebarScaffold(
                                             name = activeProfileName,
                                             colorHex = activeProfileColorHex,
                                             size = profileAvatarSize,
-                                            avatarImageUrl = activeProfileAvatarImageUrl
+                                            avatarImageUrl = activeProfileAvatarImageUrl,
+                                            imageCrossfade = false
                                         )
                                         Spacer(modifier = Modifier.width(profileGapAfterAvatar))
                                         Text(
