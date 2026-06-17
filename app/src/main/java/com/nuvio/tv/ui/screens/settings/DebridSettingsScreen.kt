@@ -2,6 +2,7 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 import android.content.Context
@@ -160,6 +161,35 @@ fun DebridSettingsContent(
                         )
                     }
 
+                    item(key = "debrid_nuvio_torbox_section") {
+                        DebridSectionLabel(text = "Nuvio TorBox")
+                    }
+
+                    item(key = "debrid_${DebridProviders.TORBOX_ID}_api_key") {
+                        val provider = DebridProviders.Torbox
+                        SettingsActionRow(
+                            title = provider.displayName,
+                            subtitle = "Optional override. A shared key is active by default — enter your own to use your personal TorBox account.",
+                            value = providerCredentialStatus(
+                                provider = provider,
+                                credential = uiState.apiKeyFor(provider.id),
+                                notSetLabel = stringResource(R.string.debrid_not_set),
+                                connectedLabel = stringResource(R.string.debrid_connected)
+                            ),
+                            onClick = {
+                                when (provider.authMethod) {
+                                    DebridProviderAuthMethod.DeviceCode -> activeDeviceAuthDialog = provider.id
+                                    DebridProviderAuthMethod.ApiKey -> activeApiKeyDialog = provider.id
+                                }
+                            },
+                            enabled = true
+                        )
+                    }
+
+                    item(key = "debrid_external_providers_section") {
+                        DebridSectionLabel(text = "External Providers")
+                    }
+
                     item(key = "debrid_enabled") {
                         SettingsToggleRow(
                             title = stringResource(R.string.debrid_enable_title),
@@ -188,11 +218,7 @@ fun DebridSettingsContent(
                         }
                     }
 
-                    item(key = "debrid_account_section") {
-                        DebridSectionLabel(text = stringResource(R.string.debrid_section_account))
-                    }
-
-                    DebridProviders.visible().forEach { provider ->
+                    DebridProviders.visible().filter { it.id != DebridProviders.TORBOX_ID }.forEach { provider ->
                         item(key = "debrid_${provider.id}_api_key") {
                             SettingsActionRow(
                                 title = provider.displayName,
@@ -213,100 +239,6 @@ fun DebridSettingsContent(
                                         DebridProviderAuthMethod.ApiKey -> activeApiKeyDialog = provider.id
                                     }
                                 },
-                                enabled = true
-                            )
-                        }
-                    }
-
-                    item(key = "debrid_stream_engine_section") {
-                        DebridSectionLabel(text = "Stream Engine")
-                    }
-
-                    item(key = "debrid_stream_engine_toggle") {
-                        SettingsToggleRow(
-                            title = "Use Stream Engine",
-                            subtitle = "Backend selects the best stream for this device automatically. Device profile replaces manual quality filters.",
-                            checked = uiState.streamEngineEnabled,
-                            onToggle = { viewModel.onEvent(DebridSettingsEvent.ToggleStreamEngine(!uiState.streamEngineEnabled)) },
-                            enabled = uiState.canResolvePlayableLinks
-                        )
-                    }
-
-                    if (uiState.streamEngineEnabled) {
-                        item(key = "debrid_device_profile_section") {
-                            DebridSectionLabel(text = "Device Profile")
-                        }
-
-                        item(key = "debrid_device_profile_info") {
-                            DebridInfoText(text = "Stream filtering is handled by the backend based on this profile. Edit and save to update your device capabilities.")
-                        }
-
-                        item(key = "debrid_device_profile_resolution") {
-                            SettingsActionRow(
-                                title = "Max Resolution",
-                                subtitle = null,
-                                value = uiState.editMaxResolution,
-                                onClick = { showProfileResolutionPicker = true },
-                                enabled = true
-                            )
-                        }
-
-                        item(key = "debrid_device_profile_hdr") {
-                            SettingsActionRow(
-                                title = "HDR Types",
-                                subtitle = null,
-                                value = uiState.editHdrTypes.joinToString(", ").ifBlank { "None" },
-                                onClick = { showProfileHdrDialog = true },
-                                enabled = true
-                            )
-                        }
-
-                        item(key = "debrid_device_profile_codecs") {
-                            SettingsActionRow(
-                                title = "Codecs",
-                                subtitle = null,
-                                value = uiState.editCodecs.joinToString(", ").ifBlank { "None" },
-                                onClick = { showProfileCodecDialog = true },
-                                enabled = true
-                            )
-                        }
-
-                        item(key = "debrid_device_profile_audio_formats") {
-                            SettingsActionRow(
-                                title = "Audio Formats",
-                                subtitle = null,
-                                value = uiState.editAudioFormats.joinToString(", ").ifBlank { "None" },
-                                onClick = { showProfileAudioFormatDialog = true },
-                                enabled = true
-                            )
-                        }
-
-                        item(key = "debrid_device_profile_audio_channels") {
-                            SettingsActionRow(
-                                title = "Max Audio Channels",
-                                subtitle = null,
-                                value = uiState.editMaxAudioChannels,
-                                onClick = { showProfileAudioChannelsPicker = true },
-                                enabled = true
-                            )
-                        }
-
-                        item(key = "debrid_device_profile_speed") {
-                            SettingsActionRow(
-                                title = "Download Speed",
-                                subtitle = null,
-                                value = uiState.deviceProfile?.downloadSpeedMbps?.let { "${it.toInt()} Mbps (auto-detected)" } ?: "Not registered",
-                                onClick = {},
-                                enabled = false
-                            )
-                        }
-
-                        item(key = "debrid_device_profile_save") {
-                            SettingsActionRow(
-                                title = "Save Device Profile",
-                                subtitle = null,
-                                value = "↑ Save",
-                                onClick = { viewModel.onEvent(DebridSettingsEvent.SaveDeviceProfile) },
                                 enabled = true
                             )
                         }

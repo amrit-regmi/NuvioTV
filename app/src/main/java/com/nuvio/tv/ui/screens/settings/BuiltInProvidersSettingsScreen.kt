@@ -13,17 +13,35 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import com.nuvio.tv.ui.theme.NuvioTheme
 
 @Composable
 internal fun BuiltInProvidersSettingsContent(
     initialFocusRequester: FocusRequester,
-    onConfigureOnAnotherDevice: () -> Unit,
+    onConfigureReco: () -> Unit,
+    viewModel: BuiltInProvidersViewModel = hiltViewModel(),
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    var showProfileResolutionPicker by remember { mutableStateOf(false) }
+    var showProfileHdrDialog by remember { mutableStateOf(false) }
+    var showProfileCodecDialog by remember { mutableStateOf(false) }
+    var showProfileAudioFormatDialog by remember { mutableStateOf(false) }
+    var showProfileAudioChannelsPicker by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         runCatching { initialFocusRequester.requestFocus() }
     }
@@ -34,7 +52,7 @@ internal fun BuiltInProvidersSettingsContent(
     ) {
         SettingsDetailHeader(
             title = "Built-in providers",
-            subtitle = "Catalog and recommendation engine powered by your private backend"
+            subtitle = "Catalog and stream engine powered by your private backend"
         )
 
         SettingsGroupCard(
@@ -50,37 +68,267 @@ internal fun BuiltInProvidersSettingsContent(
                     contentPadding = PaddingValues(bottom = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    item(key = "builtin_catalog") {
+                    item(key = "builtin_catalog_section") {
+                        BuiltInSectionLabel(text = "Catalog")
+                    }
+
+                    item(key = "builtin_catalog_toggle") {
                         SettingsToggleRow(
                             title = "Catalog provider",
-                            subtitle = "Browse movies and TV shows from the built-in catalog",
-                            checked = true,
-                            enabled = false,
-                            onToggle = {},
+                            subtitle = "Fetch movies and TV shows from your private catalog",
+                            checked = uiState.isCatalogEnabled,
+                            enabled = true,
+                            onToggle = { viewModel.toggleCatalog(!uiState.isCatalogEnabled) },
                             modifier = Modifier
                                 .padding(top = 4.dp)
                                 .focusRequester(initialFocusRequester)
                         )
                     }
-                    item(key = "builtin_reco") {
-                        SettingsToggleRow(
+
+                    item(key = "builtin_reco_link") {
+                        SettingsActionRow(
                             title = "Recommendation engine",
-                            subtitle = "AI-powered recommendations personalized for you",
-                            checked = true,
-                            enabled = false,
-                            onToggle = {}
+                            subtitle = "Personalized AI recommendations",
+                            onClick = onConfigureReco
                         )
                     }
-                    item(key = "builtin_configure") {
-                        SettingsActionRow(
-                            title = "Configure on another device",
-                            subtitle = "Open the Reco engine UI on your phone or laptop",
-                            onClick = onConfigureOnAnotherDevice
+
+                    item(key = "builtin_stream_engine_section") {
+                        BuiltInSectionLabel(text = "Stream Engine")
+                    }
+
+                    item(key = "builtin_stream_engine_toggle") {
+                        SettingsToggleRow(
+                            title = "Use built-in stream engine",
+                            subtitle = "Backend selects the best stream for this device automatically.",
+                            checked = uiState.streamEngineEnabled,
+                            enabled = true,
+                            onToggle = { viewModel.toggleStreamEngine(!uiState.streamEngineEnabled) }
                         )
+                    }
+
+                    if (uiState.streamEngineEnabled) {
+                        item(key = "builtin_device_profile_section") {
+                            BuiltInSectionLabel(text = "Device Profile")
+                        }
+
+                        item(key = "builtin_device_profile_auto_detect") {
+                            SettingsToggleRow(
+                                title = "Use auto-detected device profile",
+                                subtitle = "Capabilities are detected automatically from your hardware",
+                                checked = uiState.useAutoDetectedProfile,
+                                enabled = true,
+                                onToggle = { viewModel.toggleAutoDetect(!uiState.useAutoDetectedProfile) }
+                            )
+                        }
+
+                        item(key = "builtin_device_profile_info") {
+                            BuiltInInfoText(
+                                text = if (uiState.useAutoDetectedProfile)
+                                    "Stream filtering is handled by the backend based on your detected hardware capabilities."
+                                else
+                                    "Stream filtering uses the profile below. Changes are saved immediately."
+                            )
+                        }
+
+                        item(key = "builtin_device_profile_resolution") {
+                            SettingsActionRow(
+                                title = "Max Resolution",
+                                subtitle = null,
+                                value = uiState.editMaxResolution,
+                                onClick = { showProfileResolutionPicker = true },
+                                enabled = !uiState.useAutoDetectedProfile
+                            )
+                        }
+
+                        item(key = "builtin_device_profile_hdr") {
+                            SettingsActionRow(
+                                title = "HDR Types",
+                                subtitle = null,
+                                value = uiState.editHdrTypes.joinToString(", ").ifBlank { "None" },
+                                onClick = { showProfileHdrDialog = true },
+                                enabled = !uiState.useAutoDetectedProfile
+                            )
+                        }
+
+                        item(key = "builtin_device_profile_codecs") {
+                            SettingsActionRow(
+                                title = "Codecs",
+                                subtitle = null,
+                                value = uiState.editCodecs.joinToString(", ").ifBlank { "None" },
+                                onClick = { showProfileCodecDialog = true },
+                                enabled = !uiState.useAutoDetectedProfile
+                            )
+                        }
+
+                        item(key = "builtin_device_profile_audio_formats") {
+                            SettingsActionRow(
+                                title = "Audio Formats",
+                                subtitle = null,
+                                value = uiState.editAudioFormats.joinToString(", ").ifBlank { "None" },
+                                onClick = { showProfileAudioFormatDialog = true },
+                                enabled = !uiState.useAutoDetectedProfile
+                            )
+                        }
+
+                        item(key = "builtin_device_profile_audio_channels") {
+                            SettingsActionRow(
+                                title = "Max Audio Channels",
+                                subtitle = null,
+                                value = uiState.editMaxAudioChannels,
+                                onClick = { showProfileAudioChannelsPicker = true },
+                                enabled = !uiState.useAutoDetectedProfile
+                            )
+                        }
+
+                        item(key = "builtin_device_profile_speed") {
+                            SettingsActionRow(
+                                title = "Download Speed",
+                                subtitle = null,
+                                value = uiState.deviceProfile?.downloadSpeedMbps?.let { "${it.toInt()} Mbps (auto-detected)" } ?: "Not registered",
+                                onClick = {},
+                                enabled = false
+                            )
+                        }
                     }
                 }
                 SettingsVerticalScrollIndicators(state = listState)
             }
         }
     }
+
+    if (showProfileResolutionPicker) {
+        BuiltInProfileResolutionDialog(
+            selectedValue = uiState.editMaxResolution,
+            onSelected = { resolution ->
+                viewModel.setProfileResolution(resolution)
+                showProfileResolutionPicker = false
+            },
+            onDismiss = { showProfileResolutionPicker = false }
+        )
+    }
+
+    if (showProfileHdrDialog) {
+        val hdrOptions = listOf("HDR10", "HDR10+", "DolbyVision", "HLG")
+        SettingsMultiChoiceDialog(
+            title = "HDR Types",
+            selectedValues = uiState.editHdrTypes.toList(),
+            options = hdrOptions.map { SettingsPickerOption(it, it) },
+            onValuesSelected = { selected ->
+                viewModel.setProfileHdrTypes(selected.toSet())
+                showProfileHdrDialog = false
+            },
+            onDismiss = { showProfileHdrDialog = false },
+            width = 560.dp,
+            maxHeight = 420.dp
+        )
+    }
+
+    if (showProfileCodecDialog) {
+        val codecOptions = listOf("H.265", "AV1", "H.264")
+        SettingsMultiChoiceDialog(
+            title = "Codecs",
+            selectedValues = uiState.editCodecs.toList(),
+            options = codecOptions.map { SettingsPickerOption(it, it) },
+            onValuesSelected = { selected ->
+                viewModel.setProfileCodecs(selected.toSet())
+                showProfileCodecDialog = false
+            },
+            onDismiss = { showProfileCodecDialog = false },
+            width = 560.dp,
+            maxHeight = 420.dp
+        )
+    }
+
+    if (showProfileAudioFormatDialog) {
+        val audioFormatOptions = listOf("Dolby Atmos", "DTS:X", "DTS-HD", "AAC")
+        SettingsMultiChoiceDialog(
+            title = "Audio Formats",
+            selectedValues = uiState.editAudioFormats.toList(),
+            options = audioFormatOptions.map { SettingsPickerOption(it, it) },
+            onValuesSelected = { selected ->
+                viewModel.setProfileAudioFormats(selected.toSet())
+                showProfileAudioFormatDialog = false
+            },
+            onDismiss = { showProfileAudioFormatDialog = false },
+            width = 560.dp,
+            maxHeight = 420.dp
+        )
+    }
+
+    if (showProfileAudioChannelsPicker) {
+        BuiltInProfileAudioChannelsDialog(
+            selectedValue = uiState.editMaxAudioChannels,
+            onSelected = { channels ->
+                viewModel.setProfileAudioChannels(channels)
+                showProfileAudioChannelsPicker = false
+            },
+            onDismiss = { showProfileAudioChannelsPicker = false }
+        )
+    }
+}
+
+@Composable
+private fun BuiltInSectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = NuvioTheme.colors.TextPrimary,
+        modifier = Modifier.padding(start = NuvioTheme.spacing.sm, top = NuvioTheme.spacing.sm)
+    )
+}
+
+@Composable
+private fun BuiltInInfoText(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = NuvioTheme.colors.TextSecondary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = NuvioTheme.spacing.sm)
+    )
+}
+
+@Composable
+private fun BuiltInProfileResolutionDialog(
+    selectedValue: String,
+    onSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf("2160p", "1080p", "720p")
+    val labels = mapOf("2160p" to "2160p (4K)", "1080p" to "1080p", "720p" to "720p")
+
+    SettingsSingleChoiceDialog(
+        title = "Max Resolution",
+        options = options.map { value ->
+            SettingsPickerOption(value, labels[value] ?: value)
+        },
+        selectedValue = selectedValue,
+        onOptionSelected = onSelected,
+        onDismiss = onDismiss,
+        width = 420.dp,
+        maxHeight = 280.dp
+    )
+}
+
+@Composable
+private fun BuiltInProfileAudioChannelsDialog(
+    selectedValue: String,
+    onSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf("7.1", "5.1", "2.0")
+
+    SettingsSingleChoiceDialog(
+        title = "Max Audio Channels",
+        options = options.map { value ->
+            SettingsPickerOption(value, value)
+        },
+        selectedValue = selectedValue,
+        onOptionSelected = onSelected,
+        onDismiss = onDismiss,
+        width = 420.dp,
+        maxHeight = 280.dp
+    )
 }

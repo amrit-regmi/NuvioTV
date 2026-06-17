@@ -57,7 +57,7 @@ class DeviceProfileDataStore @Inject constructor(
     }
 
     val isStreamEngineEnabled: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs -> prefs[streamEngineEnabledKey] ?: false }
+        factory.get(pid, FEATURE).data.map { prefs -> prefs[streamEngineEnabledKey] ?: true }
     }
 
     suspend fun setProfileId(profileId: String, userOverride: Boolean = true) {
@@ -71,6 +71,12 @@ class DeviceProfileDataStore @Inject constructor(
     suspend fun setStreamEngineEnabled(enabled: Boolean) {
         factory.get(profileManager.activeProfileId.value, FEATURE).edit { prefs ->
             prefs[streamEngineEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setUserOverridden(overridden: Boolean) {
+        factory.get(profileManager.activeProfileId.value, FEATURE).edit { prefs ->
+            prefs[userOverriddenKey] = overridden
         }
     }
 

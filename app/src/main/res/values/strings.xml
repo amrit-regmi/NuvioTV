@@ -1365,6 +1365,17 @@
     <string name="debrid_missing_api_key">Add a Debrid API key in Settings.</string>
     <string name="debrid_not_cached">Not cached on this service.</string>
     <string name="debrid_resolution_failed">Could not resolve this Debrid stream.</string>
+    <string name="stream_queued_toast">Stream queued for download. Check back soon.</string>
+    <string name="stream_queued_eta">Stream queued — ready in ~%d minutes</string>
+    <string name="stream_download_queued">Queued</string>
+    <string name="stream_download_downloading">Downloading</string>
+    <string name="stream_download_ready">Ready</string>
+    <string name="stream_download_failed">Download failed</string>
+    <string name="stream_download_no_source">No valid source found</string>
+    <string name="stream_download_eta">Ready in %1$d min</string>
+    <string name="stream_download_sheet_title">Preparing Stream</string>
+    <string name="stream_download_stop">Stop</string>
+    <string name="stream_download_close">Close</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
     <string name="p2p_consent_title">P2P Streaming</string>

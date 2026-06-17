@@ -812,7 +812,11 @@ class AddonManagerViewModel @Inject constructor(
                 .collect { addons ->
                     _uiState.update { state ->
                         state.copy(
-                            installedAddons = addons,
+                            installedAddons = addons.filter { addon ->
+                                !addon.baseUrl.contains("recoengine.regmig.com/catalog-addon", ignoreCase = true) &&
+                                !(BuildConfig.CATALOG_ADDON_BASE_URL.isNotBlank() &&
+                                  addon.baseUrl.trim().lowercase().contains(BuildConfig.CATALOG_ADDON_BASE_URL.trim().lowercase()))
+                            },
                             isLoading = false,
                             error = null
                         )

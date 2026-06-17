@@ -641,8 +641,16 @@ private fun IntegrationSettingsContent(
     builtInProvidersFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
+    var previousSection by remember { mutableStateOf<IntegrationSettingsSection?>(null) }
+    val previousSectionRef = remember { mutableStateOf(selectedSection) }
+    LaunchedEffect(selectedSection) {
+        if (previousSectionRef.value != selectedSection) {
+            previousSection = previousSectionRef.value
+            previousSectionRef.value = selectedSection
+        }
+    }
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
-        onSelectSection(IntegrationSettingsSection.Hub)
+        onSelectSection(previousSection ?: IntegrationSettingsSection.Hub)
     }
     val hubEntryFocusRequester = initialFocusRequester ?: hubFocusRequester
 
@@ -699,13 +707,6 @@ private fun IntegrationSettingsContent(
                                     modifier = Modifier.focusRequester(hubEntryFocusRequester)
                                 )
                             }
-                            item(key = "integration_hub_tmdb") {
-                                SettingsActionRow(
-                                    title = "TMDB",
-                                    subtitle = stringResource(R.string.settings_tmdb_subtitle),
-                                    onClick = { onSelectSection(IntegrationSettingsSection.Tmdb) }
-                                )
-                            }
                             item(key = "integration_hub_mdblist") {
                                 SettingsActionRow(
                                     title = "MDBList",
@@ -718,13 +719,6 @@ private fun IntegrationSettingsContent(
                                     title = "Anime-Skip",
                                     subtitle = stringResource(R.string.settings_animeskip_subtitle),
                                     onClick = { onSelectSection(IntegrationSettingsSection.AnimeSkip) }
-                                )
-                            }
-                            item(key = "integration_hub_reco") {
-                                SettingsActionRow(
-                                    title = "Recommendations",
-                                    subtitle = "Configure your personal recommendation engine",
-                                    onClick = { onSelectSection(IntegrationSettingsSection.Reco) }
                                 )
                             }
                         }
@@ -767,7 +761,7 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.BuiltInProviders -> {
             BuiltInProvidersSettingsContent(
                 initialFocusRequester = builtInProvidersFocusRequester,
-                onConfigureOnAnotherDevice = { onSelectSection(IntegrationSettingsSection.Reco) }
+                onConfigureReco = { onSelectSection(IntegrationSettingsSection.Reco) }
             )
         }
     }
