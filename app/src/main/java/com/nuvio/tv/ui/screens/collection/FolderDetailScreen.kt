@@ -764,7 +764,8 @@ private fun FollowLayoutContent(
             onItemFocus = onItemFocus,
             onPreloadAdjacentItem = onPreloadAdjacentItem,
             onSaveFocusState = onSaveFocusState,
-            scrollToTopTrigger = scrollToTopTrigger
+            scrollToTopTrigger = scrollToTopTrigger,
+            blockLeftOnFirstExpandedItem = true
         )
     }
 }
