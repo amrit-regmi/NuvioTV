@@ -1397,6 +1397,9 @@ class StreamScreenViewModel @Inject constructor(
                 )
             }
             
+            val fileLimit = playbackInfo.videoSize ?: Long.MAX_VALUE
+            val preloadTarget = minOf(5_242_880L, fileLimit)
+
             val preloadCompleted = kotlinx.coroutines.CompletableDeferred<Unit>()
             val statsJob = viewModelScope.launch {
                 torrentService.state.collectLatest { torrentState ->
@@ -1420,7 +1423,6 @@ class StreamScreenViewModel @Inject constructor(
                                 context.getString(R.string.player_torrent_buffered_status, mbLoaded, peerInfo, speed)
                             }
                             
-                            val preloadTarget = 5_242_880L // 5MB
                             val progress = (torrentState.preloadedBytes.toFloat() / preloadTarget).coerceIn(0f, 1f)
                             
                             updateUiStateIfChanged {
@@ -1455,9 +1457,14 @@ class StreamScreenViewModel @Inject constructor(
                 playUrl = localUrl
                 isTorrentStreamStarted = true
                 
-                // Wait for TorrServer to preload (or timeout after 15 seconds)
-                kotlinx.coroutines.withTimeoutOrNull(15_000L) {
+                // Wait for TorrServer to preload (or timeout after 60 seconds)
+                val preloaded = kotlinx.coroutines.withTimeoutOrNull(60_000L) {
                     preloadCompleted.await()
+                    true
+                } ?: false
+
+                if (!preloaded) {
+                    throw Exception(context.getString(R.string.torrent_error_start_timeout, 60))
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start torrent stream for external player", e)
