@@ -79,6 +79,7 @@ import coil3.request.crossfade
 import coil3.request.transformations
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.Video
+import com.nuvio.tv.ui.components.FocusMarqueeText
 import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -707,12 +708,11 @@ private fun EpisodeCard(
                     )
                 }
 
-                Text(
+                FocusMarqueeText(
                     text = episode.title.localizeEpisodeTitle(context),
+                    focused = isFocused,
                     style = titleStyle,
                     color = textPrimary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
                 )
 
                 if (description.isNotBlank()) {

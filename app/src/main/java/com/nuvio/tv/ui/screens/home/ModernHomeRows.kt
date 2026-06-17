@@ -105,6 +105,7 @@ import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.ContinueWatchingCard
+import com.nuvio.tv.ui.components.FocusMarqueeText
 import com.nuvio.tv.ui.components.MonochromePosterPlaceholder
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.components.placeholderCardShimmer
@@ -1347,12 +1348,11 @@ private fun ModernCarouselCard(
                         alignment = Alignment.CenterStart
                     )
                 } else if (useLandscapeOverlayTreatment || isBackdropExpanded) {
-                    Text(
+                    FocusMarqueeText(
                         text = item.title,
+                        focused = isFocused,
                         style = titleStyle,
                         color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .fillMaxWidth(0.62f)
@@ -1387,21 +1387,19 @@ private fun ModernCarouselCard(
                     .fillMaxWidth()
                     .padding(horizontal = NuvioTheme.spacing.xs)
             ) {
-                Text(
+                FocusMarqueeText(
                     text = item.title,
+                    focused = isFocused,
                     style = titleStyle,
                     color = NuvioTheme.colors.TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
                 )
                 item.subtitle?.takeIf { it.isNotBlank() }?.let { subtitle ->
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.xxs))
-                    Text(
+                    FocusMarqueeText(
                         text = subtitle,
+                        focused = isFocused,
                         style = MaterialTheme.typography.labelMedium,
                         color = NuvioTheme.colors.TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

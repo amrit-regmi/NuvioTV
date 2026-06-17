@@ -15,13 +15,15 @@ import kotlinx.coroutines.launch
 data class AdvancedSettingsUiState(
     val fastHorizontalNavigationEnabled: Boolean = false,
     val smoothBringIntoViewEnabled: Boolean = true,
-    val composeHighlighterEnabled: Boolean = false
+    val composeHighlighterEnabled: Boolean = false,
+    val marqueeFocusedTextEnabled: Boolean = true
 )
 
 sealed class AdvancedSettingsEvent {
     data class SetFastHorizontalNavigationEnabled(val enabled: Boolean) : AdvancedSettingsEvent()
     data class SetSmoothBringIntoViewEnabled(val enabled: Boolean) : AdvancedSettingsEvent()
     data class SetComposeHighlighterEnabled(val enabled: Boolean) : AdvancedSettingsEvent()
+    data class SetMarqueeFocusedTextEnabled(val enabled: Boolean) : AdvancedSettingsEvent()
 }
 
 @HiltViewModel
@@ -47,6 +49,11 @@ class AdvancedSettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(composeHighlighterEnabled = enabled) }
             }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.marqueeFocusedTextEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(marqueeFocusedTextEnabled = enabled) }
+            }
+        }
     }
 
     fun onEvent(event: AdvancedSettingsEvent) {
@@ -64,6 +71,11 @@ class AdvancedSettingsViewModel @Inject constructor(
             is AdvancedSettingsEvent.SetComposeHighlighterEnabled -> {
                 viewModelScope.launch {
                     layoutPreferenceDataStore.setComposeHighlighterEnabled(event.enabled)
+                }
+            }
+            is AdvancedSettingsEvent.SetMarqueeFocusedTextEnabled -> {
+                viewModelScope.launch {
+                    layoutPreferenceDataStore.setMarqueeFocusedTextEnabled(event.enabled)
                 }
             }
         }

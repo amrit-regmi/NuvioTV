@@ -351,6 +351,18 @@ fun AdvancedSettingsContent(
                         )
                     }
                 )
+                SettingsToggleRow(
+                    title = stringResource(R.string.advanced_marquee_focused_text),
+                    subtitle = stringResource(R.string.advanced_marquee_focused_text_subtitle),
+                    checked = uiState.marqueeFocusedTextEnabled,
+                    onToggle = {
+                        viewModel.onEvent(
+                            AdvancedSettingsEvent.SetMarqueeFocusedTextEnabled(
+                                !uiState.marqueeFocusedTextEnabled
+                            )
+                        )
+                    }
+                )
                 val profileManager = remember {
                     dagger.hilt.android.EntryPointAccessors.fromApplication(
                         context.applicationContext,
