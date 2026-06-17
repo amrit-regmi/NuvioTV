@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -280,6 +281,7 @@ fun SettingsScreen(
     val integrationRecoFocusRequester = remember { FocusRequester() }
     val integrationBuiltInProvidersFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
+    val integrationSectionHistory = remember { mutableStateListOf<IntegrationSettingsSection>() }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
     var allowDetailAutofocus by remember { mutableStateOf(false) }
@@ -388,6 +390,7 @@ fun SettingsScreen(
                                     } else {
                                         if (section.category == SettingsCategory.INTEGRATION) {
                                             integrationSection = IntegrationSettingsSection.Hub
+                                            integrationSectionHistory.clear()
                                         }
                                         allowDetailAutofocus = true
                                         selectedCategory = section.category
@@ -496,7 +499,14 @@ fun SettingsScreen(
                         }
                         SettingsCategory.INTEGRATION -> IntegrationSettingsContent(
                             selectedSection = integrationSection,
-                            onSelectSection = { integrationSection = it },
+                            onSelectSection = {
+                                integrationSectionHistory.add(integrationSection)
+                                integrationSection = it
+                            },
+                            onBack = {
+                                integrationSection = integrationSectionHistory.removeLastOrNull()
+                                    ?: IntegrationSettingsSection.Hub
+                            },
                             initialFocusRequester = if (allowDetailAutofocus) {
                                 contentFocusRequesters[SettingsCategory.INTEGRATION]
                             } else {
@@ -631,6 +641,7 @@ private fun AccountSettingsInline(
 private fun IntegrationSettingsContent(
     selectedSection: IntegrationSettingsSection,
     onSelectSection: (IntegrationSettingsSection) -> Unit,
+    onBack: () -> Unit,
     initialFocusRequester: FocusRequester?,
     hubFocusRequester: FocusRequester,
     debridFocusRequester: FocusRequester,
@@ -641,16 +652,8 @@ private fun IntegrationSettingsContent(
     builtInProvidersFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
-    var previousSection by remember { mutableStateOf<IntegrationSettingsSection?>(null) }
-    val previousSectionRef = remember { mutableStateOf(selectedSection) }
-    LaunchedEffect(selectedSection) {
-        if (previousSectionRef.value != selectedSection) {
-            previousSection = previousSectionRef.value
-            previousSectionRef.value = selectedSection
-        }
-    }
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
-        onSelectSection(previousSection ?: IntegrationSettingsSection.Hub)
+        onBack()
     }
     val hubEntryFocusRequester = initialFocusRequester ?: hubFocusRequester
 
