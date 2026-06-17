@@ -1331,22 +1331,24 @@ private fun MetaDetailsContent(
     // Pre-compute gradient brushes once
 
     // Stable hero play callback
-    val heroPlayClick = remember(heroVideo, meta.id, onEpisodeClick, onPlayClick) {
+    val heroPlayClick = remember(heroVideo, isSeries, meta.id, onEpisodeClick, onPlayClick) {
         {
             markHeroRestore()
             if (heroVideo != null) {
                 onEpisodeClick(heroVideo)
-            } else {
+            } else if (!isSeries) {
+                // Only navigate for movies when heroVideo is null; for series, episodes
+                // may still be loading and navigating without season/episode shows wrong content.
                 onPlayClick(meta.id)
             }
         }
     }
-    val heroPlayManualClick = remember(heroVideo, meta.id, onEpisodeManualPlayClick, onPlayManuallyClick) {
+    val heroPlayManualClick = remember(heroVideo, isSeries, meta.id, onEpisodeManualPlayClick, onPlayManuallyClick) {
         {
             markHeroRestore()
             if (heroVideo != null) {
                 onEpisodeManualPlayClick(heroVideo)
-            } else {
+            } else if (!isSeries) {
                 onPlayManuallyClick(meta.id)
             }
         }

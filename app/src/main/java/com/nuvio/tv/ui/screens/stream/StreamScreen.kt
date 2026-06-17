@@ -1150,7 +1150,10 @@ private fun StreamCard(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val streamName = remember(stream) { stream.getDisplayName() }
+    val streamName = remember(stream, isInstant) {
+        if (isInstant) stream.getDisplayName().replace("🟢 Cached", "⚡ Instant")
+        else stream.getDisplayName()
+    }
     val streamDescription = remember(stream) { stream.getDisplayDescription() }
     val hasBadges = stream.badges.isNotEmpty() || (showFileSizeBadges && stream.behaviorHints?.videoSize != null) || reserveBadgeSpace
 

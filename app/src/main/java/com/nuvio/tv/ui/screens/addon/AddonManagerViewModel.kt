@@ -100,6 +100,9 @@ class AddonManagerViewModel @Inject constructor(
     private var disabledHomeCatalogKeys: Set<String> = emptySet()
     private var followAddonsOrderEnabled: Boolean = false
     private var currentCollections: List<Collection> = emptyList()
+    // Full addon list including the built-in catalog-addon (used for catalog ordering only;
+    // the catalog-addon is excluded from installedAddons to hide it from addon management).
+    private var allAddons: List<Addon> = emptyList()
 
     init {
         observeInstalledAddons()
@@ -271,7 +274,7 @@ class AddonManagerViewModel @Inject constructor(
             currentPageStateProvider = {
                 val addons = _uiState.value.installedAddons
                 val orderedCatalogs = buildOrderedCatalogEntries(
-                    addons = addons.enabledAddons(),
+                    addons = allAddons.enabledAddons(),
                     savedOrderKeys = homeCatalogOrderKeys,
                     disabledKeys = disabledHomeCatalogKeys
                 )
@@ -506,7 +509,7 @@ class AddonManagerViewModel @Inject constructor(
         val currentUrls = _uiState.value.installedAddons.map { normalizeUrlForComparison(it.baseUrl) }.toSet()
         val proposedNormalized = change.proposedUrls.map { normalizeUrlForComparison(it) }.toSet()
         val currentCatalogEntries = buildOrderedCatalogEntries(
-            addons = _uiState.value.installedAddons.enabledAddons(),
+            addons = allAddons.enabledAddons(),
             savedOrderKeys = homeCatalogOrderKeys,
             disabledKeys = disabledHomeCatalogKeys
         )
@@ -810,6 +813,7 @@ class AddonManagerViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, error = error.message) }
                 }
                 .collect { addons ->
+                    allAddons = addons
                     _uiState.update { state ->
                         state.copy(
                             installedAddons = addons.filter { addon ->

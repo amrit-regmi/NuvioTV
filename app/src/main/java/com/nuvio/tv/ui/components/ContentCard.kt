@@ -64,6 +64,7 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
+import com.nuvio.tv.domain.model.StreamStatus
 import com.nuvio.tv.ui.theme.NuvioTheme
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -381,6 +382,14 @@ fun ContentCard(
                     )
                 } else {
                     MonochromePosterPlaceholder()
+                }
+
+                if (item.streamStatus == StreamStatus.UNAVAILABLE && !isPlaceholderItem) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.55f))
+                    )
                 }
 
                 val shouldPlayTrailerPreview = isBackdropExpanded &&

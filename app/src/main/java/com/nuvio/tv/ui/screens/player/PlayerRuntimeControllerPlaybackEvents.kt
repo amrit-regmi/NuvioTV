@@ -316,7 +316,7 @@ private fun PlayerRuntimeController.isShortPlaceholderStream(): Boolean {
 internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, duration: Long, syncRemote: Boolean = true) {
     if (contentId.isNullOrEmpty() || contentType.isNullOrEmpty()) return
 
-    if (position < 1000) return
+    if (position < 30_000) return
 
     val fallbackPercent = if (duration <= 0L) 5f else null
 

@@ -34,6 +34,7 @@ fun MetaPreviewDto.toDomain(): MetaPreview {
         behaviorHints = mapBehaviorHints(behaviorHints),
         trailers = mapTrailers(trailers, trailerStreams),
         trailerYtIds = collectTrailerYtIds(trailers, trailerStreams),
-        streamStatus = StreamStatus.fromString(streamStatus)
+        streamStatus = StreamStatus.fromString(streamStatus),
+        ageRating = certification?.trim()?.takeIf { it.isNotBlank() }
     )
 }

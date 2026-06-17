@@ -417,7 +417,7 @@ class StreamWarmer @Inject constructor(
             // Tier 2: resolve clientResolve (direct-debrid) streams in the background.
             // The resolved CDN URL is stored in resolvedUrlCache with a 60-min TTL so that
             // the detail panel can display "⚡ Instant" (already resolved) immediately.
-            val tier2Candidates = reordered.filter { it.isDirectDebrid() && it.getStreamUrl() == null }
+            val tier2Candidates = reordered.filter { it.isDirectDebrid() && it.getStreamUrl() == null }.take(BACKGROUND_PROBE_COUNT)
             if (tier2Candidates.isNotEmpty()) {
                 scope.launch(Dispatchers.IO) {
                     for (stream in tier2Candidates) {
@@ -457,6 +457,43 @@ class StreamWarmer @Inject constructor(
             Log.w(TAG, "All ${ minOf(maxProbe, streams.size) } probed streams invalid for type=$type videoId=$videoId — clearing warm session and cache")
             playerPreWarmer.clearSession(type, videoId)
             cache.remove(cacheKey)
+            // Still attempt Tier-2 resolution for direct-debrid streams that had no URL.
+            // When all probed streams are Tier-2 (no CDN URL yet), the probe loop skips them
+            // all and no valid index is found — but TorBox may still be able to resolve them.
+            // Resolving here ensures resolvedUrlCache is populated so pollInstantStreams()
+            // can detect and surface "⚡ Instant" without needing a re-open.
+            val tier2Candidates = streams.filter { it.isDirectDebrid() && it.getStreamUrl() == null }.take(BACKGROUND_PROBE_COUNT)
+            if (tier2Candidates.isNotEmpty()) {
+                scope.launch(Dispatchers.IO) {
+                    for (stream in tier2Candidates) {
+                        val key = stream.resolvedUrlCacheKey() ?: continue
+                        val existing = resolvedUrlCache[key]
+                        if (existing != null && System.currentTimeMillis() - existing.resolvedAt < RESOLVED_URL_TTL_MS) continue
+                        try {
+                            when (val result = torboxResolver.resolve(stream, stream.clientResolve?.season, stream.clientResolve?.episode)) {
+                                is DirectDebridResolveResult.Success -> {
+                                    resolvedUrlCache[key] = ResolvedUrlEntry(
+                                        url = result.url,
+                                        filename = result.filename,
+                                        videoSize = result.videoSize,
+                                        resolvedAt = System.currentTimeMillis()
+                                    )
+                                    Log.d(TAG, "Tier2 warm (all-cached) resolved: key=$key url=${result.url.take(60)}…")
+                                }
+                                DirectDebridResolveResult.RateLimited -> {
+                                    Log.w(TAG, "Tier2 warm (all-cached): rate-limited, stopping")
+                                    break
+                                }
+                                else -> Log.d(TAG, "Tier2 warm (all-cached): resolve result=$result for key=$key")
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Tier2 warm (all-cached): exception resolving key=$key", e)
+                        }
+                    }
+                }
+            }
             return null
         }
 
