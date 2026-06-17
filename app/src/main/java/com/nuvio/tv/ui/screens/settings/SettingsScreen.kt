@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Explore
@@ -537,6 +538,10 @@ fun SettingsScreen(
                             onNavigateToAddons = onNavigateToAddons,
                             onNavigateToPlugins = onNavigateToPlugins,
                             showPlugins = AppFeaturePolicy.pluginsEnabled && !isEssentialMode,
+                            onConfigureReco = {
+                                selectedCategory = SettingsCategory.INTEGRATION
+                                integrationSection = IntegrationSettingsSection.Reco
+                            },
                             initialFocusRequester = if (allowDetailAutofocus) {
                                 contentFocusRequesters[SettingsCategory.CONTENT_DISCOVERY]
                             } else {
@@ -560,8 +565,25 @@ private fun ContentDiscoverySettingsContent(
     onNavigateToAddons: () -> Unit,
     onNavigateToPlugins: () -> Unit,
     showPlugins: Boolean,
+    onConfigureReco: () -> Unit,
     initialFocusRequester: FocusRequester?
 ) {
+    val showBuiltInProviders = com.nuvio.tv.BuildConfig.RECO_MODE == "private"
+    var builtInProvidersOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val builtInProvidersFocusRequester = androidx.compose.runtime.remember { FocusRequester() }
+
+    androidx.activity.compose.BackHandler(enabled = builtInProvidersOpen) {
+        builtInProvidersOpen = false
+    }
+
+    if (builtInProvidersOpen) {
+        BuiltInProvidersSettingsContent(
+            initialFocusRequester = builtInProvidersFocusRequester,
+            onConfigureReco = onConfigureReco
+        )
+        return
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
@@ -571,12 +593,25 @@ private fun ContentDiscoverySettingsContent(
             subtitle = stringResource(R.string.settings_content_discovery_subtitle)
         )
         SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
+            if (showBuiltInProviders) {
+                SettingsActionRow(
+                    title = "Built-in providers",
+                    subtitle = "Catalog and recommendation engine",
+                    onClick = { builtInProvidersOpen = true },
+                    leadingIcon = Icons.Default.AutoAwesome,
+                    modifier = if (initialFocusRequester != null) {
+                        Modifier.focusRequester(initialFocusRequester)
+                    } else {
+                        Modifier
+                    }
+                )
+            }
             SettingsActionRow(
                 title = stringResource(R.string.addon_title),
                 subtitle = stringResource(R.string.settings_content_discovery_addons_subtitle),
                 onClick = onNavigateToAddons,
                 leadingIcon = Icons.Default.GridView,
-                modifier = if (initialFocusRequester != null) {
+                modifier = if (initialFocusRequester != null && !showBuiltInProviders) {
                     Modifier.focusRequester(initialFocusRequester)
                 } else {
                     Modifier
@@ -714,15 +749,6 @@ private fun IntegrationSettingsContent(
                             state = integrationHubState,
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
-                                item(key = "integration_hub_builtin_providers") {
-                                    SettingsActionRow(
-                                        title = "Built-in providers",
-                                        subtitle = "Catalog and recommendation engine",
-                                        onClick = { onSelectSection(IntegrationSettingsSection.BuiltInProviders) }
-                                    )
-                                }
-                            }
                             item(key = "integration_hub_debrid") {
                                 SettingsActionRow(
                                     title = stringResource(R.string.debrid_title),
