@@ -1,11 +1,11 @@
 package com.nuvio.tv.core.debrid
 
+import android.util.Log
 import com.nuvio.tv.data.local.DebridSettingsDataStore
 import com.nuvio.tv.data.remote.api.TorboxApi
 import com.nuvio.tv.data.remote.dto.TorboxCreateTorrentDataDto
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamClientResolve
-import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import okhttp3.MediaType.Companion.toMediaType
@@ -17,6 +17,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TORBOX_RESOLVER_TAG = "TorboxDebridResolver"
+private const val TAG = TORBOX_RESOLVER_TAG
 private const val RATE_LIMIT_COOLDOWN_MS = 60_000L
 
 @Singleton
@@ -63,25 +64,28 @@ class TorboxDirectDebridResolver @Inject constructor(
             val torrentId: Int
             if (knownTorrentId != null) {
                 torrentId = knownTorrentId
-                Log.d(TORBOX_RESOLVER_TAG, "Using pre-known torrentId=$torrentId, skipping createTorrent")
+                Log.d(TAG, "Using pre-known torrentId=$torrentId, skipping createTorrent")
             } else {
                 // Slow path: create/find torrent by magnet URI
                 val magnet = resolve.magnetUri?.takeIf { it.isNotBlank() }
                     ?: buildMagnetUri(resolve)
                     ?: return DirectDebridResolveResult.Stale
+                Log.d(TAG, "resolve: createTorrent hash=${resolve.infoHash?.take(12)}...")
+                val createStartMs = System.currentTimeMillis()
                 val create = api.createTorrent(
                     authorization = authorization,
                     magnet = magnet.toTextPart(),
                     addOnlyIfCached = "true".toTextPart(),
                     allowZip = "false".toTextPart()
                 )
+                Log.d(TAG, "resolve: createTorrent done in ${System.currentTimeMillis() - createStartMs}ms code=${create.code()}")
                 torrentId = create.extractTorrentId() ?: return create.toFailureForCreate()
             }
 
             // If fileIdx is already known and torrentId was pre-known, we can skip getTorrent
             val knownFileIdx = resolve.fileIdx
             if (knownTorrentId != null && knownFileIdx != null) {
-                Log.d(TORBOX_RESOLVER_TAG, "Using pre-known fileIdx=$knownFileIdx, skipping getTorrent")
+                Log.d(TAG, "Using pre-known fileIdx=$knownFileIdx, skipping getTorrent")
                 val link = api.requestDownloadLink(
                     authorization = authorization,
                     token = apiKey,
@@ -102,11 +106,14 @@ class TorboxDirectDebridResolver @Inject constructor(
                 )
             }
 
+            Log.d(TAG, "resolve: getTorrent id=$torrentId")
+            val getTorrentStartMs = System.currentTimeMillis()
             val torrent = api.getTorrent(
                 authorization = authorization,
                 id = torrentId,
                 bypassCache = true
             )
+            Log.d(TAG, "resolve: getTorrent done in ${System.currentTimeMillis() - getTorrentStartMs}ms code=${torrent.code()}")
             if (torrent.code() == 429) { triggerCooldown(); return DirectDebridResolveResult.RateLimited }
             if (!torrent.isSuccessful) return DirectDebridResolveResult.Stale
             val files = torrent.body()?.data?.files.orEmpty()
@@ -114,6 +121,8 @@ class TorboxDirectDebridResolver @Inject constructor(
                 ?: return DirectDebridResolveResult.Stale
             val fileId = file.id ?: return DirectDebridResolveResult.Stale
 
+            Log.d(TAG, "resolve: requestDownloadLink torrentId=$torrentId fileId=$fileId")
+            val linkStartMs = System.currentTimeMillis()
             val link = api.requestDownloadLink(
                 authorization = authorization,
                 token = apiKey,
@@ -123,6 +132,7 @@ class TorboxDirectDebridResolver @Inject constructor(
                 redirect = false,
                 appendName = false
             )
+            Log.d(TAG, "resolve: requestDownloadLink done in ${System.currentTimeMillis() - linkStartMs}ms code=${link.code()}")
             if (link.code() == 429) { triggerCooldown(); return DirectDebridResolveResult.RateLimited }
             if (!link.isSuccessful) return DirectDebridResolveResult.Stale
             val url = link.body()?.data?.takeIf { it.isNotBlank() }
@@ -135,6 +145,7 @@ class TorboxDirectDebridResolver @Inject constructor(
             )
         } catch (error: Exception) {
             if (error is CancellationException) throw error
+            Log.w(TAG, "resolve: failed with ${error::class.simpleName}: ${error.message}")
             DirectDebridResolveResult.Error
         }
     }

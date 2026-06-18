@@ -115,7 +115,8 @@ fun ModernHomeContent(
     scrollToTopTrigger: Int = 0,
     onRequestLazyCatalogLoad: (String) -> Unit = {},
     onRowItemFocusedCallback: (String, Int, Boolean) -> Unit = { _, _, _ -> },
-    onCwItemFocused: (Int) -> Unit = {}
+    onCwItemFocused: (Int) -> Unit = {},
+    blockLeftOnFirstExpandedItem: Boolean = false
 ) {
     val onRowItemFocusedPassedDown = rememberUpdatedState(onRowItemFocusedCallback)
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
@@ -1072,6 +1073,7 @@ fun ModernHomeContent(
                 focusedHeroMediaNonce = focusedHeroMediaNonce,
                 onFocusedHeroMediaNonceChange = onFocusedHeroMediaNonceChangeLambda,
                 onExpansionInteractionNonceChange = onExpansionInteractionNonceChangeLambda,
+                blockLeftOnFirstExpandedItem = blockLeftOnFirstExpandedItem,
                 isVerticalRowsScrollingState = isVerticalRowsScrollingState,
                 modifier = Modifier.align(Alignment.BottomStart)
             )
