@@ -297,32 +297,36 @@ fun AuthQrSignInScreen(
                             }
                         )
                     }
-                    Button(
-                        onClick = {
-                            if (onContinue != null && !isSignedIn) {
-                                viewModel.signOut()
-                            }
-                            viewModel.clearQrLoginSession()
-                            if (onContinue != null) {
+                    if (isSignedIn && onContinue != null) {
+                        Button(
+                            onClick = {
+                                viewModel.clearQrLoginSession()
                                 onContinue()
-                            } else {
+                            },
+                            colors = ButtonDefaults.colors(
+                                containerColor = NuvioTheme.colors.BackgroundCard,
+                                focusedContainerColor = Color.White,
+                                contentColor = NuvioTheme.colors.TextPrimary,
+                                focusedContentColor = Color.Black
+                            )
+                        ) {
+                            Text(stringResource(R.string.auth_qr_continue))
+                        }
+                    } else if (onContinue == null) {
+                        Button(
+                            onClick = {
+                                viewModel.clearQrLoginSession()
                                 onBackPress()
-                            }
-                        },
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioTheme.colors.BackgroundCard,
-                            focusedContainerColor = Color.White,
-                            contentColor = NuvioTheme.colors.TextPrimary,
-                            focusedContentColor = Color.Black
-                        )
-                    ) {
-                        Text(
-                            if (onContinue != null) {
-                                if (isSignedIn) stringResource(R.string.auth_qr_continue) else stringResource(R.string.auth_qr_continue_without_account)
-                            } else {
-                                stringResource(R.string.auth_qr_back)
-                            }
-                        )
+                            },
+                            colors = ButtonDefaults.colors(
+                                containerColor = NuvioTheme.colors.BackgroundCard,
+                                focusedContainerColor = Color.White,
+                                contentColor = NuvioTheme.colors.TextPrimary,
+                                focusedContentColor = Color.Black
+                            )
+                        ) {
+                            Text(stringResource(R.string.auth_qr_back))
+                        }
                     }
                 }
             }
