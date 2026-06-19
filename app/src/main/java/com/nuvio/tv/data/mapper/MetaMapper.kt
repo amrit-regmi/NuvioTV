@@ -47,7 +47,7 @@ fun MetaDto.toDomain(episodeLabel: String = "Episode"): Meta {
         videos = videos?.map { it.toDomain(episodeLabel) } ?: emptyList(),
         productionCompanies = productionCompanies?.map { MetaCompany(name = it.name, logo = it.logo, tmdbId = it.id) } ?: emptyList(),
         networks = emptyList(),
-        ageRating = appExtras?.certification?.takeIf { it.isNotBlank() },
+        ageRating = (appExtras?.certification ?: certification)?.takeIf { it.isNotBlank() },
         country = country,
         awards = awards,
         language = language,

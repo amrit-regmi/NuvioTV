@@ -82,7 +82,8 @@ class TorboxDirectDebridResolver @Inject constructor(
                 torrentId = create.extractTorrentId() ?: return create.toFailureForCreate()
             }
 
-            // If fileIdx is already known and torrentId was pre-known, we can skip getTorrent
+            // Fast path: if fileIdx is known, try requestdl directly without getTorrent.
+            // If it fails (stale fileIdx from when stream was tier-0), fall through to slow path.
             val knownFileIdx = resolve.fileIdx
             if (knownTorrentId != null && knownFileIdx != null) {
                 Log.d(TAG, "Using pre-known fileIdx=$knownFileIdx, skipping getTorrent")
@@ -96,14 +97,17 @@ class TorboxDirectDebridResolver @Inject constructor(
                     appendName = false
                 )
                 if (link.code() == 429) { triggerCooldown(); return DirectDebridResolveResult.RateLimited }
-                if (!link.isSuccessful) return DirectDebridResolveResult.Stale
-                val url = link.body()?.data?.takeIf { it.isNotBlank() }
-                    ?: return DirectDebridResolveResult.Stale
-                return DirectDebridResolveResult.Success(
-                    url = url,
-                    filename = resolve.filename,
-                    videoSize = stream.behaviorHints?.videoSize
-                )
+                if (link.isSuccessful) {
+                    val url = link.body()?.data?.takeIf { it.isNotBlank() }
+                        ?: return DirectDebridResolveResult.Stale
+                    return DirectDebridResolveResult.Success(
+                        url = url,
+                        filename = resolve.filename,
+                        videoSize = stream.behaviorHints?.videoSize
+                    )
+                }
+                // Fast path failed (fileIdx stale or file not yet indexed) — fall through to slow path
+                Log.d(TAG, "Fast path requestdl failed (${link.code()}), falling back to getTorrent")
             }
 
             Log.d(TAG, "resolve: getTorrent id=$torrentId")
@@ -117,9 +121,14 @@ class TorboxDirectDebridResolver @Inject constructor(
             if (torrent.code() == 429) { triggerCooldown(); return DirectDebridResolveResult.RateLimited }
             if (!torrent.isSuccessful) return DirectDebridResolveResult.Stale
             val files = torrent.body()?.data?.files.orEmpty()
+            Log.d(TAG, "resolve: getTorrent files=${files.size} ids=${files.map { it.id }}")
             val file = fileSelector.selectFile(files, resolve, season, episode)
-                ?: return DirectDebridResolveResult.Stale
-            val fileId = file.id ?: return DirectDebridResolveResult.Stale
+            Log.d(TAG, "resolve: selected file=${file?.name} id=${file?.id}")
+            // If no file selected (files empty or selector found no match), return Stale.
+            // Don't fall back to fileId=0 — TorBox rejects that with HTTP 500.
+            val fileId = file?.id ?: return DirectDebridResolveResult.Stale
+            val filename = file?.displayName()?.takeIf { it.isNotBlank() }
+            val videoSize = file?.size
 
             Log.d(TAG, "resolve: requestDownloadLink torrentId=$torrentId fileId=$fileId")
             val linkStartMs = System.currentTimeMillis()
@@ -140,8 +149,8 @@ class TorboxDirectDebridResolver @Inject constructor(
 
             DirectDebridResolveResult.Success(
                 url = url,
-                filename = file.displayName().takeIf { it.isNotBlank() },
-                videoSize = file.size
+                filename = filename,
+                videoSize = videoSize
             )
         } catch (error: Exception) {
             if (error is CancellationException) throw error
@@ -166,7 +175,8 @@ class TorboxDirectDebridResolver @Inject constructor(
                 DirectDebridResolveResult.RateLimited
             }
             else -> {
-                Log.d(TORBOX_RESOLVER_TAG, "createTorrent failed with HTTP ${code()}")
+                val errorBody = runCatching { errorBody()?.string() }.getOrNull()
+                Log.d(TORBOX_RESOLVER_TAG, "createTorrent failed with HTTP ${code()} body=$errorBody")
                 DirectDebridResolveResult.Stale
             }
         }

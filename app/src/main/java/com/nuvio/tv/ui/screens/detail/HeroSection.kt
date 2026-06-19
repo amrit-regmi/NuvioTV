@@ -63,6 +63,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
@@ -144,7 +146,19 @@ fun HeroContentSection(
     onRatingSelected: (Int) -> Unit = {},
     onDismissRatingPicker: () -> Unit = {},
     onSubmitRating: () -> Unit = {},
-    onPrepareStream: (() -> Unit)? = null
+    onPrepareStream: (() -> Unit)? = null,
+    onNavigateToDownloadStreams: (() -> Unit)? = null,
+    isPreparingStream: Boolean = false,
+    streamPreparePercent: Float? = null,
+    streamPrepareSeedCount: Int? = null,
+    streamPrepareSpeedMbps: Double? = null,
+    streamPrepareEtaMinutes: Int? = null,
+    streamPrepareReady: Boolean = false,
+    isThisItemDownloading: Boolean = false,
+    // True when the active download has progressed enough to start buffer streaming
+    isStreamableNow: Boolean = false,
+    // -1 = unknown (treat as multiple/navigate), 0 = none, 1 = exactly one (direct download), >1 = multiple (navigate)
+    uncachedStreamCount: Int = -1
 ) {
     val context = LocalContext.current
     val isSeriesApi = remember(meta.apiType) {
@@ -330,13 +344,168 @@ fun HeroContentSection(
                             )
                         }
 
-                        if (meta.streamStatus == StreamStatus.QUEUEABLE && onPrepareStream != null) {
-                            ActionIconButton(
-                                icon = Icons.Default.CloudDownload,
-                                contentDescription = "Prepare Stream",
-                                onClick = onPrepareStream,
-                                onFocused = onHeroActionFocused
-                            )
+                        if (meta.streamStatus == StreamStatus.QUEUEABLE) {
+                            var showDownloadStatusDialog by remember { mutableStateOf(false) }
+
+                            when {
+                                streamPrepareReady -> {
+                                    // Show a "Ready" checkmark icon — no callback needed
+                                    ActionIconButton(
+                                        icon = Icons.Default.Check,
+                                        contentDescription = "Ready to stream",
+                                        onClick = {},
+                                        onFocused = onHeroActionFocused
+                                    )
+                                }
+                                isPreparingStream || isThisItemDownloading -> {
+                                    // Clickable progress indicator — tapping shows download status dialog
+                                    val progressFraction = if (streamPreparePercent != null && streamPreparePercent > 0f) {
+                                        streamPreparePercent / 100f
+                                    } else null
+
+                                    var downloadButtonFocused by remember { mutableStateOf(false) }
+                                    IconButton(
+                                        onClick = { showDownloadStatusDialog = true },
+                                        modifier = Modifier
+                                            .size(NuvioTheme.spacing.xxxl)
+                                            .onFocusChanged { state ->
+                                                downloadButtonFocused = state.isFocused
+                                                if (state.isFocused) onHeroActionFocused()
+                                            }
+                                            .focusProperties { up = FocusRequester.Cancel },
+                                        colors = IconButtonDefaults.colors(
+                                            containerColor = NuvioTheme.colors.BackgroundCard,
+                                            focusedContainerColor = NuvioColors.Secondary,
+                                            contentColor = NuvioTheme.colors.TextPrimary,
+                                            focusedContentColor = NuvioColors.OnSecondary
+                                        ),
+                                        border = IconButtonDefaults.border(
+                                            focusedBorder = Border(
+                                                border = BorderStroke(NuvioTheme.spacing.xxs, NuvioTheme.colors.FocusRing),
+                                                shape = CircleShape
+                                            )
+                                        ),
+                                        shape = IconButtonDefaults.shape(shape = CircleShape)
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            if (progressFraction != null) {
+                                                androidx.compose.material3.CircularProgressIndicator(
+                                                    progress = { progressFraction },
+                                                    modifier = Modifier.size(24.dp),
+                                                    color = NuvioTheme.colors.Primary,
+                                                    strokeWidth = 2.5.dp
+                                                )
+                                            } else {
+                                                androidx.compose.material3.CircularProgressIndicator(
+                                                    modifier = Modifier.size(24.dp),
+                                                    color = NuvioTheme.colors.Primary,
+                                                    strokeWidth = 2.5.dp
+                                                )
+                                            }
+                                            if (streamPreparePercent != null && streamPreparePercent > 0f) {
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = "${streamPreparePercent.toInt()}%",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = NuvioTheme.extendedColors.textSecondary
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (showDownloadStatusDialog) {
+                                        val etaMin = streamPrepareEtaMinutes
+                                        val speedMbps = streamPrepareSpeedMbps
+                                        val seeds = streamPrepareSeedCount
+                                        androidx.compose.material3.AlertDialog(
+                                            onDismissRequest = { showDownloadStatusDialog = false },
+                                            title = {
+                                                androidx.compose.material3.Text(
+                                                    text = "Download in Progress",
+                                                    style = MaterialTheme.typography.titleMedium.copy(
+                                                        color = com.nuvio.tv.ui.theme.NuvioTheme.colors.TextPrimary
+                                                    )
+                                                )
+                                            },
+                                            text = {
+                                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    if (streamPreparePercent != null && streamPreparePercent > 0f) {
+                                                        androidx.compose.material3.Text(
+                                                            text = "Progress: ${streamPreparePercent.toInt()}%",
+                                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                                color = com.nuvio.tv.ui.theme.NuvioTheme.colors.TextPrimary
+                                                            )
+                                                        )
+                                                    }
+                                                    if (etaMin != null && etaMin > 0) {
+                                                        androidx.compose.material3.Text(
+                                                            text = "ETA: ~${etaMin} min",
+                                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                                color = com.nuvio.tv.ui.theme.NuvioTheme.colors.TextPrimary
+                                                            )
+                                                        )
+                                                    }
+                                                    if (speedMbps != null && speedMbps > 0.0) {
+                                                        androidx.compose.material3.Text(
+                                                            text = "Speed: ${String.format(java.util.Locale.US, "%.1f", speedMbps)} MB/s",
+                                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                                color = com.nuvio.tv.ui.theme.NuvioTheme.colors.TextPrimary
+                                                            )
+                                                        )
+                                                    }
+                                                    if (seeds != null && seeds > 0) {
+                                                        androidx.compose.material3.Text(
+                                                            text = "Seeds: $seeds",
+                                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                                color = com.nuvio.tv.ui.theme.NuvioTheme.colors.TextPrimary
+                                                            )
+                                                        )
+                                                    }
+                                                    if ((streamPreparePercent == null || streamPreparePercent <= 0f) &&
+                                                        (etaMin == null || etaMin <= 0) &&
+                                                        (speedMbps == null || speedMbps <= 0.0) &&
+                                                        (seeds == null || seeds <= 0)
+                                                    ) {
+                                                        androidx.compose.material3.Text(
+                                                            text = "Preparing download…",
+                                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                                color = com.nuvio.tv.ui.theme.NuvioTheme.colors.TextPrimary
+                                                            )
+                                                        )
+                                                    }
+                                                }
+                                            },
+                                            confirmButton = {
+                                                androidx.compose.material3.TextButton(
+                                                    onClick = { showDownloadStatusDialog = false }
+                                                ) {
+                                                    androidx.compose.material3.Text("OK")
+                                                }
+                                            },
+                                            containerColor = com.nuvio.tv.ui.theme.NuvioTheme.colors.BackgroundElevated,
+                                            titleContentColor = com.nuvio.tv.ui.theme.NuvioTheme.colors.TextPrimary,
+                                            textContentColor = com.nuvio.tv.ui.theme.NuvioTheme.colors.TextPrimary
+                                        )
+                                    }
+                                }
+                                (onNavigateToDownloadStreams != null || onPrepareStream != null) && uncachedStreamCount != 0 -> {
+                                    // Smart dispatch: if exactly one uncached stream is available,
+                                    // trigger the download directly; otherwise navigate to stream picker.
+                                    val downloadClick: () -> Unit = if (uncachedStreamCount == 1 && onPrepareStream != null) {
+                                        onPrepareStream
+                                    } else {
+                                        onNavigateToDownloadStreams ?: onPrepareStream ?: {}
+                                    }
+                                    ActionIconButton(
+                                        icon = Icons.Default.CloudDownload,
+                                        contentDescription = "Download",
+                                        onClick = downloadClick,
+                                        onFocused = onHeroActionFocused
+                                    )
+                                }
+                            }
                         }
 
                         val showRatingButton = (com.nuvio.tv.BuildConfig.RECO_MODE == "private" || traktAuthenticated) &&

@@ -33,6 +33,8 @@ data class RecoItem(
     val vote_average: Double? = null,
     val score: Double = 0.0,
     val imdb_id: String? = null,
+    val certification: String? = null,
+    val status: String? = null,
 )
 
 @Serializable

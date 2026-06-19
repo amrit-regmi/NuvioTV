@@ -210,6 +210,7 @@ fun SettingsScreen(
     onNavigateToTrakt: () -> Unit = {},
     onNavigateToAddons: () -> Unit = {},
     onNavigateToPlugins: () -> Unit = {},
+    onNavigateToBuiltInProviders: () -> Unit = {},
     onNavigateToAuthQrSignIn: () -> Unit = {},
     onNavigateToManageProfiles: () -> Unit = {},
     onNavigateToSupportersContributors: () -> Unit = {},
@@ -537,6 +538,7 @@ fun SettingsScreen(
                         SettingsCategory.CONTENT_DISCOVERY -> ContentDiscoverySettingsContent(
                             onNavigateToAddons = onNavigateToAddons,
                             onNavigateToPlugins = onNavigateToPlugins,
+                            onNavigateToBuiltInProviders = onNavigateToBuiltInProviders,
                             showPlugins = AppFeaturePolicy.pluginsEnabled && !isEssentialMode,
                             onConfigureReco = {
                                 selectedCategory = SettingsCategory.INTEGRATION
@@ -564,25 +566,12 @@ fun SettingsScreen(
 private fun ContentDiscoverySettingsContent(
     onNavigateToAddons: () -> Unit,
     onNavigateToPlugins: () -> Unit,
+    onNavigateToBuiltInProviders: () -> Unit,
     showPlugins: Boolean,
     onConfigureReco: () -> Unit,
     initialFocusRequester: FocusRequester?
 ) {
     val showBuiltInProviders = com.nuvio.tv.BuildConfig.RECO_MODE == "private"
-    var builtInProvidersOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    val builtInProvidersFocusRequester = androidx.compose.runtime.remember { FocusRequester() }
-
-    androidx.activity.compose.BackHandler(enabled = builtInProvidersOpen) {
-        builtInProvidersOpen = false
-    }
-
-    if (builtInProvidersOpen) {
-        BuiltInProvidersSettingsContent(
-            initialFocusRequester = builtInProvidersFocusRequester,
-            onConfigureReco = onConfigureReco
-        )
-        return
-    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -596,8 +585,8 @@ private fun ContentDiscoverySettingsContent(
             if (showBuiltInProviders) {
                 SettingsActionRow(
                     title = "Built-in providers",
-                    subtitle = "Catalog and recommendation engine",
-                    onClick = { builtInProvidersOpen = true },
+                    subtitle = "Private catalog, stream engine and recommendations",
+                    onClick = onNavigateToBuiltInProviders,
                     leadingIcon = Icons.Default.AutoAwesome,
                     modifier = if (initialFocusRequester != null) {
                         Modifier.focusRequester(initialFocusRequester)

@@ -4,6 +4,7 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
@@ -28,6 +29,13 @@ interface CatalogAddonApi {
         @Path(value = "videoId", encoded = true) videoId: String,
         @Header("Authorization") authorization: String?
     ): Response<CatalogStreamPrepareDto>
+
+    @DELETE("stream/{type}/{videoId}/prepare")
+    suspend fun cancelPrepare(
+        @Path("type") type: String,
+        @Path(value = "videoId", encoded = true) videoId: String,
+        @Header("Authorization") authorization: String?
+    ): Response<Unit>
 
     @GET("device-profile/{deviceId}")
     suspend fun getDeviceProfile(
@@ -57,14 +65,20 @@ data class CatalogStreamStatusItemDto(
     @Json(name = "cached") val cached: Boolean? = null,
     @Json(name = "has_url") val hasUrl: Boolean? = null,
     @Json(name = "warm_expires_at") val warmExpiresAt: String? = null,
-    @Json(name = "warmed_at") val warmedAt: String? = null
+    @Json(name = "warmed_at") val warmedAt: String? = null,
+    @Json(name = "progress_pct") val progressPct: Double? = null,
+    @Json(name = "seeds") val seeds: Int? = null,
+    @Json(name = "download_speed_mbps") val downloadSpeedMbps: Double? = null,
+    @Json(name = "eta_seconds") val etaSeconds: Int? = null,
+    @Json(name = "download_state") val downloadState: String? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class CatalogStreamPrepareDto(
     @Json(name = "status") val status: String? = null,
     @Json(name = "eta_minutes") val etaMinutes: Int? = null,
-    @Json(name = "info_hash") val infoHash: String? = null
+    @Json(name = "info_hash") val infoHash: String? = null,
+    @Json(name = "torrent_id") val torrentId: String? = null
 )
 
 @JsonClass(generateAdapter = true)

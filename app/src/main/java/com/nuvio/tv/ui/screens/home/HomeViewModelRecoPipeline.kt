@@ -126,5 +126,7 @@ private fun RecoItem.toMetaPreview(): MetaPreview {
         releaseInfo = year?.toString(),
         imdbRating = vote_average?.toFloat() ?: score.takeIf { it > 0.0 }?.toFloat(),
         genres = genres,
+        ageRating = certification?.trim()?.takeIf { it.isNotBlank() },
+        status = status?.trim()?.takeIf { it.isNotBlank() },
     )
 }

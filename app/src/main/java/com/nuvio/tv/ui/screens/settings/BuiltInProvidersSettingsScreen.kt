@@ -2,36 +2,80 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
+
+@Composable
+fun BuiltInProvidersScreen(
+    showBuiltInHeader: Boolean = true,
+    onBackPress: () -> Unit,
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    BackHandler { onBackPress() }
+
+    LaunchedEffect(Unit) {
+        runCatching { focusRequester.requestFocus() }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NuvioTheme.colors.Background)
+            .padding(
+                start = NuvioTheme.spacing.xxl,
+                end = NuvioTheme.spacing.xxl,
+                top = if (showBuiltInHeader) NuvioTheme.spacing.xl else 68.dp,
+                bottom = NuvioTheme.spacing.xl
+            )
+    ) {
+        SettingsWorkspaceSurface(modifier = Modifier.fillMaxSize()) {
+            BuiltInProvidersSettingsContent(initialFocusRequester = focusRequester)
+        }
+    }
+}
 
 @Composable
 internal fun BuiltInProvidersSettingsContent(
     initialFocusRequester: FocusRequester,
-    onConfigureReco: () -> Unit,
+    onConfigureReco: () -> Unit = {},
     viewModel: BuiltInProvidersViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -52,7 +96,7 @@ internal fun BuiltInProvidersSettingsContent(
     ) {
         SettingsDetailHeader(
             title = "Built-in providers",
-            subtitle = "Catalog and stream engine powered by your private backend"
+            subtitle = "Private catalog and stream engine powered by shared TorBox"
         )
 
         SettingsGroupCard(
@@ -85,14 +129,6 @@ internal fun BuiltInProvidersSettingsContent(
                         )
                     }
 
-                    item(key = "builtin_reco_link") {
-                        SettingsActionRow(
-                            title = "Recommendation engine",
-                            subtitle = "Personalized AI recommendations",
-                            onClick = onConfigureReco
-                        )
-                    }
-
                     item(key = "builtin_stream_engine_section") {
                         BuiltInSectionLabel(text = "Stream Engine")
                     }
@@ -100,7 +136,7 @@ internal fun BuiltInProvidersSettingsContent(
                     item(key = "builtin_stream_engine_toggle") {
                         SettingsToggleRow(
                             title = "Use built-in stream engine",
-                            subtitle = "Backend selects the best stream for this device automatically.",
+                            subtitle = "Provides streams via shared TorBox account based on your device profile",
                             checked = uiState.streamEngineEnabled,
                             enabled = true,
                             onToggle = { viewModel.toggleStreamEngine(!uiState.streamEngineEnabled) }
@@ -265,6 +301,83 @@ internal fun BuiltInProvidersSettingsContent(
             },
             onDismiss = { showProfileAudioChannelsPicker = false }
         )
+    }
+}
+
+@Composable
+private fun InlineRecoSection(
+    viewModel: RecoSettingsViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        when {
+            uiState.error != null -> {
+                Text(
+                    text = uiState.error!!,
+                    color = NuvioColors.TextSecondary,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(4.dp))
+                Button(onClick = { viewModel.issueWatchlyKey() }) {
+                    Text("Retry")
+                }
+            }
+            uiState.url != null -> {
+                if (uiState.qrBitmap != null) {
+                    Image(
+                        bitmap = uiState.qrBitmap!!.asImageBitmap(),
+                        contentDescription = "Reco engine QR code",
+                        modifier = Modifier
+                            .size(160.dp)
+                            .background(Color.White, RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+                Text(
+                    text = uiState.url!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioColors.TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+                uiState.countdownSeconds?.let { remaining ->
+                    val minutes = remaining / 60
+                    val seconds = remaining % 60
+                    Text(
+                        text = "Expires in %d:%02d".format(minutes, seconds),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (remaining < 60) MaterialTheme.colorScheme.error
+                                else NuvioColors.TextSecondary
+                    )
+                }
+            }
+            uiState.isLoading -> {
+                Text(
+                    text = "Generating key…",
+                    color = NuvioColors.TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            else -> {
+                Text(
+                    text = "Scan QR to configure on your phone or laptop. Key expires after 15 minutes.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioColors.TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(4.dp))
+                Button(onClick = { viewModel.issueWatchlyKey() }) {
+                    Text("Configure on another device")
+                }
+            }
+        }
     }
 }
 

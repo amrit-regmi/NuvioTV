@@ -30,7 +30,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -139,6 +139,8 @@ fun StreamScreen(
     )
     val activeDownload by viewModel.activeDownload.collectAsStateWithLifecycle(initialValue = null)
     var showDownloadSheet by remember { mutableStateOf(false) }
+    // Becomes true when background polling confirms TorBox can serve the stream via requestdl
+    var isStreamable by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun launchExternalPlayer(playbackInfo: StreamPlaybackInfo) {
@@ -432,9 +434,26 @@ fun StreamScreen(
                         if (currentIndex >= 0) {
                             focusedStreamIndex = currentIndex
                         }
-                        // If this stream is the active download, show progress sheet
-                        if (viewModel.isActiveDownload(stream)) {
+                        // If this stream is the active download OR shares its infoHash with the
+                        // active download (cached stream whose requestdl returns 500 while same
+                        // torrent is downloading), show the download dialog instead of resolving.
+                        val streamHash = (stream.infoHash ?: stream.clientResolve?.infoHash)?.lowercase()
+                        val activeKey = activeDownload?.streamKey
+                        val isActiveDownload = viewModel.isActiveDownload(stream)
+                        val isMatchingActiveDownload = isActiveDownload ||
+                            (streamHash != null && activeKey == "hash:$streamHash")
+                        android.util.Log.d("StreamClick", "stream=${stream.name} hash=$streamHash activeKey=$activeKey isActive=$isActiveDownload isMatch=$isMatchingActiveDownload isNonCached=${stream.isNonCachedDebridStream()}")
+                        if (isMatchingActiveDownload) {
                             showDownloadSheet = true
+                        } else if (stream.isNonCachedDebridStream()) {
+                            if (activeDownload != null) {
+                                // Another download is already in progress — show that dialog
+                                // so the user can stop it before starting a new one.
+                                showDownloadSheet = true
+                            } else {
+                                viewModel.queueStreamForDownload(stream)
+                                showDownloadSheet = true
+                            }
                         } else {
                             scope.coroutineLaunch {
                                 val playbackInfo = viewModel.resolveStreamForPlayback(stream)
@@ -451,6 +470,7 @@ fun StreamScreen(
                     onRestoreFocusedStreamHandled = { restoreFocusedStream = false },
                     onRetry = { viewModel.onEvent(StreamScreenEvent.OnRetry) },
                     activeDownloadKey = activeDownload?.streamKey,
+                    activeDownload = activeDownload,
                     instantStreamKeys = uiState.instantStreamKeys,
                     modifier = Modifier
                         .weight(0.6f)
@@ -501,15 +521,60 @@ fun StreamScreen(
             )
         }
 
+        // Background poll: confirm TorBox can serve the stream via requestdl.
+        // Runs automatically while the dialog is open; sets isStreamable when ready.
+        LaunchedEffect(showDownloadSheet, activeDownload?.streamKey) {
+            isStreamable = false
+            if (!showDownloadSheet || activeDownload == null) return@LaunchedEffect
+            if (activeDownload?.status == DebridDownloadStatus.READY) {
+                isStreamable = true
+                return@LaunchedEffect
+            }
+            val pollStatus = activeDownload?.status
+            if (pollStatus != DebridDownloadStatus.QUEUED &&
+                pollStatus != DebridDownloadStatus.DOWNLOADING) return@LaunchedEffect
+
+            while (true) {
+                val bufferStream = uiState.filteredStreams.firstOrNull { viewModel.isActiveDownload(it) }
+                if (bufferStream != null) {
+                    try {
+                        val info = viewModel.resolveStreamForPlayback(bufferStream, skipQueueCheck = true)
+                        android.util.Log.d("StreamSheet", "poll: result=${info?.url?.take(40)}")
+                        if (info != null) { isStreamable = true; break }
+                    } catch (_: Exception) {}
+                }
+                coroutineDelay(30_000)
+            }
+        }
+
         if (showDownloadSheet && activeDownload != null) {
             DownloadProgressSheet(
                 downloadState = activeDownload!!,
+                isStreamable = isStreamable,
                 onStop = {
+                    isStreamable = false
                     viewModel.cancelDownload()
                     showDownloadSheet = false
+                    viewModel.clearAutoPlayOverlay()
                 },
                 onClose = {
+                    isStreamable = false
                     showDownloadSheet = false
+                    viewModel.clearAutoPlayOverlay()
+                },
+                onStartStreaming = {
+                    val bufferStream = uiState.filteredStreams.firstOrNull { viewModel.isActiveDownload(it) }
+                    if (bufferStream != null) {
+                        scope.coroutineLaunch {
+                            val playbackInfo = viewModel.resolveStreamForPlayback(bufferStream, skipQueueCheck = true)
+                            if (playbackInfo != null) {
+                                showDownloadSheet = false
+                                isStreamable = false
+                                pendingRestoreOnResume = true
+                                routePlayback(playbackInfo)
+                            }
+                        }
+                    }
                 }
             )
         }
@@ -718,6 +783,7 @@ private fun RightStreamSection(
     onRestoreFocusedStreamHandled: () -> Unit,
     onRetry: () -> Unit,
     activeDownloadKey: String? = null,
+    activeDownload: DebridDownloadState? = null,
     instantStreamKeys: Set<String> = emptySet(),
     modifier: Modifier = Modifier
 ) {
@@ -835,6 +901,7 @@ private fun RightStreamSection(
                             orderedAddonNames = orderedAddonNames,
                             onFocusChanged = { listHasFocus = it },
                             activeDownloadKey = activeDownloadKey,
+                            activeDownload = activeDownload,
                             instantStreamKeys = instantStreamKeys
                         )
                     }
@@ -1049,6 +1116,7 @@ private fun StreamsList(
     orderedAddonNames: List<String> = emptyList(),
     onFocusChanged: (Boolean) -> Unit = {},
     activeDownloadKey: String? = null,
+    activeDownload: DebridDownloadState? = null,
     instantStreamKeys: Set<String> = emptySet()
 ) {
     val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
@@ -1125,14 +1193,16 @@ private fun StreamsList(
             stream.stableKey(index)
         }) { index, stream ->
             Box(modifier = Modifier.padding(vertical = NuvioTheme.spacing.xs)) {
+                val isThisActiveDownload = activeDownloadKey != null &&
+                    activeDownloadKey == DebridDownloadManager.streamKey(stream)
                 StreamCard(
                     stream = stream,
                     showFileSizeBadges = showFileSizeBadges,
                     showAddonLogo = showAddonLogo,
                     badgePlacement = badgePlacement,
                     reserveBadgeSpace = hasBadgeRules && stream.badges.isEmpty(),
-                    isActiveDownload = activeDownloadKey != null &&
-                        activeDownloadKey == DebridDownloadManager.streamKey(stream),
+                    isActiveDownload = isThisActiveDownload,
+                    activeDownloadState = if (isThisActiveDownload) activeDownload else null,
                     isInstant = instantStreamKeys.contains(stream.stableKey()),
                     isNonCachedDebrid = stream.isNonCachedDebridStream(),
                     onClick = { onStreamSelected(stream) },
@@ -1163,6 +1233,7 @@ private fun StreamCard(
     badgePlacement: StreamBadgePlacement,
     reserveBadgeSpace: Boolean = false,
     isActiveDownload: Boolean = false,
+    activeDownloadState: DebridDownloadState? = null,
     isInstant: Boolean = false,
     isNonCachedDebrid: Boolean = false,
     onClick: () -> Unit,
@@ -1217,6 +1288,7 @@ private fun StreamCard(
         shape = CardDefaults.shape(shape = RoundedCornerShape(NuvioTheme.radii.md)),
         scale = CardDefaults.scale(focusedScale = 1f)
     ) {
+        Column {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1296,42 +1368,84 @@ private fun StreamCard(
                         color = NuvioTheme.extendedColors.textTertiary,
                         maxLines = 1
                     )
+
+                    if (isActiveDownload) {
+                        Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = NuvioTheme.colors.Primary,
+                            strokeWidth = 2.dp
+                        )
+                    } else if (isNonCachedDebrid) {
+                        Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = "Download",
+                            modifier = Modifier.size(20.dp),
+                            tint = NuvioTheme.extendedColors.textSecondary
+                        )
+                    }
                 }
+            }
+        } // end Row
 
-                Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
-
-                Text(
-                    text = stream.addonName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = NuvioTheme.extendedColors.textTertiary,
-                    maxLines = 1
+        // Inline progress bar + stats row for the active download
+        if (isActiveDownload && activeDownloadState != null) {
+            val pct = activeDownloadState.progressPct
+            if (pct != null && pct > 0f) {
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = { pct / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = NuvioTheme.colors.Primary,
+                    trackColor = NuvioTheme.colors.BackgroundElevated
                 )
-
-                if (isActiveDownload) {
-                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
-                    androidx.compose.material3.CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = NuvioTheme.colors.Primary,
-                        strokeWidth = 2.dp
-                    )
-                } else if (isInstant) {
-                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+            } else {
+                androidx.compose.material3.LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = NuvioTheme.colors.Primary,
+                    trackColor = NuvioTheme.colors.BackgroundElevated
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = NuvioTheme.spacing.lg, vertical = NuvioTheme.spacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+            ) {
+                if (pct != null && pct > 0f) {
                     Text(
-                        text = "⚡ Instant",
+                        text = "${pct.toInt()}%",
                         style = MaterialTheme.typography.labelSmall,
-                        color = NuvioTheme.colors.Primary
+                        color = NuvioTheme.extendedColors.textSecondary
                     )
-                } else if (isNonCachedDebrid) {
-                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
-                    Icon(
-                        imageVector = Icons.Default.FileDownload,
-                        contentDescription = "Queue download",
-                        modifier = Modifier.size(20.dp),
-                        tint = NuvioTheme.extendedColors.textSecondary
+                }
+                val eta = activeDownloadState.etaMinutes
+                if (eta != null && eta > 0) {
+                    Text(
+                        text = "~${eta}m",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = NuvioTheme.extendedColors.textSecondary
+                    )
+                }
+                val seeds = activeDownloadState.seeds
+                if (seeds != null && seeds > 0) {
+                    Text(
+                        text = "${seeds}↑",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = NuvioTheme.extendedColors.textSecondary
+                    )
+                }
+                val speed = activeDownloadState.speedMbps
+                if (speed != null && speed > 0.0) {
+                    Text(
+                        text = String.format(java.util.Locale.US, "%.1f MB/s", speed),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = NuvioTheme.extendedColors.textSecondary
                     )
                 }
             }
         }
+        } // end Column
     }
 }
 
@@ -1441,20 +1555,42 @@ private fun PlayerChoiceDialog(
 @Composable
 private fun DownloadProgressSheet(
     downloadState: DebridDownloadState,
+    isStreamable: Boolean = false,
     onStop: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onStartStreaming: () -> Unit = {}
 ) {
     val stopFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        stopFocusRequester.requestFocus()
+    val closeFocusRequester = remember { FocusRequester() }
+    val streamingFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(downloadState.status, isStreamable) {
+        when {
+            isStreamable -> streamingFocusRequester.requestFocus()
+            downloadState.status == DebridDownloadStatus.READY -> streamingFocusRequester.requestFocus()
+            downloadState.status == DebridDownloadStatus.FAILED ||
+            downloadState.status == DebridDownloadStatus.NO_VALID_SOURCE -> stopFocusRequester.requestFocus()
+            else -> closeFocusRequester.requestFocus()
+        }
     }
 
-    val statusText = when (downloadState.status) {
-        DebridDownloadStatus.QUEUED -> stringResource(R.string.stream_download_queued)
-        DebridDownloadStatus.DOWNLOADING -> stringResource(R.string.stream_download_downloading)
-        DebridDownloadStatus.READY -> stringResource(R.string.stream_download_ready)
-        DebridDownloadStatus.FAILED -> stringResource(R.string.stream_download_failed)
-        DebridDownloadStatus.NO_VALID_SOURCE -> stringResource(R.string.stream_download_no_source)
+    val statusText = when {
+        isStreamable -> "Stream is ready — tap Stream to play"
+        downloadState.status == DebridDownloadStatus.FAILED && downloadState.failureReason == "slots_full" ->
+            "TorBox download slots full — cancel an existing download to add more"
+        downloadState.status == DebridDownloadStatus.DOWNLOADING -> {
+            val pct = downloadState.progressPct?.let { "%.0f%%".format(it) }
+            if (pct != null) "Downloading $pct — checking stream availability..."
+            else "Downloading — checking stream availability..."
+        }
+        downloadState.status == DebridDownloadStatus.QUEUED ->
+            "Queued — checking stream availability..."
+        else -> when (downloadState.status) {
+            DebridDownloadStatus.QUEUED -> stringResource(R.string.stream_download_queued)
+            DebridDownloadStatus.DOWNLOADING -> stringResource(R.string.stream_download_downloading)
+            DebridDownloadStatus.READY -> stringResource(R.string.stream_download_ready)
+            DebridDownloadStatus.FAILED -> stringResource(R.string.stream_download_failed)
+            DebridDownloadStatus.NO_VALID_SOURCE -> stringResource(R.string.stream_download_no_source)
+        }
     }
 
     val etaText = downloadState.etaMinutes?.takeIf { it > 0 }?.let { eta ->
@@ -1495,11 +1631,21 @@ private fun DownloadProgressSheet(
                 if (downloadState.status == DebridDownloadStatus.QUEUED ||
                     downloadState.status == DebridDownloadStatus.DOWNLOADING
                 ) {
-                    androidx.compose.material3.LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = NuvioTheme.colors.Primary,
-                        trackColor = NuvioTheme.colors.BackgroundElevated
-                    )
+                    val pct = downloadState.progressPct
+                    if (pct != null && pct > 0f) {
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { pct / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = NuvioTheme.colors.Primary,
+                            trackColor = NuvioTheme.colors.BackgroundElevated
+                        )
+                    } else {
+                        androidx.compose.material3.LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = NuvioTheme.colors.Primary,
+                            trackColor = NuvioTheme.colors.BackgroundElevated
+                        )
+                    }
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
                 }
 
@@ -1510,10 +1656,40 @@ private fun DownloadProgressSheet(
                     textAlign = TextAlign.Center
                 )
 
+                val progressPct = downloadState.progressPct
+                val seeds = downloadState.seeds
+                val speedMbps = downloadState.speedMbps
+                if (progressPct != null && progressPct > 0f) {
+                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+                    Text(
+                        text = "${progressPct.toInt()}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NuvioTheme.extendedColors.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
                 if (etaText != null) {
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
                     Text(
                         text = etaText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NuvioTheme.extendedColors.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                if (seeds != null && seeds > 0) {
+                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+                    Text(
+                        text = "$seeds seeders",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NuvioTheme.extendedColors.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                if (speedMbps != null && speedMbps > 0.0) {
+                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+                    Text(
+                        text = String.format(java.util.Locale.US, "%.1f MB/s", speedMbps),
                         style = MaterialTheme.typography.bodySmall,
                         color = NuvioTheme.extendedColors.textSecondary,
                         textAlign = TextAlign.Center
@@ -1529,11 +1705,13 @@ private fun DownloadProgressSheet(
                     if (downloadState.status == DebridDownloadStatus.QUEUED ||
                         downloadState.status == DebridDownloadStatus.DOWNLOADING
                     ) {
+                        var stopFocused by remember { mutableStateOf(false) }
                         Card(
                             onClick = onStop,
                             modifier = Modifier
                                 .weight(1f)
-                                .focusRequester(stopFocusRequester),
+                                .focusRequester(stopFocusRequester)
+                                .onFocusChanged { stopFocused = it.isFocused },
                             colors = CardDefaults.colors(
                                 containerColor = NuvioTheme.colors.BackgroundElevated,
                                 focusedContainerColor = NuvioTheme.colors.Secondary
@@ -1550,7 +1728,41 @@ private fun DownloadProgressSheet(
                             Text(
                                 text = stringResource(R.string.stream_download_stop),
                                 style = MaterialTheme.typography.titleMedium,
-                                color = NuvioTheme.colors.TextPrimary,
+                                color = if (stopFocused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.TextPrimary,
+                                modifier = Modifier
+                                    .padding(horizontal = NuvioTheme.spacing.lg, vertical = 14.dp)
+                                    .fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+
+                        // "Stream" button — only enabled when background polling confirms TorBox
+                        // can serve the file via requestdl (isStreamable), or download is READY.
+                        val isStreamActive = isStreamable || downloadState.status == DebridDownloadStatus.READY
+                        var streamingFocused by remember { mutableStateOf(false) }
+                        Card(
+                            onClick = { if (isStreamActive) onStartStreaming() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(streamingFocusRequester)
+                                .onFocusChanged { streamingFocused = it.isFocused },
+                            colors = CardDefaults.colors(
+                                containerColor = if (isStreamActive) NuvioTheme.colors.Primary else NuvioTheme.colors.BackgroundElevated,
+                                focusedContainerColor = if (isStreamActive) NuvioTheme.colors.Primary else NuvioTheme.colors.BackgroundElevated
+                            ),
+                            border = CardDefaults.border(
+                                focusedBorder = Border(
+                                    border = BorderStroke(NuvioTheme.spacing.xxs, NuvioTheme.colors.FocusRing),
+                                    shape = RoundedCornerShape(NuvioTheme.radii.md)
+                                )
+                            ),
+                            shape = CardDefaults.shape(shape = RoundedCornerShape(NuvioTheme.radii.md)),
+                            scale = CardDefaults.scale(focusedScale = if (isStreamActive) 1.05f else 1.0f)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.stream_download_stream_now),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (isStreamActive) NuvioTheme.colors.OnPrimary else NuvioTheme.extendedColors.textSecondary,
                                 modifier = Modifier
                                     .padding(horizontal = NuvioTheme.spacing.lg, vertical = 14.dp)
                                     .fillMaxWidth(),
@@ -1559,6 +1771,7 @@ private fun DownloadProgressSheet(
                         }
                     }
 
+                    var closeFocused by remember { mutableStateOf(false) }
                     Card(
                         onClick = onClose,
                         modifier = Modifier
@@ -1566,8 +1779,10 @@ private fun DownloadProgressSheet(
                             .then(
                                 if (downloadState.status != DebridDownloadStatus.QUEUED &&
                                     downloadState.status != DebridDownloadStatus.DOWNLOADING
-                                ) Modifier.focusRequester(stopFocusRequester) else Modifier
-                            ),
+                                ) Modifier.focusRequester(stopFocusRequester)
+                                else Modifier.focusRequester(closeFocusRequester)
+                            )
+                            .onFocusChanged { closeFocused = it.isFocused },
                         colors = CardDefaults.colors(
                             containerColor = NuvioTheme.colors.BackgroundElevated,
                             focusedContainerColor = NuvioTheme.colors.Secondary
@@ -1584,7 +1799,7 @@ private fun DownloadProgressSheet(
                         Text(
                             text = stringResource(R.string.stream_download_close),
                             style = MaterialTheme.typography.titleMedium,
-                            color = NuvioTheme.colors.TextPrimary,
+                            color = if (closeFocused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.TextPrimary,
                             modifier = Modifier
                                 .padding(horizontal = NuvioTheme.spacing.lg, vertical = 14.dp)
                                 .fillMaxWidth(),

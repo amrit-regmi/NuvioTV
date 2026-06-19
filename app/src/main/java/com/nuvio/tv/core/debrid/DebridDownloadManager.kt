@@ -34,7 +34,23 @@ data class DebridDownloadState(
     val streamName: String,
     val status: DebridDownloadStatus,
     val etaMinutes: Int? = null,
-    val infoHash: String? = null
+    val infoHash: String? = null,
+    val progressPct: Float? = null,
+    val seeds: Int? = null,
+    val speedMbps: Double? = null,
+    val failureReason: String? = null
+)
+
+/**
+ * Tracks an in-progress catalog-addon stream prepare operation across ViewModels.
+ * @param imdbId The IMDB ID being prepared (e.g. "tt1234567")
+ * @param title Human-readable title shown in the cancel-confirmation dialog
+ * @param type Content type ("movie" or "series") — used to build the cancel DELETE URL
+ */
+data class ActivePrepare(
+    val imdbId: String,
+    val title: String,
+    val type: String
 )
 
 /**
@@ -53,7 +69,46 @@ class DebridDownloadManager @Inject constructor(
     private val _activeDownload = MutableStateFlow<DebridDownloadState?>(null)
     val activeDownload: StateFlow<DebridDownloadState?> = _activeDownload.asStateFlow()
 
+    // Tracks which content item is currently being prepared by a MetaDetailsViewModel.
+    // Used to enforce single-download-at-a-time across detail screens.
+    private val _activePrepare = MutableStateFlow<ActivePrepare?>(null)
+    val activePrepare: StateFlow<ActivePrepare?> = _activePrepare.asStateFlow()
+
     private var pollJob: Job? = null
+
+    /** Register a prepare operation as the current active one. Replaces any prior entry. */
+    fun setPrepareActive(imdbId: String, title: String, type: String) {
+        _activePrepare.value = ActivePrepare(imdbId = imdbId, title = title, type = type)
+    }
+
+    /**
+     * Clear the active prepare registration without sending a cancel to the backend.
+     * Use this on successful completion so the cached torrent is not deleted from TorBox.
+     */
+    fun clearPrepare() {
+        _activePrepare.value = null
+    }
+
+    /**
+     * Cancel the active prepare: clears the registration AND fires a fire-and-forget
+     * DELETE /stream/{type}/{videoId}/prepare to remove the torrent from TorBox.
+     * Call this on explicit user cancellation or when navigating away mid-download.
+     */
+    fun cancelAndClearPrepare() {
+        val current = _activePrepare.value
+        _activePrepare.value = null
+        if (current != null) {
+            val secret = BuildConfig.CATALOG_SECRET.trim()
+            val auth = if (secret.isNotBlank()) "Bearer $secret" else null
+            scope.launch {
+                try {
+                    catalogAddonApi.cancelPrepare(current.type, current.imdbId, auth)
+                } catch (e: Exception) {
+                    Log.w(TAG, "cancelPrepare failed: ${e.message}")
+                }
+            }
+        }
+    }
 
     /**
      * Queue a stream for download. Cancels any existing active download.
@@ -82,6 +137,10 @@ class DebridDownloadManager @Inject constructor(
             else -> "movie"
         }
 
+        // Register at app scope so cancel() fires the DELETE to TorBox
+        val imdbId = videoId.substringBefore(':')
+        setPrepareActive(imdbId, streamName ?: videoId, apiType)
+
         pollJob = scope.launch {
             try {
                 // Step 1: Call /prepare to queue the download on the backend
@@ -105,18 +164,29 @@ class DebridDownloadManager @Inject constructor(
                             status = DebridDownloadStatus.READY,
                             etaMinutes = 0
                         )
+                        clearPrepare()
                         return@launch
                     }
                     "no_valid_hash" -> {
                         _activeDownload.value = _activeDownload.value?.copy(
                             status = DebridDownloadStatus.NO_VALID_SOURCE
                         )
+                        clearPrepare()
+                        return@launch
+                    }
+                    "no_seeders" -> {
+                        _activeDownload.value = _activeDownload.value?.copy(
+                            status = DebridDownloadStatus.NO_VALID_SOURCE
+                        )
+                        clearPrepare()
                         return@launch
                     }
                     "slots_full" -> {
                         _activeDownload.value = _activeDownload.value?.copy(
-                            status = DebridDownloadStatus.FAILED
+                            status = DebridDownloadStatus.FAILED,
+                            failureReason = "slots_full"
                         )
+                        clearPrepare()
                         return@launch
                     }
                     else -> {
@@ -155,10 +225,22 @@ class DebridDownloadManager @Inject constructor(
                     if (item?.cached == true || item?.hasUrl == true) {
                         _activeDownload.value = _activeDownload.value?.copy(
                             status = DebridDownloadStatus.READY,
-                            etaMinutes = 0
+                            etaMinutes = 0,
+                            progressPct = 100f,
+                            seeds = null,
+                            speedMbps = null
                         )
+                        clearPrepare()
                         return@launch
                     }
+                    // Update live progress from TorBox via status response
+                    _activeDownload.value = _activeDownload.value?.copy(
+                        progressPct = item?.progressPct?.toFloat(),
+                        seeds = item?.seeds,
+                        speedMbps = item?.downloadSpeedMbps,
+                        etaMinutes = item?.etaSeconds?.let { (it / 60).coerceAtLeast(1) }
+                            ?: _activeDownload.value?.etaMinutes
+                    )
                 }
 
                 // Timeout — mark as failed
@@ -166,6 +248,7 @@ class DebridDownloadManager @Inject constructor(
                 _activeDownload.value = _activeDownload.value?.copy(
                     status = DebridDownloadStatus.FAILED
                 )
+                clearPrepare()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -173,17 +256,20 @@ class DebridDownloadManager @Inject constructor(
                 _activeDownload.value = _activeDownload.value?.copy(
                     status = DebridDownloadStatus.FAILED
                 )
+                clearPrepare()
             }
         }
     }
 
     /**
      * Cancel the active download and clear state.
+     * Also fires the backend DELETE to remove the torrent from TorBox.
      */
     fun cancel() {
         pollJob?.cancel()
         pollJob = null
         _activeDownload.value = null
+        cancelAndClearPrepare()
     }
 
     /**

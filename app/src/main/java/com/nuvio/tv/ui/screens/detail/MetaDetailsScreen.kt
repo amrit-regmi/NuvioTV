@@ -733,7 +733,34 @@ fun MetaDetailsScreen(
                     onRatingSelected = { viewModel.onEvent(MetaDetailsEvent.OnRatingSelected(it)) },
                     onDismissRatingPicker = { viewModel.onEvent(MetaDetailsEvent.OnDismissRatingPicker) },
                     onSubmitRating = { viewModel.onEvent(MetaDetailsEvent.OnSubmitRating) },
-                    onPrepareStream = { viewModel.onEvent(MetaDetailsEvent.OnPrepareStream) }
+                    onPrepareStream = { viewModel.onEvent(MetaDetailsEvent.OnPrepareStream) },
+                    onNavigateToDownloadStreams = {
+                        onPlayManuallyClick(
+                            meta.id,
+                            meta.apiType,
+                            meta.id,
+                            meta.name,
+                            meta.poster,
+                            meta.backdropUrl,
+                            meta.logo,
+                            null,
+                            null,
+                            null,
+                            genresString,
+                            yearString,
+                            null,
+                            meta.resolveContentLanguage()
+                        )
+                    },
+                    isPreparingStream = uiState.isPreparingStream,
+                    streamPreparePercent = uiState.streamPreparePercent,
+                    streamPrepareSeedCount = uiState.streamPrepareSeedCount,
+                    streamPrepareSpeedMbps = uiState.streamPrepareSpeedMbps,
+                    streamPrepareEtaMinutes = uiState.streamPrepareEtaMinutes,
+                    streamPrepareReady = uiState.streamPrepareReady,
+                    isThisItemDownloading = uiState.isThisItemDownloading,
+                    isStreamableNow = uiState.isStreamableNow,
+                    uncachedStreamCount = uiState.uncachedStreamCount
                 )
             }
         }
@@ -756,6 +783,14 @@ fun MetaDetailsScreen(
                 },
                 onSave = { viewModel.onEvent(MetaDetailsEvent.OnPickerSave) },
                 onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnPickerDismiss) }
+            )
+        }
+
+        if (uiState.showCancelDownloadDialog) {
+            CancelDownloadConfirmDialog(
+                inProgressTitle = uiState.cancelDownloadDialogTitle ?: "",
+                onConfirm = { viewModel.onEvent(MetaDetailsEvent.OnConfirmCancelDownload) },
+                onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnDismissCancelDownload) }
             )
         }
 
@@ -921,7 +956,17 @@ private fun MetaDetailsContent(
     onRatingSelected: (Int) -> Unit = {},
     onDismissRatingPicker: () -> Unit = {},
     onSubmitRating: () -> Unit = {},
-    onPrepareStream: () -> Unit = {}
+    onPrepareStream: () -> Unit = {},
+    onNavigateToDownloadStreams: () -> Unit = {},
+    isPreparingStream: Boolean = false,
+    streamPreparePercent: Float? = null,
+    streamPrepareSeedCount: Int? = null,
+    streamPrepareSpeedMbps: Double? = null,
+    streamPrepareEtaMinutes: Int? = null,
+    streamPrepareReady: Boolean = false,
+    isThisItemDownloading: Boolean = false,
+    isStreamableNow: Boolean = false,
+    uncachedStreamCount: Int = -1
 ) {
     val canLoadMoreComments = commentsCurrentPage in 1 until commentsPageCount
     val selectedCommentIndex = remember(comments, selectedComment?.id) {
@@ -1385,10 +1430,13 @@ private fun MetaDetailsContent(
     // Pre-compute gradient brushes once
 
     // Stable hero play callback
-    val heroPlayClick = remember(heroVideo, isSeries, meta.id, onEpisodeClick, onPlayClick) {
+    val heroPlayClick = remember(heroVideo, isSeries, meta.id, onEpisodeClick, onPlayClick, isThisItemDownloading, onNavigateToDownloadStreams) {
         {
             markHeroRestore()
-            if (heroVideo != null) {
+            if (isThisItemDownloading) {
+                // Navigate to stream screen to stream while downloading (buffer streaming)
+                onNavigateToDownloadStreams()
+            } else if (heroVideo != null) {
                 onEpisodeClick(heroVideo)
             } else if (!isSeries) {
                 // Only navigate for movies when heroVideo is null; for series, episodes
@@ -1683,7 +1731,17 @@ private fun MetaDetailsContent(
                         onRatingSelected = onRatingSelected,
                         onDismissRatingPicker = onDismissRatingPicker,
                         onSubmitRating = onSubmitRating,
-                        onPrepareStream = onPrepareStream
+                        onPrepareStream = onPrepareStream,
+                        onNavigateToDownloadStreams = onNavigateToDownloadStreams,
+                        isPreparingStream = isPreparingStream,
+                        streamPreparePercent = streamPreparePercent,
+                        streamPrepareSeedCount = streamPrepareSeedCount,
+                        streamPrepareSpeedMbps = streamPrepareSpeedMbps,
+                        streamPrepareEtaMinutes = streamPrepareEtaMinutes,
+                        streamPrepareReady = streamPrepareReady,
+                        isThisItemDownloading = isThisItemDownloading,
+                        isStreamableNow = isStreamableNow,
+                        uncachedStreamCount = uncachedStreamCount
                     )
                 }
             }
@@ -2118,6 +2176,49 @@ private fun MetaDetailsContent(
                 onDismiss = onDismissSharedTrailer,
                 onRetry = onRetrySharedTrailer
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun CancelDownloadConfirmDialog(
+    inProgressTitle: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val confirmFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        confirmFocusRequester.requestFocus()
+    }
+
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = "Download in progress",
+        subtitle = "A download is already in progress for \"$inProgressTitle\". Starting a new download will cancel it. Continue?"
+    ) {
+        Button(
+            onClick = onConfirm,
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(confirmFocusRequester),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioTheme.colors.Primary,
+                contentColor = NuvioTheme.colors.TextPrimary
+            )
+        ) {
+            Text("Yes, cancel and start new")
+        }
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioTheme.colors.BackgroundCard,
+                contentColor = NuvioTheme.colors.TextPrimary
+            )
+        ) {
+            Text("No, keep current download")
         }
     }
 }

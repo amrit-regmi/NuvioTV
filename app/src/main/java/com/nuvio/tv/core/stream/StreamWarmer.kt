@@ -542,6 +542,31 @@ class StreamWarmer @Inject constructor(
     fun isKnownStub(url: String?) = url != null && stubUrls.contains(url)
 
     /**
+     * Returns the number of non-cached debrid streams across all cached addon responses for
+     * the given [type] and [videoId]. Returns -1 if no cache entries exist for this content yet
+     * (warm hasn't completed). Returns 0 if all streams are cached/direct (no download needed).
+     * Used by MetaDetailsViewModel to decide whether to show a stream picker or trigger a
+     * direct download.
+     */
+    fun getCachedUncachedStreamCount(type: String, videoId: String): Int {
+        val suffix = "|$type|$videoId"
+        val matchingStreams = mutableListOf<Stream>()
+        var foundAnyEntry = false
+        val now = System.currentTimeMillis()
+        synchronized(cache) {
+            for ((key, entry) in cache) {
+                if (!key.endsWith(suffix)) continue
+                // Respect the same TTL as getCached() uses
+                if (now - entry.cachedAtMs > CACHE_TTL_MS) continue
+                foundAnyEntry = true
+                matchingStreams.addAll(entry.streams)
+            }
+        }
+        if (!foundAnyEntry) return -1
+        return matchingStreams.count { it.isNonCachedDebridStream() }
+    }
+
+    /**
      * Returns a pre-resolved CDN URL for a direct-debrid stream if it was warmed in the
      * background and is still within the 60-min TTL. Returns null if not cached or expired.
      */
@@ -558,6 +583,22 @@ class StreamWarmer @Inject constructor(
         val key = stream.resolvedUrlCacheKey() ?: return
         resolvedUrlCache.remove(key)
         Log.d(TAG, "Evicted resolved URL cache entry: key=$key")
+    }
+
+    /**
+     * Evicts all stream cache entries for a given content type and videoId.
+     * Call this after a download completes so the next navigation triggers a fresh
+     * stream list fetch and reflects the newly-cached state on TorBox.
+     */
+    fun evictStreamsForVideo(type: String, videoId: String) {
+        val suffix = "|$type|$videoId"
+        synchronized(cache) {
+            val keysToRemove = cache.keys.filter { it.endsWith(suffix) }
+            keysToRemove.forEach { cache.remove(it) }
+            if (keysToRemove.isNotEmpty()) {
+                Log.d(TAG, "Evicted ${keysToRemove.size} stream cache entries for $type/$videoId")
+            }
+        }
     }
 
     // Maps a raw Content-Type header value or file extension to a canonical MIME string.

@@ -52,6 +52,7 @@ data class Stream(
 
     fun getEffectiveInfoHash(): String? =
         infoHash?.takeIf { it.isNotBlank() }
+            ?: clientResolve?.infoHash?.takeIf { it.isNotBlank() }
             ?: url?.let { extractInfoHashFromTorrentUrl(it) ?: extractInfoHashFromMagnetLink(it) }
             ?: externalUrl?.let { extractInfoHashFromTorrentUrl(it) ?: extractInfoHashFromMagnetLink(it) }
 
@@ -107,7 +108,10 @@ data class Stream(
         if (resolve.service.isNullOrBlank()) return false
         if (isDirectDebrid()) return false
         if (getStreamUrl() != null) return false
-        if (isTorrent()) return false
+        // Do NOT gate on isTorrent() here. A stream can carry a top-level infoHash
+        // (making isTorrent() true) while also having a clientResolve that indicates
+        // it is a non-cached debrid entry. The presence of clientResolve with a
+        // non-blank service and identity is the authoritative signal.
         val hasIdentity = !resolve.infoHash.isNullOrBlank() ||
             !resolve.magnetUri.isNullOrBlank() ||
             !resolve.torrentName.isNullOrBlank()

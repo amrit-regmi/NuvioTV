@@ -1143,7 +1143,24 @@ class StreamScreenViewModel @Inject constructor(
         }
     }
 
-    suspend fun resolveStreamForPlayback(stream: Stream): StreamPlaybackInfo? {
+    /**
+     * Queue a non-cached debrid stream for download without showing the "stream queued" toast.
+     * Call this from the UI when showing the download progress dialog directly.
+     */
+    fun queueStreamForDownload(stream: Stream) {
+        val prepareImdbId = contentId?.substringBefore(':')?.takeIf { it.startsWith("tt", ignoreCase = true) }
+        val prepareType = if (contentType.equals("series", ignoreCase = true)) "series" else "movie"
+        if (prepareImdbId != null) {
+            debridDownloadManager.setPrepareActive(prepareImdbId, title, prepareType)
+        }
+        debridDownloadManager.queue(stream, contentType, videoId)
+    }
+
+    /**
+     * @param skipQueueCheck When true, skips the re-queue path for non-cached debrid streams.
+     *   Use this when calling from the download progress dialog retry loop to avoid re-queuing.
+     */
+    suspend fun resolveStreamForPlayback(stream: Stream, skipQueueCheck: Boolean = false): StreamPlaybackInfo? {
         // Check if stream is already the active download and is now ready
         val currentDownload = debridDownloadManager.activeDownload.value
         if (currentDownload != null &&
@@ -1156,8 +1173,16 @@ class StreamScreenViewModel @Inject constructor(
             return null
         }
 
-        // Non-cached debrid stream: queue for download instead of silent null
-        if (stream.isNonCachedDebridStream()) {
+        // Non-cached debrid stream: queue for download instead of silent null.
+        // Skip this when called from the retry loop (dialog Stream button) so we go
+        // straight to requestdl polling instead of re-queuing.
+        if (!skipQueueCheck && stream.isNonCachedDebridStream()) {
+            // Register the active prepare at app scope so the detail screen can show its spinner
+            val prepareImdbId = contentId?.substringBefore(':')?.takeIf { it.startsWith("tt", ignoreCase = true) }
+            val prepareType = if (contentType.equals("series", ignoreCase = true)) "series" else "movie"
+            if (prepareImdbId != null) {
+                debridDownloadManager.setPrepareActive(prepareImdbId, title, prepareType)
+            }
             debridDownloadManager.queue(stream, contentType, videoId)
             updateUiStateIfChanged {
                 it.copy(streamQueuedMessage = context.getString(R.string.stream_queued_toast))
@@ -1165,7 +1190,10 @@ class StreamScreenViewModel @Inject constructor(
             return null
         }
 
-        if (!directDebridResolver.shouldResolveToPlayableStream(stream)) {
+        // For buffer-stream polling (skipQueueCheck=true on non-cached debrid streams),
+        // bypass shouldResolveToPlayableStream — tier-0 streams fail that check because
+        // isDirectDebrid()=false, but we still need to try requestdl via the TorBox resolver.
+        if (!skipQueueCheck && !directDebridResolver.shouldResolveToPlayableStream(stream)) {
             Log.d(TAG, "resolveStreamForPlayback: no debrid resolve needed, using direct URL")
             return getStreamForPlayback(stream)
         }
@@ -1173,21 +1201,26 @@ class StreamScreenViewModel @Inject constructor(
         Log.d(TAG, "resolveStreamForPlayback: starting debrid resolve for stream=${stream.name} addon=${stream.addonName}")
         val resolveStartMs = System.currentTimeMillis()
 
-        val showLoadingStatus = playerSettingsDataStore.playerSettings.first().showPlayerLoadingStatus
-        updateUiStateIfChanged {
-            it.copy(
-                showDirectAutoPlayOverlay = true,
-                directAutoPlayMessage = if (showLoadingStatus) {
-                    context.getString(R.string.debrid_resolving_stream)
-                } else {
-                    null
-                },
-                playbackErrorMessage = null
-            )
+        // Skip UI overlay and stream-load cancellation when polling from the download dialog.
+        // Showing the overlay and calling cancelStreamsLoad() every 30s causes the stream list
+        // to flicker and streams to be lost between reloads.
+        if (!skipQueueCheck) {
+            val showLoadingStatus = playerSettingsDataStore.playerSettings.first().showPlayerLoadingStatus
+            updateUiStateIfChanged {
+                it.copy(
+                    showDirectAutoPlayOverlay = true,
+                    directAutoPlayMessage = if (showLoadingStatus) {
+                        context.getString(R.string.debrid_resolving_stream)
+                    } else {
+                        null
+                    },
+                    playbackErrorMessage = null
+                )
+            }
         }
 
-        val basePlaybackInfo = getStreamForPlayback(stream)
-        val result = directDebridResolver.resolve(stream, season, episode)
+        val basePlaybackInfo = if (!skipQueueCheck) getStreamForPlayback(stream) else null
+        val result = directDebridResolver.resolve(stream, season, episode, skipPlayableCheck = skipQueueCheck)
         val resolveMs = System.currentTimeMillis() - resolveStartMs
         Log.d(TAG, "resolveStreamForPlayback: debrid resolve completed in ${resolveMs}ms result=${result::class.simpleName}")
 
@@ -1206,14 +1239,15 @@ class StreamScreenViewModel @Inject constructor(
                     }
                 }
                 cancelStreamsLoad()
-                val resolved = basePlaybackInfo.copy(
+                val base = basePlaybackInfo ?: getStreamForPlayback(stream)
+                val resolved = base.copy(
                     url = result.url,
                     isExternal = false,
                     isTorrent = false,
                     infoHash = null,
                     headers = null,
-                    filename = result.filename ?: basePlaybackInfo.filename,
-                    videoSize = result.videoSize ?: basePlaybackInfo.videoSize
+                    filename = result.filename ?: base.filename,
+                    videoSize = result.videoSize ?: base.videoSize
                 )
                 // Save resolved URL to cache for reuse last link
                 if (!result.url.isNullOrBlank()) {
@@ -1239,7 +1273,11 @@ class StreamScreenViewModel @Inject constructor(
                 null
             }
             DirectDebridResolveResult.NotCached -> {
-                // Queue stream for background download on the shared Torbox account
+                // Queue stream for background download on the shared Torbox account.
+                // Do NOT call setPrepareActive here — this path fires when autoplay
+                // attempts a cached stream that turns out uncached at resolution time
+                // (not a user-initiated download), so the detail panel should not show
+                // its spinner.
                 directAutoPlayFlowEnabledForSession = false
                 updateUiStateIfChanged {
                     it.copy(
@@ -1260,7 +1298,13 @@ class StreamScreenViewModel @Inject constructor(
                 null
             }
             DirectDebridResolveResult.Stale -> {
-                showDirectDebridPlaybackError(context.getString(R.string.debrid_stale_stream), refreshStreams = true)
+                // Suppress error toast when called from the buffer-stream polling loop —
+                // Stale (HTTP 500) is expected while TorBox hasn't indexed the file yet.
+                // Never refresh streams on Stale — loadStreams() reorders the list, which
+                // is jarring. Badges update in-place via streamBadgePresentationJob.
+                if (!skipQueueCheck) {
+                    showDirectDebridPlaybackError(context.getString(R.string.debrid_stale_stream), refreshStreams = false)
+                }
                 null
             }
             DirectDebridResolveResult.Error -> {
@@ -1347,6 +1391,12 @@ class StreamScreenViewModel @Inject constructor(
         externalOverlayHideJob = viewModelScope.launch {
             kotlinx.coroutines.delay(700L)
             updateUiStateIfChanged { it.copy(externalPlayerOverlayVisible = false) }
+        }
+    }
+
+    fun clearAutoPlayOverlay() {
+        updateUiStateIfChanged {
+            it.copy(showDirectAutoPlayOverlay = false, directAutoPlayMessage = null)
         }
     }
 

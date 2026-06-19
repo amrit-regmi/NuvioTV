@@ -50,7 +50,8 @@ data class MetaDto(
     @Json(name = "_hasLinks") val hasLinks: Boolean? = null,
     @Json(name = "_hasVideos") val hasVideos: Boolean? = null,
     @Json(name = "streamStatus") val streamStatus: String? = null,
-    @Json(name = "productionCompanies") val productionCompanies: List<MetaCompanyDto>? = null
+    @Json(name = "productionCompanies") val productionCompanies: List<MetaCompanyDto>? = null,
+    @Json(name = "certification") val certification: String? = null
 )
 
 @JsonClass(generateAdapter = true)

@@ -1391,6 +1391,7 @@
     <string name="stream_download_sheet_title">Preparing Stream</string>
     <string name="stream_download_stop">Stop</string>
     <string name="stream_download_close">Close</string>
+    <string name="stream_download_stream_now">Stream</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
     <string name="p2p_consent_title">P2P Streaming</string>

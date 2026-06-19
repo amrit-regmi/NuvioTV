@@ -100,13 +100,8 @@ android {
         applicationId = "com.nuvio.tv"
         minSdk = 24
         targetSdk = 36
-<<<<<<< HEAD
-        versionCode = 1024
-        versionName = "0.7.8-beta"
-=======
         versionCode = 1026
         versionName = "0.7.9-beta"
->>>>>>> 0.7.9-beta
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -138,12 +133,9 @@ android {
         buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", "")}\"")
         buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", "")}\"")
         buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
-<<<<<<< HEAD
         buildConfigField("String", "CATALOG_ADDON_BASE_URL", "\"${localProperties.getProperty("CATALOG_ADDON_BASE_URL", "")}\"")
         buildConfigField("String", "CATALOG_SECRET", "\"${localProperties.getProperty("CATALOG_SECRET", "")}\"")
-=======
         buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
->>>>>>> 0.7.9-beta
 
         // In-app updater (GitHub Releases)
         buildConfigField("String", "GITHUB_OWNER", "\"tapframe\"")
@@ -215,16 +207,13 @@ android {
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${devProperties.getProperty("AVATAR_PUBLIC_BASE_URL", localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", ""))}\"")
             buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${devProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", ""))}\"")
             buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${devProperties.getProperty("PREMIUMIZE_CLIENT_ID", localProperties.getProperty("PREMIUMIZE_CLIENT_ID", ""))}\"")
-<<<<<<< HEAD
             buildConfigField("String", "CATALOG_ADDON_BASE_URL", "\"${devProperties.getProperty("CATALOG_ADDON_BASE_URL", localProperties.getProperty("CATALOG_ADDON_BASE_URL", ""))}\"")
             buildConfigField("String", "CATALOG_SECRET", "\"${devProperties.getProperty("CATALOG_SECRET", localProperties.getProperty("CATALOG_SECRET", ""))}\"")
             buildConfigField("String", "RECO_API_BASE_URL",
                 "\"${localProperties.getProperty("RECO_API_BASE_URL", "https://recoengine.regmig.com")}\"")
             buildConfigField("String", "RECO_MODE",
                 "\"${localProperties.getProperty("RECO_MODE", "private")}\"")
-=======
             buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
->>>>>>> 0.7.9-beta
         }
         release {
             isMinifyEnabled = true
@@ -259,14 +248,11 @@ android {
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", "")}\"")
             buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", "")}\"")
             buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
-<<<<<<< HEAD
             buildConfigField("String", "RECO_API_BASE_URL",
                 "\"${localProperties.getProperty("RECO_API_BASE_URL", "https://recoengine.regmig.com")}\"")
             buildConfigField("String", "RECO_MODE",
                 "\"${localProperties.getProperty("RECO_MODE", "private")}\"")
-=======
             buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
->>>>>>> 0.7.9-beta
         }
         create("benchmark") {
             initWith(buildTypes.getByName("release"))

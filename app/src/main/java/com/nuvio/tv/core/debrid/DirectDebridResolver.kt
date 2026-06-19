@@ -34,9 +34,10 @@ class DirectDebridResolver @Inject constructor(
     suspend fun resolve(
         stream: Stream,
         season: Int?,
-        episode: Int?
+        episode: Int?,
+        skipPlayableCheck: Boolean = false
     ): DirectDebridResolveResult {
-        if (!shouldResolveToPlayableStream(stream)) {
+        if (!skipPlayableCheck && !shouldResolveToPlayableStream(stream)) {
             return DirectDebridResolveResult.Stale
         }
         val cacheKey = stream.directDebridResolveCacheKey(season, episode)
