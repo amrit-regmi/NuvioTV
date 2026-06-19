@@ -48,7 +48,17 @@ data class MetaDto(
     @Json(name = "_hasLandscapePoster") val hasLandscapePoster: Boolean? = null,
     @Json(name = "_hasLogo") val hasLogo: Boolean? = null,
     @Json(name = "_hasLinks") val hasLinks: Boolean? = null,
-    @Json(name = "_hasVideos") val hasVideos: Boolean? = null
+    @Json(name = "_hasVideos") val hasVideos: Boolean? = null,
+    @Json(name = "streamStatus") val streamStatus: String? = null,
+    @Json(name = "productionCompanies") val productionCompanies: List<MetaCompanyDto>? = null,
+    @Json(name = "certification") val certification: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class MetaCompanyDto(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String,
+    @Json(name = "logo") val logo: String? = null
 )
 
 @JsonClass(generateAdapter = true)

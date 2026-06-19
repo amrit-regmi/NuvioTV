@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.network.safeApiCall
+import com.nuvio.tv.core.subtitle.SubtitleWarmer
 import com.nuvio.tv.data.local.AddonPreferences
 import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.Addon
@@ -24,7 +25,8 @@ import javax.inject.Inject
 class SubtitleRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val api: AddonApi,
-    private val addonRepository: AddonRepositoryImpl
+    private val addonRepository: AddonRepositoryImpl,
+    private val subtitleWarmer: SubtitleWarmer
 ) : SubtitleRepository {
 
     companion object {
@@ -41,6 +43,14 @@ class SubtitleRepositoryImpl @Inject constructor(
         filename: String?,
         onProgress: ((completed: Int, total: Int, addonName: String?) -> Unit)?
     ): List<Subtitle> = withContext(Dispatchers.IO) {
+        if (filename != null) {
+            subtitleWarmer.awaitWarm(filename, videoSize)?.let { cached ->
+                Log.d(TAG, "Subtitle warm hit: ${cached.size} subs for filename=$filename")
+                if (cached.isNotEmpty()) return@withContext cached
+                // Empty warm result means warmer's addon found nothing; fall through to full fetch.
+            }
+        }
+
         val requestType = canonicalSubtitleType(type)
         val startedAtMs = System.currentTimeMillis()
         Log.d(TAG, "Fetching subtitles for type=$requestType, id=$id, videoId=$videoId")

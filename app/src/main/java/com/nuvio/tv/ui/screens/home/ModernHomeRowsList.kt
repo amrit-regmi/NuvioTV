@@ -33,6 +33,11 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -49,6 +54,7 @@ import com.nuvio.tv.ui.util.StableMap
 import com.nuvio.tv.ui.util.StableRef
 import com.nuvio.tv.ui.util.dpadVerticalFastScroll
 import com.nuvio.tv.ui.util.recompositionHighlighter
+import com.nuvio.tv.ui.components.rememberPlaceholderShimmerOffsetState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
@@ -129,6 +135,7 @@ internal fun ModernHomeRowsList(
     focusedHeroMediaNonce: State<Int>,
     onFocusedHeroMediaNonceChange: (Int) -> Unit,
     onExpansionInteractionNonceChange: (Int) -> Unit,
+    blockLeftOnFirstExpandedItem: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     // Unwrap StableRef wrappers for internal use (not passed to child composables)
@@ -240,6 +247,8 @@ internal fun ModernHomeRowsList(
 
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
 
+    val sharedPlaceholderShimmerOffsetState = rememberPlaceholderShimmerOffsetState(label = "sharedRowShimmer")
+
     CompositionLocalProvider(
         LocalBringIntoViewSpec provides verticalRowBringIntoViewSpec,
         LocalFastScrollActive provides isFastScrolling,
@@ -256,6 +265,30 @@ internal fun ModernHomeRowsList(
                 .graphicsLayer { alpha = trailerContentAlpha() }
                 .focusRequester(contentFocusRequester)
                 .focusRestorer { focusRestorerRequester() }
+                .onPreviewKeyEvent { event ->
+                    val firstRowKey = carouselRows.list.firstOrNull()?.key
+                    val lastRowKey = carouselRows.list.lastOrNull()?.key
+                    if (event.type == KeyEventType.KeyDown &&
+                        event.key == Key.DirectionUp &&
+                        effectiveExpandEnabled &&
+                        expandedCatalogFocusKey.value != null &&
+                        activeRowKey.value == firstRowKey
+                    ) return@onPreviewKeyEvent true
+                    if (event.type == KeyEventType.KeyDown &&
+                        event.key == Key.DirectionDown &&
+                        effectiveExpandEnabled &&
+                        expandedCatalogFocusKey.value != null &&
+                        activeRowKey.value == lastRowKey
+                    ) return@onPreviewKeyEvent true
+                    if (blockLeftOnFirstExpandedItem &&
+                        event.type == KeyEventType.KeyDown &&
+                        event.key == Key.DirectionLeft &&
+                        effectiveExpandEnabled &&
+                        expandedCatalogFocusKey.value != null &&
+                        activeItemIndex.value == 0
+                    ) return@onPreviewKeyEvent true
+                    false
+                }
                 .dpadVerticalFastScroll(
                     scrollableState = verticalRowListState,
                     onFastScrollingChanged = onFastScrollingChanged,
@@ -408,6 +441,7 @@ internal fun ModernHomeRowsList(
                     onLoadMoreCatalog = onLoadMoreCatalog,
                     onBackdropInteraction = onBackdropInteraction,
                     onExpandedCatalogFocusKeyChange = onExpandedCatalogFocusKeyChange,
+                    sharedPlaceholderShimmerOffsetState = sharedPlaceholderShimmerOffsetState,
                     isVerticalRowsScrollingState = isVerticalRowsScrollingState,
                     itemFocusRequesters = stableItemFocusRequestersByRow.getOrPut(row.key) {
                         StableRef(mutableMapOf())

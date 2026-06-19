@@ -1,6 +1,7 @@
 package com.nuvio.tv.core.profile
 
 import android.content.Context
+import com.nuvio.tv.R
 import com.nuvio.tv.data.local.ProfileDataStore
 import com.nuvio.tv.data.local.ProfileDataStoreFactory
 import com.nuvio.tv.domain.model.UserProfile
@@ -25,6 +26,9 @@ class ProfileManager @Inject constructor(
 ) {
     companion object {
         const val MAX_PROFILES = 5
+        // Updated whenever the active profile changes; read by the global OkHttp interceptor
+        // so every request (reco, events, streams) carries the correct profile identity.
+        @Volatile var currentProfileId: Int = 1
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -44,7 +48,7 @@ class ProfileManager @Inject constructor(
 
     val profiles: StateFlow<List<UserProfile>> = profileDataStore.profilesList
         .stateIn(scope, SharingStarted.Eagerly, listOf(
-            UserProfile(id = 1, name = "Profile 1", avatarColorHex = "#1E88E5")
+            UserProfile(id = 1, name = context.getString(R.string.profile_default_name, 1), avatarColorHex = "#1E88E5")
         ))
 
     val activeProfile: UserProfile?
@@ -59,6 +63,7 @@ class ProfileManager @Inject constructor(
     suspend fun setActiveProfile(id: Int) {
         val exists = profiles.value.any { it.id == id }
         if (exists) {
+            currentProfileId = id
             profileDataStore.setActiveProfile(id)
         }
     }
@@ -82,7 +87,7 @@ class ProfileManager @Inject constructor(
 
         val profile = UserProfile(
             id = nextId,
-            name = name.trim().ifEmpty { "Profile $nextId" },
+            name = name.trim().ifEmpty { context.getString(R.string.profile_default_name, nextId) },
             avatarColorHex = avatarColorHex,
             usesPrimaryAddons = usesPrimaryAddons,
             usesPrimaryPlugins = usesPrimaryPlugins,

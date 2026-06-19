@@ -49,6 +49,7 @@ fun StreamClientResolveDto.toDomain(): StreamClientResolve = StreamClientResolve
     serviceIndex = serviceIndex,
     serviceExtension = serviceExtension,
     isCached = isCached,
+    torrentId = torrentId,
     stream = stream?.toDomain()
 )
 

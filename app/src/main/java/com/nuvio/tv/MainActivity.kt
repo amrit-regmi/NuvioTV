@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -80,6 +81,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -113,15 +115,26 @@ import androidx.tv.material3.rememberDrawerState
 import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import com.nuvio.tv.R
+import android.hardware.display.DisplayManager
+import android.view.Display
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.core.device.DeviceCapabilityDetector
+import com.nuvio.tv.core.network.SyncBackendSwitchService
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.data.local.DeviceProfileDataStore
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import com.nuvio.tv.core.sync.ProfileSettingsSyncService
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.data.local.AppOnboardingDataStore
+import com.nuvio.tv.data.local.AuthSessionNoticeDataStore
 import com.nuvio.tv.data.local.ExperienceModeDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
+import com.nuvio.tv.data.local.StartupAuthNotice
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.remote.supabase.AvatarRepository
 import com.nuvio.tv.data.repository.TraktProgressService
@@ -156,7 +169,9 @@ import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 val LocalSidebarExpanded = compositionLocalOf { false }
@@ -211,6 +226,9 @@ class MainActivity : ComponentActivity() {
     lateinit var startupSyncService: StartupSyncService
 
     @Inject
+    lateinit var syncBackendSwitchService: SyncBackendSwitchService
+
+    @Inject
     lateinit var androidTvChannelSyncService: com.nuvio.tv.core.sync.androidtv.AndroidTvChannelSyncService
 
     @Inject
@@ -226,10 +244,22 @@ class MainActivity : ComponentActivity() {
     lateinit var authManager: AuthManager
 
     @Inject
+    lateinit var authSessionNoticeDataStore: AuthSessionNoticeDataStore
+
+    @Inject
     lateinit var appOnboardingDataStore: AppOnboardingDataStore
 
     @Inject
     lateinit var avatarRepository: AvatarRepository
+
+    @Inject
+    lateinit var deviceCapabilityDetector: DeviceCapabilityDetector
+
+    @Inject
+    lateinit var deviceProfileDataStore: DeviceProfileDataStore
+
+    @Inject
+    lateinit var httpClient: OkHttpClient
 
     @Inject
     lateinit var trailerPlayerPool: com.nuvio.tv.core.player.TrailerPlayerPool
@@ -279,6 +309,9 @@ class MainActivity : ComponentActivity() {
         externalPlaybackTracker.activityLauncher = externalPlayerLauncher
 
         PluginRuntimeHooks.onActivityCreate(this)
+        lifecycleScope.launch {
+            syncBackendSwitchService.refreshSelection()
+        }
 
         window?.decorView?.post {
             val snapshot = com.nuvio.tv.core.player.DisplayCapabilities.detect(this)
@@ -298,6 +331,20 @@ class MainActivity : ComponentActivity() {
             }
             val hasSeenAuthQrOnFirstLaunch by hasSeenAuthQrFlow.collectAsState(initial = null)
             val authState by authManager.authState.collectAsState()
+            val context = LocalContext.current
+
+            LaunchedEffect(authSessionNoticeDataStore, context) {
+                authSessionNoticeDataStore.pendingNotice.collect { notice ->
+                    if (notice == StartupAuthNotice.NUVIO) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.auth_notice_nuvio_logged_out),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        authSessionNoticeDataStore.consumeNotice(notice)
+                    }
+                }
+            }
 
             LaunchedEffect(hasSeenAuthQrOnFirstLaunch, authState) {
                 if (hasSeenAuthQrOnFirstLaunch == false && authState is AuthState.FullAccount) {
@@ -444,6 +491,15 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     if (hasSeenAuthQrOnFirstLaunch == null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(NuvioTheme.colors.Background)
+                        )
+                        return@Surface
+                    }
+
+                    if (authState is AuthState.Loading) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -641,7 +697,6 @@ class MainActivity : ComponentActivity() {
                             add(Screen.Search.route)
                             add(Screen.Library.route)
                             add(Screen.Settings.route)
-                            add(Screen.AddonManager.route)
                             if (discoverLocation == DiscoverLocation.IN_SIDEBAR) {
                                 add(Screen.Discover.route)
                             }
@@ -652,14 +707,12 @@ class MainActivity : ComponentActivity() {
                     val strNavDiscover = stringResource(R.string.nav_discover)
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
-                    val strNavAddons = stringResource(R.string.nav_addons)
                     val strNavSettings = stringResource(R.string.nav_settings)
                     val drawerItems = remember(
                         strNavHome,
                         strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
-                        strNavAddons,
                         strNavSettings,
                         discoverLocation
                     ) {
@@ -692,13 +745,6 @@ class MainActivity : ComponentActivity() {
                                     route = Screen.Library.route,
                                     label = strNavLibrary,
                                     iconRes = R.raw.sidebar_library
-                                )
-                            )
-                            add(
-                                DrawerItem(
-                                    route = Screen.AddonManager.route,
-                                    label = strNavAddons,
-                                    iconRes = R.raw.sidebar_plugin
                                 )
                             )
                             add(
@@ -808,11 +854,22 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (::jankStats.isInitialized) jankStats.isTrackingEnabled = true
-        startupSyncService.requestForegroundSync()
         lifecycleScope.launch {
+            syncBackendSwitchService.refreshSelection()
+            startupSyncService.requestForegroundSync()
             if (isFirstResumeAfterCreate) {
                 isFirstResumeAfterCreate = false
                 traktProgressService.invalidateAndRefresh()
+                val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+                val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY)
+                val snapshot = deviceCapabilityDetector.detect(display)
+                deviceProfileDataStore.applyDetectedIfNotOverridden(snapshot.suggestedProfileId())
+                val streamEngineEnabled = deviceProfileDataStore.isStreamEngineEnabled.first()
+                if (streamEngineEnabled) {
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        registerDeviceCapabilities(snapshot)
+                    }
+                }
             } else {
                 traktProgressService.refreshNow()
             }
@@ -825,8 +882,16 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStart() {
+        // Returning from an external player: raise the auto-next loader before the player's
+        // result is dispatched and before the window repaints, so the transition shows the
+        // loader instantly with no episode-list flash. No-op unless a series episode is being
+        // tracked; onActivityResult keeps it for a completion or dismisses it otherwise.
+        externalPlaybackTracker.raiseAutoNextOverlayOnReturn()
         super.onStart()
-        profileSettingsSyncService.requestForegroundPull()
+        lifecycleScope.launch {
+            syncBackendSwitchService.refreshSelection()
+            profileSettingsSyncService.requestForegroundPull()
+        }
         androidTvChannelSyncService.onForegroundChanged(true)
     }
 
@@ -840,6 +905,57 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         PluginRuntimeHooks.onActivityDestroy()
+    }
+
+    private suspend fun registerDeviceCapabilities(snapshot: com.nuvio.tv.core.device.DeviceCapabilityDetector.Snapshot) {
+        try {
+            val deviceId = deviceProfileDataStore.getOrCreateDeviceId()
+            val maxResolution = when {
+                snapshot.supports4k -> "2160p"
+                snapshot.supports1080p -> "1080p"
+                else -> "720p"
+            }
+            val hdrTypes = buildList {
+                if (snapshot.supportsHdr10) add("HDR10")
+                if (snapshot.supportsDolbyVision) add("DolbyVision")
+                if (snapshot.supportsHlg) add("HLG")
+            }
+            val codecs = buildList {
+                if (snapshot.supportsHevc) add("H.265")
+                if (snapshot.supportsAv1) add("AV1")
+                add("H.264")
+            }
+            // Always re-register so backend stays current even when URL or
+            // build config changes between installs.
+            val hash = "$deviceId|$maxResolution|${hdrTypes.sorted()}|${codecs.sorted()}|${BuildConfig.CATALOG_ADDON_BASE_URL}"
+            deviceProfileDataStore.updateCapabilitiesHashIfChanged(hash)  // update stored hash but don't gate on it
+            val downloadSpeedMbps = deviceProfileDataStore.estimateDownloadSpeedMbps()
+            val userId = (authManager.authState.value as? AuthState.FullAccount)?.userId ?: ""
+            val body = buildString {
+                append("{")
+                append("\"device_id\":\"$deviceId\",")
+                append("\"user_id\":\"$userId\",")
+                append("\"device_name\":\"${android.os.Build.MODEL}\",")
+                append("\"max_resolution\":\"$maxResolution\",")
+                append("\"hdr_types_supported\":${hdrTypes.joinToString(",", "[", "]") { "\"$it\"" }},")
+                append("\"max_audio_channels\":\"7.1\",")
+                append("\"preferred_audio_formats\":[\"Dolby Atmos\",\"DTS:X\",\"AAC\"],")
+                append("\"supported_codecs\":${codecs.joinToString(",", "[", "]") { "\"$it\"" }},")
+                append("\"max_size_gb\":0,")
+                append("\"download_speed_mbps\":$downloadSpeedMbps")
+                append("}")
+            }
+            val request = Request.Builder()
+                .url("${BuildConfig.CATALOG_ADDON_BASE_URL}device-profile")
+                .header("Authorization", "Bearer ${BuildConfig.CATALOG_SECRET}")
+                .put(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                Log.d("MainActivity", "Device capability registration: ${response.code}")
+            }
+        } catch (e: Exception) {
+            Log.w("MainActivity", "Device capability registration failed", e)
+        }
     }
 }
 
@@ -996,10 +1112,7 @@ private fun LegacySidebarScaffold(
                                 val profileLabelStart = 60.dp
                                 val profileGapAfterAvatar =
                                     (profileLabelStart - profileLeadingInset - profileAvatarSize).coerceAtLeast(NuvioTheme.spacing.none)
-                                val profileBgColor by animateColorAsState(
-                                    targetValue = if (isProfileFocused) NuvioTheme.colors.FocusBackground else Color.Transparent,
-                                    label = "legacyProfileItemBg"
-                                )
+                                val profileBgColor = if (isProfileFocused) NuvioTheme.colors.FocusBackground else Color.Transparent
                                 Box(
                                     modifier = Modifier.fillMaxWidth(),
                                     contentAlignment = Alignment.Center
@@ -1021,7 +1134,8 @@ private fun LegacySidebarScaffold(
                                             name = activeProfileName,
                                             colorHex = activeProfileColorHex,
                                             size = profileAvatarSize,
-                                            avatarImageUrl = activeProfileAvatarImageUrl
+                                            avatarImageUrl = activeProfileAvatarImageUrl,
+                                            imageCrossfade = false
                                         )
                                         Spacer(modifier = Modifier.width(profileGapAfterAvatar))
                                         Text(
@@ -1214,7 +1328,6 @@ private fun LegacySidebarButton(
                 textAlign = TextAlign.Start,
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .fillMaxWidth()
                     .padding(start = 54.dp, end = 14.dp)
             )
         }

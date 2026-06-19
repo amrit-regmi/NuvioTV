@@ -4,12 +4,14 @@ import com.nuvio.tv.data.remote.dto.MetaPreviewDto
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
+import com.nuvio.tv.domain.model.StreamStatus
 
-fun MetaPreviewDto.toDomain(): MetaPreview {
+fun MetaPreviewDto.toDomain(catalogType: String): MetaPreview {
+    val resolvedType = type?.takeIf { it.isNotBlank() } ?: catalogType
     return MetaPreview(
         id = id,
-        type = ContentType.fromString(type),
-        rawType = type,
+        type = ContentType.fromString(resolvedType),
+        rawType = resolvedType,
         name = name,
         poster = poster,
         posterShape = PosterShape.fromString(posterShape),
@@ -32,6 +34,8 @@ fun MetaPreviewDto.toDomain(): MetaPreview {
         links = links?.mapNotNull { it.toDomain() } ?: emptyList(),
         behaviorHints = mapBehaviorHints(behaviorHints),
         trailers = mapTrailers(trailers, trailerStreams),
-        trailerYtIds = collectTrailerYtIds(trailers, trailerStreams)
+        trailerYtIds = collectTrailerYtIds(trailers, trailerStreams),
+        streamStatus = StreamStatus.fromString(streamStatus),
+        ageRating = certification?.trim()?.takeIf { it.isNotBlank() }
     )
 }

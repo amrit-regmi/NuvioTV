@@ -10,7 +10,7 @@ import com.nuvio.tv.data.local.WatchedItemsPreferences
 import com.nuvio.tv.data.remote.supabase.SupabaseWatchedItem
 import com.nuvio.tv.data.remote.supabase.SupabaseWatchedItemEvent
 import com.nuvio.tv.domain.model.WatchedItem
-import io.github.jan.supabase.postgrest.Postgrest
+import com.nuvio.tv.core.network.SyncBackendSupabaseProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -42,12 +42,15 @@ data class WatchedItemsRemoteSyncResult(
 @Singleton
 class WatchedItemsSyncService @Inject constructor(
     private val authManager: AuthManager,
-    private val postgrest: Postgrest,
+    private val supabaseProvider: SyncBackendSupabaseProvider,
     private val watchedItemsPreferences: WatchedItemsPreferences,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val profileManager: ProfileManager
 ) {
+    private val postgrest
+        get() = supabaseProvider.postgrest
+
     private val deltaSyncMutex = Mutex()
 
     /**
@@ -108,7 +111,8 @@ class WatchedItemsSyncService @Inject constructor(
             put("p_limit", WATCHED_ITEMS_DELTA_PAGE_SIZE)
         }
         return withJwtRefreshRetry {
-            postgrest.rpc("sync_pull_watched_items_delta", params).decodeList<SupabaseWatchedItemEvent>()
+            postgrest.rpc("sync_pull_watched_items_delta", params)
+                .let { resp -> runCatching { resp.decodeList<SupabaseWatchedItemEvent>() }.getOrDefault(emptyList()) }
         }.also { events ->
             val firstEvent = events.firstOrNull()?.eventId
             val lastEvent = events.lastOrNull()?.eventId
@@ -190,7 +194,7 @@ class WatchedItemsSyncService @Inject constructor(
                 val response = withJwtRefreshRetry {
                     postgrest.rpc("sync_pull_watched_items", params)
                 }
-                val remote = response.decodeList<SupabaseWatchedItem>()
+                val remote = runCatching { response.decodeList<SupabaseWatchedItem>() }.getOrDefault(emptyList())
 
                 Log.d(TAG, "pullFromRemote: page $page fetched ${remote.size} watched items for profile $profileId")
 

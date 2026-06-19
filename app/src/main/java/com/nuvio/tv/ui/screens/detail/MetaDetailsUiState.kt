@@ -13,7 +13,8 @@ import com.nuvio.tv.domain.model.MDBListRatings
 
 enum class MoreLikeThisSource {
     TMDB,
-    TRAKT
+    TRAKT,
+    RECO
 }
 
 enum class CommentsMode {
@@ -78,7 +79,30 @@ data class MetaDetailsUiState(
     val commentsEpisodeTarget: Video? = null,
     val selectedComment: TraktCommentReview? = null,
     val userMessage: String? = null,
-    val userMessageIsError: Boolean = false
+    val userMessageIsError: Boolean = false,
+    val isTraktAuthenticated: Boolean = false,
+    val userRating: Int? = null,
+    val showRatingPicker: Boolean = false,
+    val ratingPickerDefault: Int = 6,
+    val isRatingPending: Boolean = false,
+    val isRatingLoaded: Boolean = false,
+    // Stream preparation / polling progress (Issue 3)
+    val isPreparingStream: Boolean = false,
+    val streamPreparePercent: Float? = null,
+    val streamPrepareSeedCount: Int? = null,
+    val streamPrepareSpeedMbps: Double? = null,
+    val streamPrepareEtaMinutes: Int? = null,
+    val streamPrepareReady: Boolean = false,
+    // Single-download enforcement: shown when a new download is requested while one is active
+    val showCancelDownloadDialog: Boolean = false,
+    val cancelDownloadDialogTitle: String? = null,
+    // True when debridDownloadManager.activePrepare matches this item's imdbId (covers navigation-away-and-back)
+    val isThisItemDownloading: Boolean = false,
+    // True when the active download has progressed enough to start streaming (buffer streaming)
+    val isStreamableNow: Boolean = false,
+    // Number of non-cached debrid streams available for this item (-1 = not yet loaded)
+    // Populated after StreamWarmer cache is warm; used to decide direct-download vs. picker navigation
+    val uncachedStreamCount: Int = -1
 )
 
 sealed class MetaDetailsEvent {
@@ -114,4 +138,17 @@ sealed class MetaDetailsEvent {
     data object OnPickerDismiss : MetaDetailsEvent()
     data object OnClearMessage : MetaDetailsEvent()
     data object OnLifecyclePause : MetaDetailsEvent()
+    data class OnReactionSelected(val reaction: TraktReaction) : MetaDetailsEvent()
+    data class OnRatingSelected(val rating: Int) : MetaDetailsEvent()
+    data object OnDismissRatingPicker : MetaDetailsEvent()
+    data object OnSubmitRating : MetaDetailsEvent()
+    data object OnPrepareStream : MetaDetailsEvent()
+    data object OnConfirmCancelDownload : MetaDetailsEvent()
+    data object OnDismissCancelDownload : MetaDetailsEvent()
+}
+
+enum class TraktReaction(val defaultRating: Int) {
+    DISLIKE(4),
+    LIKE(5),
+    LOVE(8)
 }

@@ -18,6 +18,7 @@ import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.data.repository.TraktCommentsService
 import com.nuvio.tv.data.repository.TraktRelatedService
 import com.nuvio.tv.data.repository.parseContentIds
+import com.nuvio.tv.data.repository.toTraktIds
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.LibrarySourceMode
@@ -62,7 +63,11 @@ import android.net.Uri
 import com.nuvio.tv.LocaleCache
 import com.nuvio.tv.R
 import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.core.stream.StreamWarmer
+import com.nuvio.tv.core.debrid.DebridDownloadManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.Locale
 import javax.inject.Inject
 
@@ -90,6 +95,13 @@ class MetaDetailsViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
+    private val streamWarmer: StreamWarmer,
+    private val traktRatingService: com.nuvio.tv.data.repository.TraktRatingService,
+    private val recoRatingService: com.nuvio.tv.core.reco.RecoRatingService,
+    private val recoMetadataService: com.nuvio.tv.core.reco.RecoMetadataService,
+    private val httpClient: okhttp3.OkHttpClient,
+    private val catalogAddonApi: com.nuvio.tv.data.remote.api.CatalogAddonApi,
+    private val debridDownloadManager: DebridDownloadManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -116,6 +128,7 @@ class MetaDetailsViewModel @Inject constructor(
     private var trailerFetchJob: Job? = null
     private var moreLikeThisJob: Job? = null
     private var collectionJob: Job? = null
+    private var prepareStreamJob: Job? = null
 
     val lastFocusedEpisodeIdBySeason = androidx.compose.runtime.mutableStateMapOf<Int, String>()
     private var episodeRatingsJob: Job? = null
@@ -144,6 +157,7 @@ class MetaDetailsViewModel @Inject constructor(
         posterOptions.bind(viewModelScope)
         observeMetaViewSettings()
         observeTrailerAutoplaySettings()
+        observeTraktAuthState()
         observeTraktCommentsAvailability()
         observeLibraryState()
         observeWatchProgress()
@@ -152,7 +166,39 @@ class MetaDetailsViewModel @Inject constructor(
         observeBlurUnwatchedEpisodes()
         observeShowFullReleaseDate()
         observeHideUnreleasedContent()
+        observeActivePrepare()
         loadMeta()
+    }
+
+    /**
+     * Observes the global [DebridDownloadManager.activePrepare] state and updates
+     * [MetaDetailsUiState.isThisItemDownloading] whenever it matches this item's IMDB ID.
+     * This covers the case where the user navigated away and back — the prepare is still
+     * active at app scope but this VM's [MetaDetailsUiState.isPreparingStream] was reset.
+     */
+    private fun observeActivePrepare() {
+        viewModelScope.launch {
+            combine(
+                _uiState.map { it.meta },
+                debridDownloadManager.activePrepare
+            ) { meta, activePrepare ->
+                if (meta == null || activePrepare == null) return@combine false
+                val thisImdbId = extractImdbId(meta.imdbId) ?: extractImdbId(meta.id)
+                thisImdbId != null && thisImdbId == activePrepare.imdbId
+            }.distinctUntilChanged().collectLatest { isDownloading ->
+                _uiState.update { it.copy(
+                    isThisItemDownloading = isDownloading,
+                    isStreamableNow = if (isDownloading) it.isStreamableNow else false
+                ) }
+                // If a download is active but this VM has no polling loop running, resume polling.
+                if (isDownloading && !_uiState.value.isPreparingStream &&
+                    (prepareStreamJob == null || prepareStreamJob?.isActive != true)
+                ) {
+                    val ap = debridDownloadManager.activePrepare.value ?: return@collectLatest
+                    resumeStatusPolling(ap.imdbId, ap.type)
+                }
+            }
+        }
     }
 
     private fun observeHideUnreleasedContent() {
@@ -181,6 +227,16 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    private fun observeTraktAuthState() {
+        viewModelScope.launch {
+            traktAuthDataStore.isAuthenticatedState.collect { authenticated ->
+                Log.d(TAG, "Trakt auth state: $authenticated")
+                traktAuthenticated = authenticated
+                _uiState.update { it.copy(isTraktAuthenticated = authenticated) }
+            }
+        }
+    }
+
     private fun observeTraktCommentsAvailability() {
         viewModelScope.launch {
             traktSettingsDataStore.moreLikeThisSource.collectLatest { source ->
@@ -206,12 +262,17 @@ class MetaDetailsViewModel @Inject constructor(
                     }
 
                     _uiState.update { state ->
+                        val base = if (state.isTraktAuthenticated != authenticated) {
+                            state.copy(isTraktAuthenticated = authenticated)
+                        } else {
+                            state
+                        }
                         if (shouldShow) {
-                            if (state.shouldShowCommentsSection) state else state.copy(
+                            if (base.shouldShowCommentsSection) base else base.copy(
                                 shouldShowCommentsSection = true
                             )
                         } else {
-                            state.copy(
+                            base.copy(
                                 comments = emptyList(),
                                 commentsCurrentPage = 0,
                                 commentsPageCount = 0,
@@ -280,6 +341,25 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    private fun warmStreams(meta: Meta?, nextToWatch: NextToWatch) {
+        val targetMeta = meta ?: return
+        val type = targetMeta.apiType.takeIf { it.isNotBlank() } ?: return
+        val isSeries = type.equals("series", ignoreCase = true) || type.equals("tv", ignoreCase = true)
+        val videoId = (if (isSeries) nextToWatch.nextVideoId else targetMeta.id)
+            ?.takeIf { it.isNotBlank() } ?: return
+        streamWarmer.warm(type, videoId)
+        // After a brief delay (letting the warm complete), read the cached uncached stream count.
+        // This drives the smart download button: exactly 1 uncached stream → direct download;
+        // multiple or unknown → navigate to stream picker.
+        viewModelScope.launch {
+            delay(6_000L)
+            val count = streamWarmer.getCachedUncachedStreamCount(type, videoId)
+            if (count >= 0) {
+                _uiState.update { it.copy(uncachedStreamCount = count) }
+            }
+        }
+    }
+
     private fun observeTrailerAutoplaySettings() {
         viewModelScope.launch {
             trailerSettingsDataStore.settings.collectLatest { settings ->
@@ -326,7 +406,120 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnPickerDismiss -> dismissListPicker()
             MetaDetailsEvent.OnClearMessage -> clearMessage()
             MetaDetailsEvent.OnLifecyclePause -> handleLifecyclePause()
+            is MetaDetailsEvent.OnReactionSelected -> handleReactionSelected(event.reaction)
+            is MetaDetailsEvent.OnRatingSelected -> _uiState.update { it.copy(ratingPickerDefault = event.rating) }
+            MetaDetailsEvent.OnDismissRatingPicker -> _uiState.update { it.copy(showRatingPicker = false) }
+            MetaDetailsEvent.OnSubmitRating -> submitRating()
+            MetaDetailsEvent.OnPrepareStream -> handlePrepareStream()
+            MetaDetailsEvent.OnConfirmCancelDownload -> handleConfirmCancelDownload()
+            MetaDetailsEvent.OnDismissCancelDownload -> _uiState.update {
+                it.copy(showCancelDownloadDialog = false, cancelDownloadDialogTitle = null)
+            }
         }
+    }
+
+    private fun handleReactionSelected(reaction: TraktReaction) {
+        val current = _uiState.value
+        if (current.showRatingPicker && current.ratingPickerDefault == reaction.defaultRating) {
+            _uiState.update { it.copy(showRatingPicker = false) }
+        } else {
+            // Seed from actual userRating if it's already in this reaction's range
+            val initialRating = current.userRating?.let { existing ->
+                when (reaction) {
+                    TraktReaction.DISLIKE -> if (existing <= 4) existing else reaction.defaultRating
+                    TraktReaction.LIKE -> if (existing in 5..7) existing else reaction.defaultRating
+                    TraktReaction.LOVE -> if (existing >= 8) existing else reaction.defaultRating
+                }
+            } ?: reaction.defaultRating
+            _uiState.update { it.copy(showRatingPicker = true, ratingPickerDefault = initialRating) }
+        }
+    }
+
+    private fun submitRating() {
+        val state = _uiState.value
+        val meta = state.meta ?: return
+        val rating = state.ratingPickerDefault
+        if (state.isRatingPending) return
+        if (rating == state.userRating) {
+            _uiState.update { it.copy(showRatingPicker = false) }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRatingPending = true) }
+
+            if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
+                // Resolve TMDB ID for the reco backend
+                val kind = when {
+                    meta.apiType.equals("movie", ignoreCase = true) -> "movie"
+                    meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) -> "tv"
+                    else -> null
+                }
+                val tmdbNumericId: Int? = run {
+                    val parsed = parseContentIds(meta.id)
+                    parsed.tmdb ?: parseContentIds(itemId).tmdb
+                        ?: tmdbService.ensureTmdbId(meta.id, meta.apiType)?.toIntOrNull()
+                        ?: tmdbService.ensureTmdbId(itemId, itemType)?.toIntOrNull()
+                }
+
+                val recoResult = if (kind != null && tmdbNumericId != null) {
+                    recoRatingService.submitRating(tmdbNumericId, kind, rating)
+                } else {
+                    Result.failure(Exception("Cannot resolve TMDB ID for reco rating"))
+                }
+
+                // Also submit to Trakt if authenticated (secondary target)
+                if (traktAuthenticated) {
+                    val ids = buildTraktIdsForMeta(meta)
+                    val item = when {
+                        meta.apiType.equals("movie", ignoreCase = true) ->
+                            com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
+                        meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) ->
+                            com.nuvio.tv.data.repository.TraktRatingItem.Show(ids = ids, title = meta.name)
+                        else -> null
+                    }
+                    if (item != null) {
+                        runCatching { traktRatingService.submitRating(item, rating) }
+                    }
+                }
+
+                recoResult.fold(
+                    onSuccess = {
+                        _uiState.update { it.copy(isRatingPending = false, userRating = rating, showRatingPicker = false) }
+                        showMessage("Rating saved", isError = false)
+                    },
+                    onFailure = {
+                        _uiState.update { it.copy(isRatingPending = false) }
+                        showMessage("Couldn't save rating", isError = true)
+                    }
+                )
+            } else {
+                // Non-private: submit to Trakt only (existing behavior)
+                val ids = buildTraktIdsForMeta(meta)
+                val item = when {
+                    meta.apiType.equals("movie", ignoreCase = true) ->
+                        com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
+                    meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) ->
+                        com.nuvio.tv.data.repository.TraktRatingItem.Show(ids = ids, title = meta.name)
+                    else -> null
+                }
+                val result = if (item != null) traktRatingService.submitRating(item, rating) else Result.failure(Exception("Unsupported type"))
+                result.fold(
+                    onSuccess = {
+                        _uiState.update { it.copy(isRatingPending = false, userRating = rating, showRatingPicker = false) }
+                        showMessage("Rating saved to Trakt", isError = false)
+                    },
+                    onFailure = {
+                        _uiState.update { it.copy(isRatingPending = false) }
+                        showMessage("Couldn't save rating", isError = true)
+                    }
+                )
+            }
+        }
+    }
+
+    private fun buildTraktIdsForMeta(meta: com.nuvio.tv.domain.model.Meta): com.nuvio.tv.data.remote.dto.trakt.TraktIdsDto {
+        val parsed = parseContentIds(meta.id)
+        return toTraktIds(parsed)
     }
 
     private fun observeLibraryState() {
@@ -671,6 +864,7 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private suspend fun tryApplyTmdbFallbackMeta(): Boolean {
+        if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") return false
         val tmdbId = itemId
             .takeIf { it.startsWith("tmdb:", ignoreCase = true) }
             ?.substringAfter(':')
@@ -678,6 +872,7 @@ class MetaDetailsViewModel @Inject constructor(
             ?.toIntOrNull()
             ?: return false
         val type = ContentType.fromString(itemType)
+
         val settings = tmdbSettingsDataStore.settings.first()
         val enrichment = tmdbMetadataService.fetchEnrichment(
             tmdbId = tmdbId.toString(),
@@ -688,7 +883,8 @@ class MetaDetailsViewModel @Inject constructor(
             id = itemId,
             type = type,
             rawType = itemType,
-            name = enrichment.localizedTitle ?: enrichment.originalTitle ?: "TMDB $tmdbId",
+            name = enrichment.localizedTitle ?: enrichment.originalTitle
+                ?: context.getString(R.string.detail_tmdb_fallback_title, tmdbId),
             poster = enrichment.poster,
             posterShape = com.nuvio.tv.domain.model.PosterShape.POSTER,
             background = enrichment.backdrop,
@@ -724,15 +920,20 @@ class MetaDetailsViewModel @Inject constructor(
 
     private suspend fun resolveMetaLookupId(itemId: String, itemType: String): String {
         val raw = itemId.trim()
+        // If the ID is already an IMDB ID (e.g. "tt0903747"), no resolution needed.
+        // The reco engine now returns imdb_id directly on every item, so this is the
+        // common case in private mode and avoids an unnecessary resolveImdbId() call.
+        if (raw.startsWith("tt", ignoreCase = true)) return raw
         if (!raw.startsWith("tmdb:", ignoreCase = true)) return raw
 
-        val tmdbNumericId = raw
-            .substringAfter(':', missingDelimiterValue = "")
-            .substringBefore(':')
-            .toIntOrNull()
-            ?: return raw
+        // Handle "tmdb:12345", "tmdb:movie:12345", "tmdb:series:12345"
+        val parts = raw.split(":")
+        val tmdbNumericId = when (parts.size) {
+            2 -> parts[1].toIntOrNull()    // "tmdb:12345"
+            3 -> parts[2].toIntOrNull()    // "tmdb:movie:12345" or "tmdb:series:12345"
+            else -> null
+        } ?: return raw
 
-        // Use a short timeout so a blocked TMDB API doesn't stall the detail screen.
         return kotlinx.coroutines.withTimeoutOrNull(5_000L) {
             tmdbService.tmdbToImdb(tmdbNumericId, itemType)
         }
@@ -805,6 +1006,58 @@ class MetaDetailsViewModel @Inject constructor(
         if (traktCommentsEnabled && traktAuthenticated && supportsComments(meta)) {
             loadComments(meta)
         }
+
+        if (traktAuthenticated || com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
+            loadExistingRating(meta)
+        }
+
+        // Check if TorBox already has an active download for this item (cross-navigation persistence).
+        // Use itemId (may include season:episode for series) so the /status query matches precisely.
+        val imdbId = extractImdbId(meta.imdbId) ?: extractImdbId(meta.id)
+        if (imdbId != null) {
+            val contentType = if (meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true)) "series" else "movie"
+            val statusVideoId = if (itemId.isNotBlank()) itemId else imdbId
+            checkExistingDownloadOnBackend(imdbId, contentType, statusVideoId)
+        }
+    }
+
+    private fun loadExistingRating(meta: Meta) {
+        viewModelScope.launch {
+            if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
+                val kind = when {
+                    meta.apiType.equals("movie", ignoreCase = true) -> "movie"
+                    meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) -> "tv"
+                    else -> null
+                }
+                val tmdbNumericId: Int? = run {
+                    val parsed = parseContentIds(meta.id)
+                    parsed.tmdb ?: parseContentIds(itemId).tmdb
+                        ?: tmdbService.ensureTmdbId(meta.id, meta.apiType)?.toIntOrNull()
+                        ?: tmdbService.ensureTmdbId(itemId, itemType)?.toIntOrNull()
+                }
+                if (kind != null && tmdbNumericId != null) {
+                    val existingStars = recoRatingService.fetchExistingRating(tmdbNumericId, kind)
+                    if (existingStars != null) {
+                        _uiState.update { it.copy(userRating = existingStars, ratingPickerDefault = existingStars, isRatingLoaded = true) }
+                        return@launch
+                    }
+                }
+            }
+            // Fallback: load from Trakt (existing behavior)
+            val ids = buildTraktIdsForMeta(meta)
+            val item = when {
+                meta.apiType.equals("movie", ignoreCase = true) ->
+                    com.nuvio.tv.data.repository.TraktRatingItem.Movie(ids = ids, title = meta.name)
+                meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true) ->
+                    com.nuvio.tv.data.repository.TraktRatingItem.Show(ids = ids, title = meta.name)
+                else -> {
+                    _uiState.update { it.copy(isRatingLoaded = true) }
+                    return@launch
+                }
+            }
+            val existing = try { traktRatingService.getExistingRating(item) } catch (_: Exception) { null }
+            _uiState.update { it.copy(userRating = existing, ratingPickerDefault = existing ?: it.ratingPickerDefault, isRatingLoaded = true) }
+        }
     }
 
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
@@ -822,6 +1075,7 @@ class MetaDetailsViewModel @Inject constructor(
             .first()
         val precomputedNextToWatch = computeNextToWatch(enriched, progressMap, watchedEpisodes)
         updateNextToWatch(precomputedNextToWatch)
+        warmStreams(enriched, precomputedNextToWatch)
 
         applyMeta(enriched)
         // Episode ratings and MDBList are independent — launch both without waiting.
@@ -1036,6 +1290,8 @@ class MetaDetailsViewModel @Inject constructor(
         moreLikeThisJob = viewModelScope.launch {
             val source = if (shouldLoadTraktMoreLikeThis(meta)) {
                 MoreLikeThisSource.TRAKT
+            } else if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") {
+                MoreLikeThisSource.RECO
             } else {
                 val settings = tmdbSettingsDataStore.settings.first()
                 if (!shouldLoadMoreLikeThis(settings)) {
@@ -1055,6 +1311,33 @@ class MetaDetailsViewModel @Inject constructor(
                         )
                     }.getOrElse {
                         Log.w(TAG, "Failed to load Trakt related titles for ${meta.id}: ${it.message}")
+                        emptyList()
+                    }
+                }
+
+                MoreLikeThisSource.RECO -> {
+                    fun normalizeId(raw: String): String? {
+                        return when {
+                            raw.startsWith("tt", ignoreCase = true) -> raw.lowercase()
+                            raw.startsWith("tmdb:", ignoreCase = true) -> raw.split(":").last().takeIf { it.toIntOrNull() != null }
+                            raw.toIntOrNull() != null -> raw
+                            else -> null
+                        }
+                    }
+                    val normalizedId = normalizeId(meta.id) ?: normalizeId(itemId)
+                    if (normalizedId == null) {
+                        _uiState.update { it.copy(moreLikeThis = emptyList(), moreLikeThisSource = null) }
+                        return@launch
+                    }
+                    val contentType = resolveTmdbContentType(meta)
+                    val kind = when (contentType) {
+                        ContentType.SERIES, ContentType.TV -> "tv"
+                        else -> "movie"
+                    }
+                    runCatching {
+                        recoMetadataService.fetchSimilar(kind, normalizedId) ?: emptyList()
+                    }.getOrElse {
+                        Log.w(TAG, "Failed to load reco similar titles for ${meta.id}: ${it.message}")
                         emptyList()
                     }
                 }
@@ -1262,6 +1545,10 @@ class MetaDetailsViewModel @Inject constructor(
         val settings = tmdbSettingsDataStore.settings.first()
         if (!settings.enabled) return meta
 
+        // In private mode all metadata comes from the local catalog addon.
+        // Skip every TMDB call — language, status, credits are already in the meta.
+        if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") return meta
+
         val tmdbContentType = resolveTmdbContentType(meta)
         val tmdbLookupType = tmdbContentType.toApiString()
         val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
@@ -1294,6 +1581,21 @@ class MetaDetailsViewModel @Inject constructor(
         }
 
         var updated = meta
+
+        // In private mode, override TMDB credits with our own reco backend data.
+        val creditEnrichment = if (enrichment != null && com.nuvio.tv.BuildConfig.RECO_MODE == "private" && settings.useCredits) {
+            val tmdbIdInt = tmdbId.toIntOrNull()
+            val recoCredits = if (tmdbIdInt == null) null
+                              else if (isSeries) recoMetadataService.fetchTvCredits(tmdbIdInt)
+                              else recoMetadataService.fetchMovieCredits(tmdbIdInt)
+            if (recoCredits != null) enrichment.copy(
+                castMembers = recoCredits.cast,
+                directorMembers = recoCredits.directors,
+                writerMembers = recoCredits.writers,
+                director = recoCredits.directors.map { it.name },
+                writer = recoCredits.writers.map { it.name }
+            ) else enrichment
+        } else enrichment
 
         if (enrichment != null && settings.useArtwork) {
             updated = updated.copy(
@@ -1333,11 +1635,11 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
 
-        if (enrichment != null && settings.useCredits) {
+        if (creditEnrichment != null && settings.useCredits) {
             val peopleCredits = buildList {
-                addAll(enrichment.directorMembers)
-                addAll(enrichment.writerMembers)
-                addAll(enrichment.castMembers)
+                addAll(creditEnrichment.directorMembers)
+                addAll(creditEnrichment.writerMembers)
+                addAll(creditEnrichment.castMembers)
             }
                 .filter { it.name.isNotBlank() }
                 .distinctBy { it.tmdbId ?: (it.name.lowercase() + "|" + (it.character ?: "")) }
@@ -1345,12 +1647,12 @@ class MetaDetailsViewModel @Inject constructor(
             if (peopleCredits.isNotEmpty()) {
                 updated = updated.copy(
                     castMembers = peopleCredits,
-                    cast = enrichment.castMembers.takeIf { it.isNotEmpty() }?.map { it.name } ?: updated.cast
+                    cast = creditEnrichment.castMembers.takeIf { it.isNotEmpty() }?.map { it.name } ?: updated.cast
                 )
             }
             updated = updated.copy(
-                director = if (enrichment.director.isNotEmpty()) enrichment.director else updated.director,
-                writer = if (enrichment.writer.isNotEmpty()) enrichment.writer else updated.writer
+                director = if (creditEnrichment.director.isNotEmpty()) creditEnrichment.director else updated.director,
+                writer = if (creditEnrichment.writer.isNotEmpty()) creditEnrichment.writer else updated.writer
             )
         }
 
@@ -1571,6 +1873,7 @@ class MetaDetailsViewModel @Inject constructor(
         nextToWatchJob = viewModelScope.launch {
             val nextToWatch = computeNextToWatch(meta, progressMap, watchedEpisodes)
             updateNextToWatch(nextToWatch)
+            warmStreams(meta, nextToWatch)
         }
     }
 
@@ -2306,6 +2609,201 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    private fun handlePrepareStream() {
+        if (_uiState.value.isPreparingStream) return  // prevent double-trigger on same VM
+        val meta = _uiState.value.meta ?: return
+        val imdbId = extractImdbId(meta.imdbId) ?: extractImdbId(meta.id) ?: run {
+            showMessage("No IMDB ID available", isError = true)
+            return
+        }
+        val type = meta.apiType
+
+        // Check if another title is currently being prepared at app scope (different screen)
+        val currentPrepare = debridDownloadManager.activePrepare.value
+        if (currentPrepare != null && currentPrepare.imdbId != imdbId) {
+            // Show confirmation dialog — user must confirm before we cancel the existing download
+            _uiState.update { it.copy(
+                showCancelDownloadDialog = true,
+                cancelDownloadDialogTitle = currentPrepare.title
+            ) }
+            return
+        }
+
+        startPrepareForced(imdbId, type, meta.name ?: imdbId)
+    }
+
+    private fun handleConfirmCancelDownload() {
+        // Dismiss the dialog first
+        _uiState.update { it.copy(showCancelDownloadDialog = false, cancelDownloadDialogTitle = null) }
+
+        val meta = _uiState.value.meta ?: return
+        val imdbId = extractImdbId(meta.imdbId) ?: extractImdbId(meta.id) ?: return
+        val type = meta.apiType
+
+        // The user confirmed — proceed regardless of what's active at app scope
+        startPrepareForced(imdbId, type, meta.name ?: imdbId)
+    }
+
+    /**
+     * Start preparing a stream, bypassing the app-scope active-check.
+     * Registers the new operation with [DebridDownloadManager] so other
+     * screens can detect the conflict and show their own confirmation dialog.
+     * Any previously-registered prepare entry is silently displaced (the
+     * old polling loop detects the imdbId mismatch and self-terminates).
+     */
+    private fun startPrepareForced(imdbId: String, type: String, title: String) {
+        // Cancel any existing prepare on TorBox before registering the new one.
+        // This fires the DELETE for the previously-active item (if any) so TorBox cleans up.
+        debridDownloadManager.cancelAndClearPrepare()
+
+        // Register at app scope BEFORE cancelling old job so the old loop
+        // sees a changed imdbId and exits cleanly on its next poll cycle.
+        debridDownloadManager.setPrepareActive(imdbId, title, type)
+
+        prepareStreamJob?.cancel()
+        _uiState.update { it.copy(
+            isPreparingStream = true,
+            streamPrepareReady = false,
+            streamPreparePercent = null,
+            streamPrepareSeedCount = null,
+            streamPrepareSpeedMbps = null,
+            streamPrepareEtaMinutes = null
+        ) }
+
+        prepareStreamJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Step 1: trigger the prepare endpoint via auth-intercepted Retrofit client
+                val prepareResp = try {
+                    catalogAddonApi.prepareStream(type, imdbId, null)
+                } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+                val prepareDto = prepareResp?.body()
+                if (prepareDto == null) {
+                    debridDownloadManager.clearPrepare()
+                    _uiState.update { it.copy(isPreparingStream = false) }
+                    showMessage("Failed to queue stream", isError = true)
+                    return@launch
+                }
+                if (prepareDto.status == "no_seeders") {
+                    debridDownloadManager.clearPrepare()
+                    _uiState.update { it.copy(isPreparingStream = false) }
+                    showMessage("No active seeders — this torrent may not be available right now.", isError = true)
+                    return@launch
+                }
+                if (prepareDto.status == "slots_full") {
+                    debridDownloadManager.clearPrepare()
+                    _uiState.update { it.copy(isPreparingStream = false, isThisItemDownloading = false) }
+                    showMessage("TorBox download slots are full. Cancel an existing download to add more.", isError = true)
+                    return@launch
+                }
+                if (prepareDto.status == "already_cached") {
+                    debridDownloadManager.clearPrepare()
+                    streamWarmer.evictStreamsForVideo(type, imdbId)
+                    _uiState.update { it.copy(
+                        isPreparingStream = false,
+                        streamPrepareReady = true,
+                        streamPreparePercent = 100f,
+                        uncachedStreamCount = 0
+                    ) }
+                    return@launch
+                }
+
+                // Step 2: poll /status until cached (handles timeout internally)
+                pollStatusUntilCached(imdbId, type)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "handlePrepareStream failed", e)
+                debridDownloadManager.clearPrepare()
+                _uiState.update { it.copy(isPreparingStream = false) }
+                showMessage("Failed to queue stream", isError = true)
+            }
+        }
+    }
+
+    /** Shared suspend fn: polls /status via auth Retrofit client until cached or 30-min timeout. */
+    private suspend fun pollStatusUntilCached(imdbId: String, type: String) {
+        val maxPollMs = 30L * 60L * 1000L
+        val startMs = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startMs < maxPollMs) {
+            delay(4_000L)
+            if (debridDownloadManager.activePrepare.value?.imdbId != imdbId) {
+                _uiState.update { it.copy(isPreparingStream = false, isThisItemDownloading = false, isStreamableNow = false) }
+                return
+            }
+            try {
+                val resp = catalogAddonApi.getStreamStatus(type, imdbId)
+                val item = resp.body()?.items?.firstOrNull() ?: continue
+                val cached = item.cached == true
+                val hasUrl = item.hasUrl == true
+                val percent = item.progressPct?.toFloat()
+                val seeds = item.seeds
+                val speedMbps = item.downloadSpeedMbps
+                val etaMin = item.etaSeconds?.let { (it / 60).coerceAtLeast(1) }
+                if (cached || hasUrl) {
+                    debridDownloadManager.clearPrepare()
+                    streamWarmer.evictStreamsForVideo(type, imdbId)
+                    _uiState.update { it.copy(
+                        isPreparingStream = false,
+                        isThisItemDownloading = false,
+                        isStreamableNow = false,
+                        streamPrepareReady = true,
+                        streamPreparePercent = 100f,
+                        streamPrepareSeedCount = null,
+                        streamPrepareSpeedMbps = null,
+                        streamPrepareEtaMinutes = 0,
+                        uncachedStreamCount = 0
+                    ) }
+                    return
+                }
+                val streamableNow = item.downloadState == "downloading" && percent != null && percent > 0f
+                _uiState.update { it.copy(
+                    streamPreparePercent = percent,
+                    streamPrepareSeedCount = seeds,
+                    streamPrepareSpeedMbps = speedMbps,
+                    streamPrepareEtaMinutes = etaMin,
+                    isStreamableNow = streamableNow
+                ) }
+            } catch (e: CancellationException) { throw e } catch (_: Exception) {}
+        }
+        // 30-min timeout
+        debridDownloadManager.clearPrepare()
+        _uiState.update { it.copy(isPreparingStream = false, isThisItemDownloading = false, isStreamableNow = false) }
+        showMessage("Stream preparation timed out", isError = true)
+    }
+
+    /** Resume polling for a download detected from global state (e.g. after navigating back). */
+    private fun resumeStatusPolling(imdbId: String, type: String) {
+        prepareStreamJob?.cancel()
+        _uiState.update { it.copy(isPreparingStream = true) }
+        prepareStreamJob = viewModelScope.launch(Dispatchers.IO) {
+            pollStatusUntilCached(imdbId, type)
+        }
+    }
+
+    /**
+     * After meta loads, poll /status for this item to detect a TorBox download that is
+     * already in progress (e.g. user downloaded Movie A, navigated to Movie B, came back).
+     * If the backend reports an active download for this item, auto-starts status polling.
+     */
+    private fun checkExistingDownloadOnBackend(imdbId: String, type: String, videoId: String = imdbId) {
+        if (_uiState.value.isPreparingStream) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = catalogAddonApi.getStreamStatus(type, videoId)
+                val items = response.body()?.items.orEmpty()
+                val hasActiveDownload = items.any { item ->
+                    val state = item.downloadState
+                    state == "downloading" || state == "queued"
+                }
+                if (hasActiveDownload && !_uiState.value.isPreparingStream) {
+                    resumeStatusPolling(imdbId, type)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "checkExistingDownloadOnBackend: ${e.message}")
+            }
+        }
+    }
+
     private fun extractImdbId(rawId: String?): String? {
         if (rawId.isNullOrBlank()) return null
         val normalized = rawId.trim()
@@ -2624,5 +3122,9 @@ class MetaDetailsViewModel @Inject constructor(
         idleTimerJob?.cancel()
         trailerFetchJob?.cancel()
         nextToWatchJob?.cancel()
+        prepareStreamJob?.cancel()
+        // Do NOT cancel the TorBox download here — the user may have navigated away
+        // while a download is in progress and expects it to continue in the background.
+        // Explicit cancel goes through handleCancelDownload() → cancelAndClearPrepare().
     }
 }

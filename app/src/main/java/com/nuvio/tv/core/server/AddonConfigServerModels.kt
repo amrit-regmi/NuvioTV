@@ -19,7 +19,7 @@ enum class AddonWebConfigMode(
     ),
     ADDONS_ONLY(
         allowAddonManagement = true,
-        allowCatalogManagement = false,
+        allowCatalogManagement = true,
         allowCollectionManagement = false
     )
 }

@@ -74,8 +74,10 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     onSetSkipSilence: (Boolean) -> Unit,
     onSetRememberAudioDelayPerDevice: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
+    onSetForceOpticalPassthrough: (Boolean) -> Unit,
     onSetDv5ToDv81Enabled: (Boolean) -> Unit,
     onSetDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
+    onSetStripHdr10PlusSei: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true,
     videoExtraItems: (LazyListScope.() -> Unit)? = null
@@ -127,7 +129,10 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
 
     item(key = "audio_secondary_preferred_language") {
         val secondaryAudioLangName = playerSettings.secondaryPreferredAudioLanguage?.let { code ->
-            AVAILABLE_SUBTITLE_LANGUAGES.find { it.code == code }?.displayName ?: code
+            when {
+                code.equals(AudioLanguageOption.ORIGINAL, ignoreCase = true) -> stringResource(R.string.audio_lang_original)
+                else -> AVAILABLE_SUBTITLE_LANGUAGES.find { it.code == code }?.displayName ?: code
+            }
         } ?: stringResource(R.string.sub_not_set)
 
         NavigationSettingsItem(
@@ -252,6 +257,20 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
                 enabled = enabled
             )
         }
+
+        if (isExoEngine || isMpvEngine) {
+            item(key = "audio_force_optical_passthrough") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.VolumeUp,
+                    title = stringResource(R.string.audio_force_optical_passthrough),
+                    subtitle = stringResource(R.string.audio_force_optical_passthrough_sub),
+                    isChecked = playerSettings.forceOpticalPassthrough && playerSettings.decoderPriority != 0,
+                    onCheckedChange = onSetForceOpticalPassthrough,
+                    onFocused = onItemFocused,
+                    enabled = enabled && playerSettings.decoderPriority != 0
+                )
+            }
+        }
     }
 
     // ── Video & DV Settings ──
@@ -309,6 +328,18 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
                 onCheckedChange = onSetDv5ToDv81Enabled,
                 onFocused = onItemFocused,
                 enabled = enabled && playerSettings.dv7HandlingMode == Dv7HandlingMode.DV81_LIBDOVI
+            )
+        }
+
+        item(key = "audio_strip_hdr10plus") {
+            ToggleSettingsItem(
+                icon = Icons.Default.Tune,
+                title = stringResource(R.string.audio_strip_hdr10plus_title),
+                subtitle = stringResource(R.string.audio_strip_hdr10plus_sub),
+                isChecked = playerSettings.stripHdr10PlusSei,
+                onCheckedChange = onSetStripHdr10PlusSei,
+                onFocused = onItemFocused,
+                enabled = enabled
             )
         }
     }
@@ -378,6 +409,9 @@ internal fun AudioSettingsDialogs(
             title = stringResource(R.string.sub_secondary_lang),
             selectedLanguage = selectedSecondaryLanguage,
             showNoneOption = true,
+            extraOptions = listOf(
+                AudioLanguageOption.ORIGINAL to stringResource(R.string.audio_lang_original)
+            ),
             onLanguageSelected = {
                 onSetSecondaryPreferredAudioLanguage(it)
                 onDismissSecondaryAudioLanguageDialog()

@@ -4,11 +4,14 @@ import android.content.Context
 import android.util.Log
 import com.nuvio.tv.R
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.stream.StreamWarmer
 import com.nuvio.tv.core.network.safeApiCall
 import com.nuvio.tv.core.debrid.DebridStreamPresentation
 import com.nuvio.tv.core.debrid.LocalDebridAvailabilityService
+import com.nuvio.tv.core.streams.StreamBadgePresentation
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.tmdb.TmdbService
+import com.nuvio.tv.data.local.DeviceProfileDataStore
 import com.nuvio.tv.data.mapper.toDomain
 import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.Addon
@@ -33,8 +36,10 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import javax.inject.Inject
+import com.nuvio.tv.BuildConfig
 
 private const val TAG = "StreamRepositoryImpl"
+private const val BACKEND_ADDON_HOST = "recoengine.regmig.com"
 
 class StreamRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -43,7 +48,10 @@ class StreamRepositoryImpl @Inject constructor(
     private val pluginManager: PluginManager,
     private val tmdbService: TmdbService,
     private val debridStreamPresentation: DebridStreamPresentation,
-    private val localDebridAvailabilityService: LocalDebridAvailabilityService
+    private val streamBadgePresentation: StreamBadgePresentation,
+    private val localDebridAvailabilityService: LocalDebridAvailabilityService,
+    private val streamWarmer: StreamWarmer,
+    private val deviceProfileDataStore: DeviceProfileDataStore
 ) : StreamRepository {
     private enum class StreamFailureKind {
         MISSING,
@@ -66,16 +74,32 @@ class StreamRepositoryImpl @Inject constructor(
 
         try {
             val addons = addonRepository.getInstalledAddons().first().enabledAddons()
-            
+
+            // If videoId is a raw TMDB ID (e.g. "tmdb:1226863"), resolve it to an IMDB ID so
+            // that Stremio addons whose idPrefixes = ["tt"] (e.g. Torrentio) can match it.
+            val effectiveVideoId: String = if (videoId.startsWith("tmdb:", ignoreCase = true)) {
+                val numericId = videoId.removePrefix("tmdb:").removePrefix("TMDB:").toIntOrNull()
+                val imdbId = numericId?.let { tmdbService.tmdbToImdb(it, type) }
+                if (imdbId != null) {
+                    Log.d(TAG, "Resolved tmdb videoId $videoId -> $imdbId")
+                    imdbId
+                } else {
+                    Log.w(TAG, "Could not resolve tmdb videoId $videoId to IMDB ID, keeping original")
+                    videoId
+                }
+            } else {
+                videoId
+            }
+
             // Filter addons that support streams for this type and id
             val streamAddons = addons.filter { addon ->
-                addon.supportsStreamResource(type, videoId)
+                addon.supportsStreamResource(type, effectiveVideoId)
             }
 
             // Convert IMDB ID to TMDB ID if needed for plugins
-            val tmdbId = tmdbService.ensureTmdbId(videoId, type)
-            Log.d(TAG, "Video ID: $videoId -> TMDB ID: $tmdbId (type: $type)")
-            val pluginRequest = buildPluginRequest(tmdbId, type, videoId)
+            val tmdbId = tmdbService.ensureTmdbId(effectiveVideoId, type)
+            Log.d(TAG, "Video ID: $effectiveVideoId -> TMDB ID: $tmdbId (type: $type)")
+            val pluginRequest = buildPluginRequest(tmdbId, type, effectiveVideoId)
             val attemptedAddonNames = streamAddons.map { it.displayName }
             val attemptedFailures = java.util.Collections.synchronizedList(
                 mutableListOf<StreamAttemptFailure>()
@@ -97,7 +121,7 @@ class StreamRepositoryImpl @Inject constructor(
                 streamAddons.forEach { addon ->
                     launch {
                         try {
-                            val streamsResult = getStreamsFromAddon(addon.baseUrl, type, videoId)
+                            val streamsResult = getStreamsFromAddon(addon.baseUrl, type, effectiveVideoId)
                             when (streamsResult) {
                                 is NetworkResult.Success -> {
                                     if (streamsResult.data.isNotEmpty()) {
@@ -115,7 +139,7 @@ class StreamRepositoryImpl @Inject constructor(
                                         // Stream endpoint returned empty - try inline
                                         // streams from meta response as fallback.
                                         val inlineStreams = fetchInlineStreamsFromMeta(
-                                            addon, type, videoId
+                                            addon, type, effectiveVideoId
                                         )
                                         if (inlineStreams.isNotEmpty()) {
                                             resultChannel.send(
@@ -197,7 +221,7 @@ class StreamRepositoryImpl @Inject constructor(
             if (accumulatedResults.isEmpty()) {
                 val errorMessage = buildAggregateFailureMessage(
                     type = type,
-                    id = videoId,
+                    id = effectiveVideoId,
                     attemptedAddonNames = attemptedAddonNames,
                     failures = attemptedFailures.toList()
                 )
@@ -427,6 +451,21 @@ class StreamRepositoryImpl @Inject constructor(
         }
     }
 
+    /**
+     * Returns "Bearer <secret>" when the addon URL belongs to our backend, null otherwise.
+     * Mirrors the same helper in StreamWarmer and AddonRepositoryImpl.
+     */
+    private fun catalogAuth(baseUrl: String): String? {
+        val secret = BuildConfig.CATALOG_SECRET.trim()
+        if (secret.isBlank()) return null
+        val lower = baseUrl.lowercase()
+        val catalogBase = BuildConfig.CATALOG_ADDON_BASE_URL.trim().lowercase()
+        return if (lower.contains(BACKEND_ADDON_HOST) ||
+                   (catalogBase.isNotBlank() && lower.contains(catalogBase))) {
+            "Bearer $secret"
+        } else null
+    }
+
     override suspend fun getStreamsFromAddon(
         baseUrl: String,
         type: String,
@@ -438,7 +477,13 @@ class StreamRepositoryImpl @Inject constructor(
         val baseQuery = if (queryStart >= 0) cleanBaseUrl.substring(queryStart) else ""
         val encodedType = encodePathSegment(type)
         val encodedVideoId = encodePathSegment(videoId)
-        val streamUrl = "$basePath/stream/$encodedType/$encodedVideoId.json$baseQuery"
+        val streamUrl = if (baseUrl.contains("recoengine")) {
+            val profileId = deviceProfileDataStore.selectedProfileId.first()
+            val profileParam = if (baseQuery.isEmpty()) "?profile=$profileId" else "&profile=$profileId"
+            "$basePath/stream/$encodedType/$encodedVideoId.json$baseQuery$profileParam"
+        } else {
+            "$basePath/stream/$encodedType/$encodedVideoId.json$baseQuery"
+        }
         Log.d(TAG, "Fetching streams type=$type videoId=$videoId url=$streamUrl")
 
         // First, get addon info for name and logo
@@ -452,10 +497,15 @@ class StreamRepositoryImpl @Inject constructor(
             else -> null
         }
 
-        return when (val result = safeApiCall(context) { api.getStreams(streamUrl) }) {
+        streamWarmer.awaitWarm(baseUrl, type, videoId)?.let { cached ->
+            Log.d(TAG, "Stream warm hit addon=$addonName count=${cached.size} type=$type videoId=$videoId")
+            return NetworkResult.Success(cached)
+        }
+
+        return when (val result = safeApiCall(context) { api.getStreams(streamUrl, catalogAuth(baseUrl)) }) {
             is NetworkResult.Success -> {
-                val streams = result.data.streams?.map { 
-                    it.toDomain(addonName, addonLogo) 
+                val streams = result.data.streams?.map {
+                    it.toDomain(addonName, addonLogo)
                 } ?: emptyList()
                 Log.d(TAG, "Streams success addon=$addonName count=${streams.size} url=$streamUrl")
                 NetworkResult.Success(streams)
@@ -502,16 +552,27 @@ class StreamRepositoryImpl @Inject constructor(
         // For inline streams the meta is fetched using the content-level ID
         // (everything before the video-specific suffix).  For "other" type
         // the videoId IS the content ID; for series it is contentId:S:E.
-        val contentId = videoId.substringBefore(":")
-            .takeIf { it.isNotBlank() }
-            ?: videoId
-        // Reconstruct a content-level ID that keeps the addon-specific prefix.
-        // e.g. "realdebrid:ABC:3" → "realdebrid:ABC"
+        // Video ID formats:
+        //   tt1234567:1:5      → metaId = tt1234567
+        //   mal:63375:1:5      → metaId = mal:63375
+        //   kitsu:12345:2      → metaId = kitsu:12345
+        // Strategy: drop up to 2 trailing numeric segments (season, episode)
+        // but never reduce below 2 segments for prefixed IDs (mal:X, kitsu:X).
         val metaId = run {
             val parts = videoId.split(":")
-            // Drop trailing numeric segment(s) that represent video index
-            val contentParts = parts.dropLastWhile { it.toIntOrNull() != null }
-            if (contentParts.isNotEmpty()) contentParts.joinToString(":") else videoId
+            if (parts.size <= 1) return@run videoId
+            // Count trailing numeric segments
+            val trailingNumericCount = parts.reversed().takeWhile { it.toIntOrNull() != null }.size
+            // Keep at least 2 segments for prefixed IDs (e.g. "mal:63375"),
+            // or 1 segment for IMDB-style IDs (e.g. "tt1234567")
+            val firstSegment = parts.first()
+            val minSegments = if (firstSegment.startsWith("tt") || firstSegment.toIntOrNull() != null) 1 else 2
+            val segmentsToDrop = trailingNumericCount.coerceAtMost((parts.size - minSegments).coerceAtLeast(0))
+            if (segmentsToDrop > 0) {
+                parts.dropLast(segmentsToDrop).joinToString(":")
+            } else {
+                videoId
+            }
         }
         val cleanBaseUrl = addon.baseUrl.trimEnd('/')
         val queryStart = cleanBaseUrl.indexOf('?')

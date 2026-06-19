@@ -66,6 +66,7 @@ import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.screens.home.ClassicHomeContent
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
 import com.nuvio.tv.ui.screens.home.GridHomeContent
+import com.nuvio.tv.ui.screens.home.HeroBackdropState
 import com.nuvio.tv.ui.screens.home.HomeScreenFocusState
 import com.nuvio.tv.ui.screens.home.key
 import com.nuvio.tv.domain.model.MetaPreview
@@ -314,7 +315,7 @@ private fun TabbedGridContent(
                                 text = if (tab.isAllTab) stringResource(R.string.collections_tab_all) else tab.label,
                                 style = MaterialTheme.typography.labelLarge
                             )
-                            if (tab.typeLabel.isNotBlank()) {
+                            if (uiState.catalogTypeSuffixEnabled && tab.typeLabel.isNotBlank()) {
                                 val localizedType = when {
                                     tab.isAllTab -> stringResource(R.string.collections_tab_combined)
                                     tab.rawType.lowercase() == "movie" -> stringResource(R.string.type_movie)
@@ -447,6 +448,7 @@ private fun TabbedGridContent(
                         isWatched = isItemWatched(item),
                         onFocus = { _ -> lastFocusedItemKey = itemKey },
                         onClick = {
+                            HeroBackdropState.update(item.backdropUrl)
                             onNavigateToDetail(
                                 item.id,
                                 item.apiType,
@@ -575,8 +577,8 @@ private fun RowsContent(
                 val localizedTypeLabel = remember(tab.rawType, folderContext) {
                     localizedContentType(folderContext, tab.rawType)
                 }
-                val rowTitle = remember(tab.label, localizedTypeLabel) {
-                    if (tab.label != tab.typeLabel && localizedTypeLabel.isNotEmpty()) {
+                val rowTitle = remember(tab.label, localizedTypeLabel, uiState.catalogTypeSuffixEnabled) {
+                    if (uiState.catalogTypeSuffixEnabled && tab.label != tab.typeLabel && localizedTypeLabel.isNotEmpty()) {
                         "${tab.label} - $localizedTypeLabel"
                     } else {
                         tab.label
@@ -642,7 +644,7 @@ private fun RowsContent(
                             seeAllLabel = loadMoreLabel,
                             showPosterLabels = true,
                             showAddonName = false,
-                            showCatalogTypeSuffix = true,
+                            showCatalogTypeSuffix = uiState.catalogTypeSuffixEnabled,
                             isItemWatched = isItemWatched,
                             onItemFocus = onItemFocus,
                             listState = listState,
@@ -762,7 +764,8 @@ private fun FollowLayoutContent(
             onItemFocus = onItemFocus,
             onPreloadAdjacentItem = onPreloadAdjacentItem,
             onSaveFocusState = onSaveFocusState,
-            scrollToTopTrigger = scrollToTopTrigger
+            scrollToTopTrigger = scrollToTopTrigger,
+            blockLeftOnFirstExpandedItem = true
         )
     }
 }

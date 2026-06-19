@@ -238,6 +238,22 @@ fun MetaDetailsScreen(
         year: String?,
         runtime: Int?,
         contentLanguage: String?
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+    onPlayStartFromBeginningClick: (
+        videoId: String,
+        contentType: String,
+        contentId: String,
+        title: String,
+        poster: String?,
+        backdrop: String?,
+        logo: String?,
+        season: Int?,
+        episode: Int?,
+        episodeName: String?,
+        genres: String?,
+        year: String?,
+        runtime: Int?,
+        contentLanguage: String?
     ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -543,6 +559,42 @@ fun MetaDetailsScreen(
                             meta.resolveContentLanguage()
                         )
                     },
+                    onEpisodeStartFromBeginningClick = { video ->
+                        onPlayStartFromBeginningClick(
+                            video.id,
+                            meta.apiType,
+                            meta.id,
+                            meta.name,
+                            video.thumbnail ?: meta.poster,
+                            meta.backdropUrl,
+                            meta.logo,
+                            video.season,
+                            video.episode,
+                            video.title,
+                            null,
+                            null,
+                            video.runtime,
+                            meta.resolveContentLanguage()
+                        )
+                    },
+                    onPlayStartFromBeginningClick = { videoId ->
+                        onPlayStartFromBeginningClick(
+                            videoId,
+                            meta.apiType,
+                            meta.id,
+                            meta.name,
+                            meta.poster,
+                            meta.backdropUrl,
+                            meta.logo,
+                            null,
+                            null,
+                            null,
+                            genresString,
+                            yearString,
+                            null,
+                            meta.resolveContentLanguage()
+                        )
+                    },
                     showManualPlayOption = effectiveAutoplayEnabled,
                     onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
                     onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
@@ -670,7 +722,45 @@ fun MetaDetailsScreen(
                     onNavigateToCastDetail = onNavigateToCastDetail,
                     onNavigateToTmdbEntityBrowse = onNavigateToTmdbEntityBrowse,
                     onNavigateToDetail = onNavigateToDetail,
-                    onPosterLongPress = { item -> viewModel.posterOptions.show(item, null) }
+                    onPosterLongPress = { item -> viewModel.posterOptions.show(item, null) },
+                    traktAuthenticated = uiState.isTraktAuthenticated,
+                    isRatingLoaded = uiState.isRatingLoaded,
+                    userRating = uiState.userRating,
+                    showRatingPicker = uiState.showRatingPicker,
+                    ratingPickerDefault = uiState.ratingPickerDefault,
+                    isRatingPending = uiState.isRatingPending,
+                    onReactionSelected = { viewModel.onEvent(MetaDetailsEvent.OnReactionSelected(it)) },
+                    onRatingSelected = { viewModel.onEvent(MetaDetailsEvent.OnRatingSelected(it)) },
+                    onDismissRatingPicker = { viewModel.onEvent(MetaDetailsEvent.OnDismissRatingPicker) },
+                    onSubmitRating = { viewModel.onEvent(MetaDetailsEvent.OnSubmitRating) },
+                    onPrepareStream = { viewModel.onEvent(MetaDetailsEvent.OnPrepareStream) },
+                    onNavigateToDownloadStreams = {
+                        onPlayManuallyClick(
+                            meta.id,
+                            meta.apiType,
+                            meta.id,
+                            meta.name,
+                            meta.poster,
+                            meta.backdropUrl,
+                            meta.logo,
+                            null,
+                            null,
+                            null,
+                            genresString,
+                            yearString,
+                            null,
+                            meta.resolveContentLanguage()
+                        )
+                    },
+                    isPreparingStream = uiState.isPreparingStream,
+                    streamPreparePercent = uiState.streamPreparePercent,
+                    streamPrepareSeedCount = uiState.streamPrepareSeedCount,
+                    streamPrepareSpeedMbps = uiState.streamPrepareSpeedMbps,
+                    streamPrepareEtaMinutes = uiState.streamPrepareEtaMinutes,
+                    streamPrepareReady = uiState.streamPrepareReady,
+                    isThisItemDownloading = uiState.isThisItemDownloading,
+                    isStreamableNow = uiState.isStreamableNow,
+                    uncachedStreamCount = uiState.uncachedStreamCount
                 )
             }
         }
@@ -693,6 +783,14 @@ fun MetaDetailsScreen(
                 },
                 onSave = { viewModel.onEvent(MetaDetailsEvent.OnPickerSave) },
                 onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnPickerDismiss) }
+            )
+        }
+
+        if (uiState.showCancelDownloadDialog) {
+            CancelDownloadConfirmDialog(
+                inProgressTitle = uiState.cancelDownloadDialogTitle ?: "",
+                onConfirm = { viewModel.onEvent(MetaDetailsEvent.OnConfirmCancelDownload) },
+                onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnDismissCancelDownload) }
             )
         }
 
@@ -795,8 +893,10 @@ private fun MetaDetailsContent(
     onSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onEpisodeManualPlayClick: (Video) -> Unit,
+    onEpisodeStartFromBeginningClick: (Video) -> Unit = {},
     onPlayClick: (String) -> Unit,
     onPlayManuallyClick: (String) -> Unit,
+    onPlayStartFromBeginningClick: (String) -> Unit = {},
     showManualPlayOption: Boolean,
     onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
@@ -845,7 +945,28 @@ private fun MetaDetailsContent(
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToTmdbEntityBrowse: (entityKind: String, entityId: Int, entityName: String, sourceType: String) -> Unit = { _, _, _, _ -> },
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
-    onPosterLongPress: (MetaPreview) -> Unit = {}
+    onPosterLongPress: (MetaPreview) -> Unit = {},
+    traktAuthenticated: Boolean = false,
+    isRatingLoaded: Boolean = false,
+    userRating: Int? = null,
+    showRatingPicker: Boolean = false,
+    ratingPickerDefault: Int = 6,
+    isRatingPending: Boolean = false,
+    onReactionSelected: (TraktReaction) -> Unit = {},
+    onRatingSelected: (Int) -> Unit = {},
+    onDismissRatingPicker: () -> Unit = {},
+    onSubmitRating: () -> Unit = {},
+    onPrepareStream: () -> Unit = {},
+    onNavigateToDownloadStreams: () -> Unit = {},
+    isPreparingStream: Boolean = false,
+    streamPreparePercent: Float? = null,
+    streamPrepareSeedCount: Int? = null,
+    streamPrepareSpeedMbps: Double? = null,
+    streamPrepareEtaMinutes: Int? = null,
+    streamPrepareReady: Boolean = false,
+    isThisItemDownloading: Boolean = false,
+    isStreamableNow: Boolean = false,
+    uncachedStreamCount: Int = -1
 ) {
     val canLoadMoreComments = commentsCurrentPage in 1 until commentsPageCount
     val selectedCommentIndex = remember(comments, selectedComment?.id) {
@@ -1133,6 +1254,7 @@ private fun MetaDetailsContent(
     val moreLikeThisSourceLabel = when (moreLikeThisSource) {
         MoreLikeThisSource.TMDB -> stringResource(R.string.detail_more_like_this_powered_by_tmdb)
         MoreLikeThisSource.TRAKT -> stringResource(R.string.detail_more_like_this_powered_by_trakt)
+        MoreLikeThisSource.RECO -> null
         null -> null
     }
     val peopleTabItems = remember(
@@ -1308,23 +1430,38 @@ private fun MetaDetailsContent(
     // Pre-compute gradient brushes once
 
     // Stable hero play callback
-    val heroPlayClick = remember(heroVideo, meta.id, onEpisodeClick, onPlayClick) {
+    val heroPlayClick = remember(heroVideo, isSeries, meta.id, onEpisodeClick, onPlayClick, isThisItemDownloading, onNavigateToDownloadStreams) {
         {
             markHeroRestore()
-            if (heroVideo != null) {
+            if (isThisItemDownloading) {
+                // Navigate to stream screen to stream while downloading (buffer streaming)
+                onNavigateToDownloadStreams()
+            } else if (heroVideo != null) {
                 onEpisodeClick(heroVideo)
-            } else {
+            } else if (!isSeries) {
+                // Only navigate for movies when heroVideo is null; for series, episodes
+                // may still be loading and navigating without season/episode shows wrong content.
                 onPlayClick(meta.id)
             }
         }
     }
-    val heroPlayManualClick = remember(heroVideo, meta.id, onEpisodeManualPlayClick, onPlayManuallyClick) {
+    val heroPlayManualClick = remember(heroVideo, isSeries, meta.id, onEpisodeManualPlayClick, onPlayManuallyClick) {
         {
             markHeroRestore()
             if (heroVideo != null) {
                 onEpisodeManualPlayClick(heroVideo)
-            } else {
+            } else if (!isSeries) {
                 onPlayManuallyClick(meta.id)
+            }
+        }
+    }
+    val heroPlayStartFromBeginningClick = remember(heroVideo, meta.id, onEpisodeStartFromBeginningClick, onPlayStartFromBeginningClick) {
+        {
+            markHeroRestore()
+            if (heroVideo != null) {
+                onEpisodeStartFromBeginningClick(heroVideo)
+            } else {
+                onPlayStartFromBeginningClick(meta.id)
             }
         }
     }
@@ -1547,7 +1684,7 @@ private fun MetaDetailsContent(
                         nextEpisode = nextEpisode,
                         nextToWatch = nextToWatch,
                         onPlayClick = heroPlayClick,
-                        onPlayLongPress = if (showManualPlayOption) {
+                        onPlayLongPress = if (showManualPlayOption || nextToWatch?.isResume == true) {
                             { showHeroPlayOptionsDialog = true }
                         } else {
                             null
@@ -1583,7 +1720,28 @@ private fun MetaDetailsContent(
                             onPlayButtonFocused()
                             initialHeroFocusRequested = true
                             clearPendingRestore()
-                        }
+                        },
+                        traktAuthenticated = traktAuthenticated,
+                        isRatingLoaded = isRatingLoaded,
+                        userRating = userRating,
+                        showRatingPicker = showRatingPicker,
+                        ratingPickerDefault = ratingPickerDefault,
+                        isRatingPending = isRatingPending,
+                        onReactionSelected = onReactionSelected,
+                        onRatingSelected = onRatingSelected,
+                        onDismissRatingPicker = onDismissRatingPicker,
+                        onSubmitRating = onSubmitRating,
+                        onPrepareStream = onPrepareStream,
+                        onNavigateToDownloadStreams = onNavigateToDownloadStreams,
+                        isPreparingStream = isPreparingStream,
+                        streamPreparePercent = streamPreparePercent,
+                        streamPrepareSeedCount = streamPrepareSeedCount,
+                        streamPrepareSpeedMbps = streamPrepareSpeedMbps,
+                        streamPrepareEtaMinutes = streamPrepareEtaMinutes,
+                        streamPrepareReady = streamPrepareReady,
+                        isThisItemDownloading = isThisItemDownloading,
+                        isStreamableNow = isStreamableNow,
+                        uncachedStreamCount = uncachedStreamCount
                     )
                 }
             }
@@ -1618,6 +1776,10 @@ private fun MetaDetailsContent(
                             blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                             onEpisodeClick = episodeClick,
                             onEpisodeManualPlayClick = episodeManualClick,
+                            onEpisodeStartFromBeginningClick = { video ->
+                                markEpisodeRestore(video.id)
+                                onEpisodeStartFromBeginningClick(video)
+                            },
                             showManualPlayOption = showManualPlayOption,
                             onToggleEpisodeWatched = onToggleEpisodeWatched,
                             onMarkSeasonWatched = onMarkSeasonWatched,
@@ -1973,9 +2135,15 @@ private fun MetaDetailsContent(
                 title = meta.name,
                 subtitle = nextToWatch?.displayText ?: stringResource(R.string.hero_play),
                 onDismiss = { showHeroPlayOptionsDialog = false },
+                showPlayManually = showManualPlayOption,
                 onPlayManually = {
                     showHeroPlayOptionsDialog = false
                     heroPlayManualClick()
+                },
+                showStartFromBeginning = nextToWatch?.isResume == true,
+                onStartFromBeginning = {
+                    showHeroPlayOptionsDialog = false
+                    heroPlayStartFromBeginningClick()
                 }
             )
         }
@@ -2014,11 +2182,57 @@ private fun MetaDetailsContent(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
+private fun CancelDownloadConfirmDialog(
+    inProgressTitle: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val confirmFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        confirmFocusRequester.requestFocus()
+    }
+
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = "Download in progress",
+        subtitle = "A download is already in progress for \"$inProgressTitle\". Starting a new download will cancel it. Continue?"
+    ) {
+        Button(
+            onClick = onConfirm,
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(confirmFocusRequester),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioTheme.colors.Primary,
+                contentColor = NuvioTheme.colors.TextPrimary
+            )
+        ) {
+            Text("Yes, cancel and start new")
+        }
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioTheme.colors.BackgroundCard,
+                contentColor = NuvioTheme.colors.TextPrimary
+            )
+        ) {
+            Text("No, keep current download")
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
 private fun PlayManualOverrideDialog(
     title: String,
     subtitle: String?,
     onDismiss: () -> Unit,
-    onPlayManually: () -> Unit
+    showPlayManually: Boolean = true,
+    onPlayManually: () -> Unit,
+    showStartFromBeginning: Boolean = false,
+    onStartFromBeginning: () -> Unit = {}
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
 
@@ -2031,17 +2245,34 @@ private fun PlayManualOverrideDialog(
         title = title,
         subtitle = subtitle
     ) {
-        Button(
-            onClick = onPlayManually,
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(primaryFocusRequester),
-            colors = ButtonDefaults.colors(
-                containerColor = NuvioTheme.colors.BackgroundCard,
-                contentColor = NuvioTheme.colors.TextPrimary
-            )
-        ) {
-            Text(stringResource(R.string.play_manually))
+        if (showPlayManually) {
+            Button(
+                onClick = onPlayManually,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(primaryFocusRequester),
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.play_manually))
+            }
+        }
+
+        if (showStartFromBeginning) {
+            Button(
+                onClick = onStartFromBeginning,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (!showPlayManually) Modifier.focusRequester(primaryFocusRequester) else Modifier),
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.cw_action_start_from_beginning))
+            }
         }
     }
 }

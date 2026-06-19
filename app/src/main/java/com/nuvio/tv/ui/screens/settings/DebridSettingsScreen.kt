@@ -2,6 +2,7 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 import android.content.Context
@@ -79,6 +80,7 @@ import com.nuvio.tv.domain.model.DebridStreamSortCriterion
 import com.nuvio.tv.domain.model.DebridStreamSortDirection
 import com.nuvio.tv.domain.model.DebridStreamSortKey
 import com.nuvio.tv.domain.model.DebridStreamVisualTag
+import com.nuvio.tv.data.remote.api.DeviceProfileDto
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.screens.addon.QrCodeOverlay
 import kotlinx.coroutines.CancellationException
@@ -95,12 +97,24 @@ fun DebridSettingsContent(
     var activeStreamPicker by remember { mutableStateOf<DebridStreamPicker?>(null) }
     var showResolverPicker by remember { mutableStateOf(false) }
     var showPrepareCountDialog by remember { mutableStateOf(false) }
+    var showProfileResolutionPicker by remember { mutableStateOf(false) }
+    var showProfileHdrDialog by remember { mutableStateOf(false) }
+    var showProfileCodecDialog by remember { mutableStateOf(false) }
+    var showProfileAudioFormatDialog by remember { mutableStateOf(false) }
+    var showProfileAudioChannelsPicker by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activeResolverProvider = uiState.activeResolverProvider
 
     LaunchedEffect(uiState.serverError) {
         val error = uiState.serverError ?: return@LaunchedEffect
         Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.profileSaveResult.collect { success ->
+            val message = if (success) "Profile saved" else "Failed to save profile"
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     Column(
@@ -147,6 +161,35 @@ fun DebridSettingsContent(
                         )
                     }
 
+                    item(key = "debrid_nuvio_torbox_section") {
+                        DebridSectionLabel(text = "Nuvio TorBox")
+                    }
+
+                    item(key = "debrid_${DebridProviders.TORBOX_ID}_api_key") {
+                        val provider = DebridProviders.Torbox
+                        SettingsActionRow(
+                            title = provider.displayName,
+                            subtitle = "Optional override. A shared key is active by default — enter your own to use your personal TorBox account.",
+                            value = providerCredentialStatus(
+                                provider = provider,
+                                credential = uiState.apiKeyFor(provider.id),
+                                notSetLabel = stringResource(R.string.debrid_not_set),
+                                connectedLabel = stringResource(R.string.debrid_connected)
+                            ),
+                            onClick = {
+                                when (provider.authMethod) {
+                                    DebridProviderAuthMethod.DeviceCode -> activeDeviceAuthDialog = provider.id
+                                    DebridProviderAuthMethod.ApiKey -> activeApiKeyDialog = provider.id
+                                }
+                            },
+                            enabled = true
+                        )
+                    }
+
+                    item(key = "debrid_external_providers_section") {
+                        DebridSectionLabel(text = "External Providers")
+                    }
+
                     item(key = "debrid_enabled") {
                         SettingsToggleRow(
                             title = stringResource(R.string.debrid_enable_title),
@@ -175,11 +218,7 @@ fun DebridSettingsContent(
                         }
                     }
 
-                    item(key = "debrid_account_section") {
-                        DebridSectionLabel(text = stringResource(R.string.debrid_section_account))
-                    }
-
-                    DebridProviders.visible().forEach { provider ->
+                    DebridProviders.visible().filter { it.id != DebridProviders.TORBOX_ID }.forEach { provider ->
                         item(key = "debrid_${provider.id}_api_key") {
                             SettingsActionRow(
                                 title = provider.displayName,
@@ -205,7 +244,7 @@ fun DebridSettingsContent(
                         }
                     }
 
-                    if (uiState.canResolvePlayableLinks) {
+                    if (uiState.canResolvePlayableLinks && !uiState.streamEngineEnabled) {
                         item(key = "debrid_instant_section") {
                             DebridSectionLabel(text = stringResource(R.string.debrid_section_instant_playback))
                         }
@@ -258,7 +297,7 @@ fun DebridSettingsContent(
                         )
                     }
 
-                    if (uiState.canResolvePlayableLinks) {
+                    if (uiState.canResolvePlayableLinks && !uiState.streamEngineEnabled) {
                         item(key = "debrid_filters_section") {
                             DebridSectionLabel(text = stringResource(R.string.debrid_section_filters))
                         }
@@ -679,6 +718,73 @@ fun DebridSettingsContent(
         )
     }
 
+    if (showProfileResolutionPicker) {
+        DebridProfileResolutionDialog(
+            selectedValue = uiState.editMaxResolution,
+            onSelected = { resolution ->
+                viewModel.onEvent(DebridSettingsEvent.SetProfileResolution(resolution))
+                showProfileResolutionPicker = false
+            },
+            onDismiss = { showProfileResolutionPicker = false }
+        )
+    }
+
+    if (showProfileHdrDialog) {
+        val hdrOptions = listOf("HDR10", "HDR10+", "DolbyVision", "HLG")
+        DebridMultiChoiceDialog(
+            title = "HDR Types",
+            selectedValues = uiState.editHdrTypes.toList(),
+            values = hdrOptions,
+            label = { it },
+            onSelected = { selected ->
+                viewModel.onEvent(DebridSettingsEvent.SetProfileHdrTypes(selected.toSet()))
+                showProfileHdrDialog = false
+            },
+            onDismiss = { showProfileHdrDialog = false }
+        )
+    }
+
+    if (showProfileCodecDialog) {
+        val codecOptions = listOf("H.265", "AV1", "H.264")
+        DebridMultiChoiceDialog(
+            title = "Codecs",
+            selectedValues = uiState.editCodecs.toList(),
+            values = codecOptions,
+            label = { it },
+            onSelected = { selected ->
+                viewModel.onEvent(DebridSettingsEvent.SetProfileCodecs(selected.toSet()))
+                showProfileCodecDialog = false
+            },
+            onDismiss = { showProfileCodecDialog = false }
+        )
+    }
+
+    if (showProfileAudioFormatDialog) {
+        val audioFormatOptions = listOf("Dolby Atmos", "DTS:X", "DTS-HD", "AAC")
+        DebridMultiChoiceDialog(
+            title = "Audio Formats",
+            selectedValues = uiState.editAudioFormats.toList(),
+            values = audioFormatOptions,
+            label = { it },
+            onSelected = { selected ->
+                viewModel.onEvent(DebridSettingsEvent.SetProfileAudioFormats(selected.toSet()))
+                showProfileAudioFormatDialog = false
+            },
+            onDismiss = { showProfileAudioFormatDialog = false }
+        )
+    }
+
+    if (showProfileAudioChannelsPicker) {
+        DebridProfileAudioChannelsDialog(
+            selectedValue = uiState.editMaxAudioChannels,
+            onSelected = { channels ->
+                viewModel.onEvent(DebridSettingsEvent.SetProfileAudioChannels(channels))
+                showProfileAudioChannelsPicker = false
+            },
+            onDismiss = { showProfileAudioChannelsPicker = false }
+        )
+    }
+
     if (uiState.isFormatterQrModeActive) {
         QrCodeOverlay(
             qrBitmap = uiState.formatterQrCodeBitmap,
@@ -736,6 +842,49 @@ private fun DebridPrepareCountDialog(
         },
         selectedValue = selectedLimit,
         onOptionSelected = onLimitSelected,
+        onDismiss = onDismiss,
+        width = 420.dp,
+        maxHeight = 280.dp
+    )
+}
+
+@Composable
+private fun DebridProfileResolutionDialog(
+    selectedValue: String,
+    onSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf("2160p", "1080p", "720p")
+    val labels = mapOf("2160p" to "2160p (4K)", "1080p" to "1080p", "720p" to "720p")
+
+    SettingsSingleChoiceDialog(
+        title = "Max Resolution",
+        options = options.map { value ->
+            SettingsPickerOption(value, labels[value] ?: value)
+        },
+        selectedValue = selectedValue,
+        onOptionSelected = onSelected,
+        onDismiss = onDismiss,
+        width = 420.dp,
+        maxHeight = 280.dp
+    )
+}
+
+@Composable
+private fun DebridProfileAudioChannelsDialog(
+    selectedValue: String,
+    onSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf("7.1", "5.1", "2.0")
+
+    SettingsSingleChoiceDialog(
+        title = "Max Audio Channels",
+        options = options.map { value ->
+            SettingsPickerOption(value, value)
+        },
+        selectedValue = selectedValue,
+        onOptionSelected = onSelected,
         onDismiss = onDismiss,
         width = 420.dp,
         maxHeight = 280.dp

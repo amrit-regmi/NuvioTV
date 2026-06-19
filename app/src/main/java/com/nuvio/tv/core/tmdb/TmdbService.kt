@@ -55,7 +55,7 @@ class TmdbService @Inject constructor(
             Log.d(TAG, "Cache hit: IMDB $imdbId -> TMDB $cached")
             return@withContext cached
         }
-        
+
         val normalizedType = normalizeMediaType(mediaType)
         val requestKey = "$imdbId:$normalizedType"
         val requestDeferred = CompletableDeferred<Int?>()

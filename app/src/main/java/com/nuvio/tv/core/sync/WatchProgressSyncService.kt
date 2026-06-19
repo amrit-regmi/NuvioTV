@@ -10,7 +10,7 @@ import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.data.remote.supabase.SupabaseWatchProgress
 import com.nuvio.tv.data.remote.supabase.SupabaseWatchProgressEvent
 import com.nuvio.tv.domain.model.WatchProgress
-import io.github.jan.supabase.postgrest.Postgrest
+import com.nuvio.tv.core.network.SyncBackendSupabaseProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,12 +42,15 @@ data class WatchProgressRemoteSyncResult(
 @Singleton
 class WatchProgressSyncService @Inject constructor(
     private val authManager: AuthManager,
-    private val postgrest: Postgrest,
+    private val supabaseProvider: SyncBackendSupabaseProvider,
     private val watchProgressPreferences: WatchProgressPreferences,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val profileManager: ProfileManager
 ) {
+    private val postgrest
+        get() = supabaseProvider.postgrest
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val deltaSyncMutex = Mutex()
 
@@ -388,10 +391,12 @@ class WatchProgressSyncService @Inject constructor(
                     if (event.operation.equals(WATCH_PROGRESS_EVENT_DELETE, ignoreCase = true)) {
                         pageChanges[event.progressKey] = null
                     } else if (event.operation.equals(WATCH_PROGRESS_EVENT_UPSERT, ignoreCase = true)) {
-                        normalizePulledEntries(listOf(event.progressKey to event.toWatchProgress()))
-                            .forEach { (key, progress) ->
-                                pageChanges[key] = progress
-                            }
+                        // Don't synthesize series-level mirror keys from individual delta events.
+                        // normalizePulledEntries creates a series key (contentId) from any episode
+                        // key (contentId_s1e5), which would resurrect series entries that were
+                        // explicitly deleted remotely. Only apply normalization on full snapshots.
+                        val progress = event.toWatchProgress()
+                        pageChanges[event.progressKey] = progress
                     }
                 }
 

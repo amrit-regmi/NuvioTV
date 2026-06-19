@@ -44,7 +44,8 @@ data class Meta(
     val hasLandscapePoster: Boolean? = null,
     val hasLogo: Boolean? = null,
     val hasLinks: Boolean? = null,
-    val hasVideos: Boolean? = null
+    val hasVideos: Boolean? = null,
+    val streamStatus: StreamStatus = StreamStatus.UNKNOWN
 ) {
     val apiType: String
         get() = type.toApiString(rawType)
@@ -214,6 +215,22 @@ data class MetaTrailer(
     val ytId: String? = null,
     val lang: String? = null
 )
+
+enum class StreamStatus {
+    UNKNOWN,     // not yet checked
+    INSTANT,     // cached in Torbox, ready to play
+    QUEUEABLE,   // known torrent, can be added to Torbox
+    UNAVAILABLE; // no known hashes
+
+    companion object {
+        fun fromString(s: String?): StreamStatus = when (s?.lowercase()) {
+            "instant"     -> INSTANT
+            "queueable"   -> QUEUEABLE
+            "unavailable" -> UNAVAILABLE
+            else          -> UNKNOWN
+        }
+    }
+}
 
 @Immutable
 data class MetaReleaseDateCountry(

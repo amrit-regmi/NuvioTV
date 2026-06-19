@@ -13,6 +13,8 @@ import androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer
 import com.nuvio.tv.core.player.BitrateAwareLoadControl
 import com.nuvio.tv.core.debrid.DirectDebridResolver
 import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
+import com.nuvio.tv.core.player.PlayerPreWarmer
+import com.nuvio.tv.core.subtitle.SubtitleWarmer
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.torrent.TorrentService
 import com.nuvio.tv.data.local.AutoSkipSegmentType
@@ -84,6 +86,9 @@ class PlayerRuntimeController(
     internal val tmdbSettingsDataStore: com.nuvio.tv.data.local.TmdbSettingsDataStore,
     internal val directDebridResolver: DirectDebridResolver,
     internal val directDebridStreamPreparer: DirectDebridStreamPreparer,
+    internal val subtitleWarmer: SubtitleWarmer,
+    internal val playerPreWarmer: PlayerPreWarmer,
+    internal val streamWarmer: com.nuvio.tv.core.stream.StreamWarmer,
     internal val streamBadgePresentation: com.nuvio.tv.core.streams.StreamBadgePresentation,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
@@ -148,6 +153,7 @@ class PlayerRuntimeController(
     )
 
     internal val navigationArgs = PlayerNavigationArgs.from(savedStateHandle)
+    internal val isAutoPlay: Boolean = navigationArgs.isAutoPlay
     internal val initialStreamUrl: String = navigationArgs.streamUrl
     internal val title: String = navigationArgs.title
     internal val streamName: String? = navigationArgs.streamName
@@ -191,11 +197,17 @@ class PlayerRuntimeController(
             PlayerMediaSourceFactory.sanitizeHeaders(PlayerMediaSourceFactory.parseHeaders(headersJson))
         )
         currentStreamUrl = cleanInitialUrl
+        // URL/filename inference is free; fall back to the warm session's probe-captured MIME
+        // type if inference returns null (opaque CDN URLs with no recognizable extension).
         currentStreamMimeType = PlayerMediaSourceFactory.inferMimeType(
             url = cleanInitialUrl,
             filename = currentFilename,
             responseHeaders = currentStreamResponseHeaders
-        )
+        ) ?: run {
+            val t = contentType ?: return@run null
+            val v = videoId ?: return@run null
+            playerPreWarmer.getSession(t, v)?.detectedMimeType
+        }
         currentHeaders = mergedInitialHeaders
     }
 
@@ -526,6 +538,7 @@ class PlayerRuntimeController(
                 _uiState.update {
                     it.copy(
                         showFileSizeBadges = settings.showFileSizeBadges,
+                        showAddonLogo = settings.showAddonLogo,
                         streamBadgePlacement = settings.badgePlacement
                     )
                 }

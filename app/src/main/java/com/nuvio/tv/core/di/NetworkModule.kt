@@ -7,6 +7,7 @@ import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.data.remote.api.AniSkipApi
 import com.nuvio.tv.data.remote.api.AnimeSkipApi
 import com.nuvio.tv.data.remote.api.ArmApi
+import com.nuvio.tv.data.remote.api.CatalogAddonApi
 import com.nuvio.tv.data.remote.api.DonationsApi
 import com.nuvio.tv.data.remote.api.GitHubReleaseApi
 import com.nuvio.tv.data.remote.api.TraktApi
@@ -18,7 +19,6 @@ import com.nuvio.tv.data.remote.api.ParentalGuideApi
 import com.nuvio.tv.data.remote.api.PremiumizeApi
 import com.nuvio.tv.data.remote.api.RealDebridApi
 import com.nuvio.tv.data.remote.api.SeriesGraphApi
-import com.nuvio.tv.data.remote.api.SponsorsApi
 import com.nuvio.tv.data.remote.api.TmdbApi
 import com.nuvio.tv.data.remote.api.TorboxApi
 import com.nuvio.tv.data.remote.api.UniqueContributionsApi
@@ -36,6 +36,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import com.nuvio.tv.core.network.IPv4FirstDns
+import com.nuvio.tv.core.profile.ProfileManager
 import java.io.File
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
@@ -107,12 +108,13 @@ object NetworkModule {
             .hostnameVerifier { _, _ -> true }
             .cache(Cache(File(context.cacheDir, "http_cache"), 50L * 1024 * 1024)) // 50 MB disk cache
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
                 val request = chain.request().newBuilder()
                     .header("User-Agent", "Nuvio/$version")
                     .header("Accept-Language", buildAcceptLanguageHeader())
+                    .header("X-Profile-Id", ProfileManager.currentProfileId.toString())
                     .build()
                 chain.proceed(request)
             }
@@ -267,6 +269,45 @@ object NetworkModule {
     @Singleton
     fun provideTorboxApi(@Named("torbox") retrofit: Retrofit): TorboxApi =
         retrofit.create(TorboxApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("catalogAddon")
+    fun provideCatalogAddonRetrofit(
+        okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): Retrofit {
+        val rawBaseUrl = BuildConfig.CATALOG_ADDON_BASE_URL.trim()
+        val baseUrl = if (rawBaseUrl.isNotBlank()) {
+            if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
+        } else {
+            "http://localhost/"
+        }
+        val secret = BuildConfig.CATALOG_SECRET.trim()
+        val authClient = if (secret.isNotBlank()) {
+            okHttpClient.newBuilder()
+                .addInterceptor { chain ->
+                    chain.proceed(
+                        chain.request().newBuilder()
+                            .header("Authorization", "Bearer $secret")
+                            .build()
+                    )
+                }
+                .build()
+        } else {
+            okHttpClient
+        }
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(authClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideCatalogAddonApi(@Named("catalogAddon") retrofit: Retrofit): CatalogAddonApi =
+        retrofit.create(CatalogAddonApi::class.java)
 
     @Provides
     @Singleton
@@ -448,11 +489,6 @@ object NetworkModule {
     @Singleton
     fun provideDonationsApi(@Named("donations") retrofit: Retrofit): DonationsApi =
         retrofit.create(DonationsApi::class.java)
-
-    @Provides
-    @Singleton
-    fun provideSponsorsApi(@Named("donations") retrofit: Retrofit): SponsorsApi =
-        retrofit.create(SponsorsApi::class.java)
 
     // --- Trailer API ---
 

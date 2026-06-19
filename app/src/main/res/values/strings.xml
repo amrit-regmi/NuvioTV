@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Nuvio</string>
+    <string name="app_name">Nuvio Reco</string>
     <string name="tv_channel_continue_watching">Continue Watching</string>
     <string name="type_movie">Movie</string>
     <string name="type_movies">Movies</string>
@@ -371,6 +371,10 @@
     <string name="settings_profiles_subtitle">Manage user profiles</string>
     <string name="settings_layout">Layout</string>
     <string name="settings_layout_subtitle">Home structure and poster styles</string>
+    <string name="settings_content_discovery">Content &amp; Discovery</string>
+    <string name="settings_content_discovery_subtitle">Add-ons, plugins, catalogs, and discovery sources</string>
+    <string name="settings_content_discovery_addons_subtitle">Manage add-ons, catalog order, and collections</string>
+    <string name="settings_content_discovery_plugins_subtitle">Manage repositories and stream providers</string>
     <string name="settings_plugins">Plugins</string>
     <string name="settings_plugins_subtitle">Repositories and providers</string>
     <string name="settings_integration">Integrations</string>
@@ -507,6 +511,10 @@
     <string name="supporters_contributors_subtitle">The people backing Nuvio and the contributors building it across TV and mobile.</string>
     <string name="supporters_contributors_supporters_copy">Supporters and donators help keep the project moving, fund infrastructure, and make room for ambitious features.</string>
     <string name="supporters_contributors_donate_copy">Nuvio will stay free and open source. If you want to support the project, you can help cover the time and infrastructure behind it.</string>
+    <string name="supporters_contributors_donation_progress_title">This month’s server &amp; maintenance</string>
+    <string name="supporters_contributors_donation_progress_complete">Covered. Additional support now goes to development.</string>
+    <string name="supporters_contributors_donation_progress_remaining">After 100%%, additional support goes to development.</string>
+    <string name="supporters_contributors_loading_donation_progress">Loading funding progress...</string>
     <string name="supporters_contributors_donate_button">Donate to Nuvio</string>
     <string name="supporters_contributors_qr_title">Scan to donate</string>
     <string name="supporters_contributors_qr_subtitle">Open the link on your phone and support Nuvio through Ko-fi.</string>
@@ -625,6 +633,8 @@
     <string name="audio_enable_downmix_subtitle">Uses the FFmpeg downmix path. When disabled, audio follows the previous Android/device path.</string>
     <string name="audio_tunneled">Tunneled Playback</string>
     <string name="audio_tunneled_sub">Hardware-level audio/video sync. May improve playback on some Android TV devices</string>
+    <string name="audio_force_optical_passthrough">Force AC-3 Transcoding (Optical/SPDIF)</string>
+    <string name="audio_force_optical_passthrough_sub">Transcodes multichannel formats (TrueHD, DTS, AAC, etc.) to Dolby Digital 5.1 in real-time for Optical/SPDIF connections.</string>
     <!-- DV7 Handling Mode -->
     <string name="dv7_handling_title">Dolby Vision Handling</string>
     <string name="dv7_handling_dialog_subtitle">Choose how DV streams are processed at playback time.</string>
@@ -640,6 +650,8 @@
     <string name="dv7_mode_strip_dv_desc">Removes the Dolby Vision RPU layer from all streams.</string>
     <string name="audio_dv5_to_dv81_title">Convert DV5 to DV8.1</string>
     <string name="audio_dv5_to_dv81_sub">Signal Profile 5 streams as Profile 8.1 for HDR10-compatible output. Helps on devices that do not have a native DV5 decoder.</string>
+    <string name="audio_strip_hdr10plus_title">Strip HDR10+ Metadata</string>
+    <string name="audio_strip_hdr10plus_sub">Remove HDR10+ dynamic metadata from streams. When Convert to DV8.1 is also enabled, stripping runs after conversion.</string>
     <string name="audio_dv7_preserve_mapping_title">Preserve DV mapping (DV7 to DV8.1)</string>
     <string name="audio_dv7_preserve_mapping_sub">Keeps original creator-intended tone-mapping at the cost of slightly more processing per frame.</string>
     <string name="dv7_libdovi_mode_caption" translatable="false">Conversion mode (auto-selected, do not change unless instructed). Pick one to force it; None uses auto. Active only when DV7 Handling is Convert to DV8.1.</string>
@@ -1043,6 +1055,9 @@
     <string name="settings_stream_badges_section">Fusion Style</string>
     <string name="settings_stream_size_badges_title">Size badges</string>
     <string name="settings_stream_size_badges_description">Show file size badges in stream results and player source panels.</string>
+    <string name="settings_stream_addon_logo_title">Addon logo</string>
+    <string name="settings_stream_addon_logo_description">Show addon logo and name next to stream sources.</string>
+    <string name="settings_stream_display_section">Display</string>
     <string name="settings_stream_badge_position_title">Badge position</string>
     <string name="settings_stream_badge_position_description">Choose whether Fusion and size badges appear above or below stream cards.</string>
     <string name="settings_stream_badge_position_dialog_title">Badge position</string>
@@ -1365,6 +1380,18 @@
     <string name="debrid_missing_api_key">Add a Debrid API key in Settings.</string>
     <string name="debrid_not_cached">Not cached on this service.</string>
     <string name="debrid_resolution_failed">Could not resolve this Debrid stream.</string>
+    <string name="stream_queued_toast">Stream queued for download. Check back soon.</string>
+    <string name="stream_queued_eta">Stream queued — ready in ~%d minutes</string>
+    <string name="stream_download_queued">Queued</string>
+    <string name="stream_download_downloading">Downloading</string>
+    <string name="stream_download_ready">Ready</string>
+    <string name="stream_download_failed">Download failed</string>
+    <string name="stream_download_no_source">No valid source found</string>
+    <string name="stream_download_eta">Ready in %1$d min</string>
+    <string name="stream_download_sheet_title">Preparing Stream</string>
+    <string name="stream_download_stop">Stop</string>
+    <string name="stream_download_close">Close</string>
+    <string name="stream_download_stream_now">Stream</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
     <string name="p2p_consent_title">P2P Streaming</string>
@@ -1709,6 +1736,7 @@
     <string name="account_generate_sync_desc">Create a code on this device so other devices can link to it.</string>
     <string name="account_enter_sync_desc">Link this device to another device using a sync code.</string>
     <string name="account_signed_in_as">Signed in as</string>
+    <string name="account_sync_backend_label">Sync server</string>
     <string name="account_generate_sync_signed_in_desc">Create a code so other devices can sync with this account.</string>
     <string name="account_unknown_device">Unknown Device</string>
 
@@ -2510,6 +2538,28 @@
     <string name="trakt_comments_error_request_failed">Trakt comments request failed</string>
     <string name="trakt_library_error_fetch_list_items">Failed to fetch list items</string>
 
+    <!-- Trakt rating -->
+    <string name="trakt_rating_label_1">Weak sauce!</string>
+    <string name="trakt_rating_label_2">Terrible</string>
+    <string name="trakt_rating_label_3">Bad</string>
+    <string name="trakt_rating_label_4">Poor</string>
+    <string name="trakt_rating_label_5">Meh</string>
+    <string name="trakt_rating_label_6">Fair</string>
+    <string name="trakt_rating_label_7">Good</string>
+    <string name="trakt_rating_label_8">Great</string>
+    <string name="trakt_rating_label_9">Superb</string>
+    <string name="trakt_rating_label_10">Totally Ninja!</string>
+    <string name="trakt_rating_scale_label">%d / 10</string>
+    <string name="trakt_rating_dislike">Dislike</string>
+    <string name="trakt_rating_like">Like</string>
+    <string name="trakt_rating_love">Love</string>
+    <string name="trakt_rating_rate">Rate</string>
+    <string name="trakt_rating_submit">Submit Rating</string>
+    <string name="trakt_rating_skip">Skip</string>
+    <string name="trakt_rating_saving">Saving…</string>
+    <string name="trakt_rating_error">Couldn\'t save rating</string>
+    <string name="trakt_rating_post_play_title">How was it?</string>
+
     <string name="watchlist_removed">Removed from watchlist</string>
     <string name="watchlist_added">Added to watchlist</string>
 
@@ -2588,6 +2638,7 @@
     <string name="web_debrid_template_fields">Template fields</string>
     <string name="web_debrid_name_template">Name Template</string>
     <string name="web_debrid_description_template">Description Template</string>
+    <string name="web_debrid_error_templates_required">Both templates are required</string>
     <string name="web_debrid_stream_rules">Stream rules</string>
     <string name="web_debrid_per_resolution">Per Resolution</string>
     <string name="web_debrid_per_quality">Per Quality</string>
@@ -2608,6 +2659,9 @@
     <string name="web_stream_badge_import_error">Badge import failed.</string>
     <string name="web_stream_badge_deleted">Deleted badge URL.</string>
     <string name="web_stream_badge_load_error">Could not load stream badge settings</string>
+    <string name="web_stream_badge_error_url_required">Enter a badge JSON URL.</string>
+    <string name="web_stream_badge_error_url_scheme">Badge URL must start with http:// or https://.</string>
+    <string name="web_stream_badge_error_import_limit">You can import up to %1$d badge URLs.</string>
 
     <!-- Playback — Buffer & Network settings -->
     <string name="playback_section_buffer_network">Buffer &amp; Network</string>
@@ -2657,4 +2711,61 @@
     <string name="playback_net_connection_count_sub">Number of parallel TCP connections. Higher values increase memory usage and throughput but with diminishing returns.</string>
     <string name="playback_net_chunk_size">Chunk Size</string>
     <string name="playback_net_chunk_size_sub">Size of each download chunk per connection. Larger chunks reduce overhead but use more memory.</string>
+
+    <!-- Playback diagnostics card -->
+    <string name="diag_last_playback_title">Last Playback Diagnostics</string>
+    <string name="diag_no_data">No playback data yet. Play a stream and return here to see DV decision details for that playback.</string>
+    <string name="diag_section_source_hardware">Source &amp; Hardware</string>
+    <string name="diag_section_source_hardware_sub">Take a photo of this card if reporting an issue.</string>
+    <string name="diag_label_host">Host</string>
+    <string name="diag_label_when">When</string>
+    <string name="diag_label_device">Device</string>
+    <string name="diag_label_display">Display</string>
+    <string name="diag_label_dv7_decoder">DV7 Decoder</string>
+    <string name="diag_label_dv_decoder">DV Decoder</string>
+    <string name="diag_label_dv_bridge">DV Bridge</string>
+    <string name="diag_label_bridge_version">Bridge Version</string>
+    <string name="diag_label_bridge_reason">Bridge Reason</string>
+    <string name="diag_section_decision_settings">Decision &amp; Settings</string>
+    <string name="diag_label_dv_mode_requested">DV Mode (requested)</string>
+    <string name="diag_label_dv_mode_effective">DV Mode (effective)</string>
+    <string name="diag_label_auto_decision">AUTO Decision</string>
+    <string name="diag_label_source_profile">Source Profile</string>
+    <string name="diag_label_conversions">Conversions</string>
+    <string name="diag_label_signal_rewrites">Signal Rewrites</string>
+    <string name="diag_label_custom_buffers">Custom Buffers</string>
+    <string name="diag_label_custom_network_cache">Custom Network/Cache</string>
+    <string name="diag_section_outcome">Outcome</string>
+    <string name="diag_label_hdr_format_intended">HDR Format (intended)</string>
+    <string name="diag_label_first_frame">First Frame</string>
+    <string name="diag_label_rebuffers">Rebuffers</string>
+    <string name="diag_label_result">Result</string>
+    <string name="diag_value_available">Available</string>
+    <string name="diag_value_not_available">Not available</string>
+    <string name="diag_value_none">None</string>
+    <string name="diag_value_ready">Ready</string>
+    <string name="diag_value_not_ready">Not ready</string>
+    <string name="diag_value_decoder_hidden">%1$s (hidden)</string>
+    <string name="diag_value_on">On</string>
+    <string name="diag_value_off">Off</string>
+    <string name="diag_value_conversions_fmt">%1$d of %2$d successful</string>
+    <string name="diag_value_never_rendered">Never rendered</string>
+
+    <!-- Player errors -->
+    <string name="player_error_play_stream_failed">Failed to play selected stream</string>
+
+    <!-- Size and speed units -->
+    <string name="unit_size_b">%1$d B</string>
+    <string name="unit_size_kb">%1$s KB</string>
+    <string name="unit_size_mb">%1$s MB</string>
+    <string name="unit_size_gb">%1$s GB</string>
+    <string name="unit_speed_b_s">%1$d B/s</string>
+    <string name="unit_speed_kb_s">%1$s KB/s</string>
+    <string name="unit_speed_mb_s">%1$s MB/s</string>
+
+    <!-- Misc fallbacks -->
+    <string name="playback_estimated_memory_usage">Estimated memory usage: %1$d / %2$d MB</string>
+    <string name="profile_default_name">Profile %1$d</string>
+    <string name="detail_tmdb_fallback_title">TMDB %1$d</string>
+    <string name="collections_editor_tmdb_collection_fallback">TMDB Collection %1$d</string>
 </resources>

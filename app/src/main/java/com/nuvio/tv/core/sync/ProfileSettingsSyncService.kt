@@ -19,7 +19,7 @@ import com.nuvio.tv.data.local.ProfileDataStoreFactory
 import com.nuvio.tv.data.local.StreamBadgeSettingsDataStore
 import com.nuvio.tv.data.remote.supabase.SupabaseProfileSettingsBlob
 import com.nuvio.tv.domain.model.DiscoverLocation
-import io.github.jan.supabase.postgrest.Postgrest
+import com.nuvio.tv.core.network.SyncBackendSupabaseProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -58,7 +58,6 @@ private const val TAG = "ProfileSettingsSyncService"
 private const val SETTINGS_PUSH_DEBOUNCE_MS = 1500L
 private const val FOREGROUND_PULL_DELAY_MS = 2500L
 private const val FOREGROUND_PULL_MIN_INTERVAL_MS = 60_000L
-private const val SETTINGS_SYNC_PLATFORM = "tv"
 private const val PLAYER_SETTINGS_FEATURE = "player_settings"
 
 private val catalogKeysExcludedFromProfileSettingsBlob = setOf(
@@ -142,10 +141,13 @@ internal fun shouldExcludePreferenceFromProfileSettingsSync(feature: String, key
 @Singleton
 class ProfileSettingsSyncService @Inject constructor(
     private val authManager: AuthManager,
-    private val postgrest: Postgrest,
+    private val supabaseProvider: SyncBackendSupabaseProvider,
     private val profileManager: ProfileManager,
     private val profileDataStoreFactory: ProfileDataStoreFactory
 ) {
+    private val postgrest
+        get() = supabaseProvider.postgrest
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val syncMutex = Mutex()
 
@@ -194,7 +196,6 @@ class ProfileSettingsSyncService @Inject constructor(
                 val params = buildJsonObject {
                     put("p_profile_id", profileId)
                     put("p_settings_json", settingsJson)
-                    put("p_platform", SETTINGS_SYNC_PLATFORM)
                 }
 
                 withJwtRefreshRetry {
@@ -216,7 +217,6 @@ class ProfileSettingsSyncService @Inject constructor(
                 val profileId = profileManager.activeProfileId.value
                 val params = buildJsonObject {
                     put("p_profile_id", profileId)
-                    put("p_platform", SETTINGS_SYNC_PLATFORM)
                 }
 
                 val response = withJwtRefreshRetry {

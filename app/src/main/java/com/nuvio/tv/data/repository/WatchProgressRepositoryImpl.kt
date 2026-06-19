@@ -1,7 +1,9 @@
 package com.nuvio.tv.data.repository
 
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.reco.RecommendationRepository
 import com.nuvio.tv.core.sync.WatchProgressSyncService
 import com.nuvio.tv.core.sync.WatchedItemsSyncService
 import android.util.Log
@@ -61,6 +63,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val metaRepository: MetaRepository,
     private val tmdbService: TmdbService,
     private val profileManager: com.nuvio.tv.core.profile.ProfileManager,
+    private val recommendationRepository: RecommendationRepository,
 ) : WatchProgressRepository {
     companion object {
         private const val TAG = "WatchProgressRepo"
@@ -742,6 +745,26 @@ class WatchProgressRepositoryImpl @Inject constructor(
             if (syncRemote && authManager.isAuthenticated) {
                 triggerWatchedItemsSync(listOf(watchedItem))
             }
+        }
+
+        maybeReportWatchEvent(progress, syncRemote)
+    }
+
+    private fun maybeReportWatchEvent(progress: WatchProgress, syncRemote: Boolean) {
+        if (!syncRemote) return
+        if (BuildConfig.RECO_MODE != "private") return
+        if (!authManager.isAuthenticated) return
+        val tmdbId = progress.contentId.removePrefix("tmdb:").toIntOrNull() ?: return
+        val fraction = if (progress.duration > 0L) {
+            progress.position.toFloat() / progress.duration.toFloat()
+        } else {
+            progress.progressPercent?.div(100f) ?: 0f
+        }
+        if (fraction < 0.8f) return
+        val kind = if (progress.contentType.lowercase() in setOf("series", "tv")) "tv" else "movie"
+        val token = authManager.currentAccessToken() ?: return
+        syncScope.launch(NonCancellable) {
+            recommendationRepository.reportWatched(token, tmdbId, kind, fraction, profileManager.activeProfileId.value.toString(), progress.season, progress.episode)
         }
     }
 

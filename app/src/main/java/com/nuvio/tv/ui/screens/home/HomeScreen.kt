@@ -126,7 +126,10 @@ fun HomeScreen(
         { item: MetaPreview -> latestMovieWatchedStatus.value[homeItemStatusKey(item.id, item.apiType)] == true }
     }
     val onCatalogItemLongPress: (MetaPreview, String) -> Unit = remember {
-        { item, addonBaseUrl -> posterOptionsTarget = HomePosterOptionsTarget(item, addonBaseUrl) }
+        { item, addonBaseUrl ->
+            posterOptionsTarget = HomePosterOptionsTarget(item, addonBaseUrl)
+            viewModel.refreshPosterLibraryStatus(item)
+        }
     }
 
     val onNavigateToDetailStable = remember(onNavigateToDetail) { onNavigateToDetail }
@@ -520,6 +523,9 @@ private fun ClassicHomeRoute(
         },
         onRequestLazyCatalogLoad = remember(viewModel) {
             { catalogKey: String -> viewModel.requestLazyCatalogLoad(catalogKey) }
+        },
+        onCwItemFocused = remember(viewModel) {
+            { index: Int -> viewModel.onCwItemFocused(index) }
         }
     )
 }
@@ -645,6 +651,9 @@ private fun ModernHomeRoute(
         onSaveFocusState = saveModernFocusState,
         onRequestLazyCatalogLoad = remember(viewModel) {
             { catalogKey: String -> viewModel.requestLazyCatalogLoad(catalogKey) }
+        },
+        onCwItemFocused = remember(viewModel) {
+            { index: Int -> viewModel.onCwItemFocused(index) }
         }
     )
 }

@@ -449,6 +449,7 @@ internal fun ModernRowSection(
     onLoadMoreCatalog: (String, String, String) -> Unit,
     onBackdropInteraction: () -> Unit,
     onExpandedCatalogFocusKeyChange: (String?) -> Unit,
+    sharedPlaceholderShimmerOffsetState: State<Float>,
     itemFocusRequesters: StableRef<MutableMap<Int, FocusRequester>> = StableRef(mutableMapOf())
 ) {
     // Unwrap StableRef wrappers
@@ -773,8 +774,6 @@ internal fun ModernRowSection(
             snapshotFlow { expandedCatalogFocusKey.value }
                 .collect { expandedKey ->
                     if (expandedKey == null) return@collect
-                    val lastIndex = row.items.list.lastIndex
-                    if (lastIndex < 0) return@collect
                     // Find the index of the expanded item in this row
                     val expandedIndex = row.items.list.indexOfFirst { item ->
                         when (val p = item.payload) {
@@ -784,8 +783,6 @@ internal fun ModernRowSection(
                         }
                     }
                     if (expandedIndex < 0) return@collect
-                    // Only act on the last two items in the row
-                    if (expandedIndex < lastIndex - 1) return@collect
                     // Small delay so the item is still in visible layout info
                     delay(50)
                     // Calculate overshoot using the known final expanded width rather than
@@ -810,7 +807,7 @@ internal fun ModernRowSection(
             val usesPlaceholderShimmer = row.isLoading &&
                 row.items.list.firstOrNull()?.imageUrl?.startsWith("placeholder://") == true
             val placeholderShimmerOffsetState = if (usesPlaceholderShimmer) {
-                rememberPlaceholderShimmerOffsetState(label = "placeholderShimmer")
+                sharedPlaceholderShimmerOffsetState
             } else {
                 null
             }

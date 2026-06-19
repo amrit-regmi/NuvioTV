@@ -288,6 +288,7 @@ fun PlaybackSettingsContent(
                     coroutineScope.launch { viewModel.setRememberAudioDelayPerDevice(enabled) }
                 },
                 onSetTunnelingEnabled = { enabled -> coroutineScope.launch { viewModel.setTunnelingEnabled(enabled) } },
+                onSetForceOpticalPassthrough = { enabled -> coroutineScope.launch { viewModel.setForceOpticalPassthrough(enabled) } },
                 onShowDv7HandlingModeDialog = { openDialog { showDv7HandlingModeDialog = true } },
                 onSetDv5ToDv81Enabled = { enabled ->
                     coroutineScope.launch { viewModel.setDv5ToDv81Enabled(enabled) }
@@ -296,6 +297,9 @@ fun PlaybackSettingsContent(
                     coroutineScope.launch {
                         viewModel.setDv7ToDv81PreserveMappingEnabled(enabled)
                     }
+                },
+                onSetStripHdr10PlusSei = { enabled ->
+                    coroutineScope.launch { viewModel.setStripHdr10PlusSei(enabled) }
                 },
                 onSetBufferEngineEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setBufferEngineEnabled(enabled) }
@@ -419,7 +423,7 @@ fun PlaybackSettingsContent(
                     .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 Text(
-                    text = "Estimated memory usage: $totalUsageMb / ${MemoryBudget.budgetMb} MB",
+                    text = stringResource(R.string.playback_estimated_memory_usage, totalUsageMb, MemoryBudget.budgetMb),
                     style = MaterialTheme.typography.bodySmall,
                     color = usageColor
                 )

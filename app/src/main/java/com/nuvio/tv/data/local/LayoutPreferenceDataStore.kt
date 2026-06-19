@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.sync.LocalHomeCatalogSettingsState
 import com.nuvio.tv.core.sync.SyncHomeCatalogPayload
@@ -87,6 +88,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val fastHorizontalNavigationEnabledKey = booleanPreferencesKey("fast_horizontal_navigation_enabled")
     private val followAddonsOrderKey = booleanPreferencesKey("follow_addons_order")
     private val composeHighlighterEnabledKey = booleanPreferencesKey("compose_highlighter_enabled")
+    private val recoRowDescriptorsJsonKey = stringPreferencesKey("reco_row_descriptors")
 
     private fun <T> profileFlow(extract: (prefs: androidx.datastore.preferences.core.Preferences) -> T): Flow<T> =
         profileManager.activeProfileId.flatMapLatest { pid ->
@@ -139,6 +141,10 @@ class LayoutPreferenceDataStore @Inject constructor(
         factory.get(effectivePid, FEATURE).data.map { prefs ->
             parseCatalogKeys(prefs[disabledHomeCatalogKeysKey])
         }
+    }
+
+    val recoRowDescriptors: Flow<List<RecoRowDescriptor>> = profileFlow { prefs ->
+        parseRecoDescriptors(prefs[recoRowDescriptorsJsonKey])
     }
 
     val customCatalogTitles: Flow<Map<String, String>> = profileManager.activeProfileId.flatMapLatest { pid ->
@@ -281,7 +287,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val preferExternalMetaAddonDetail: Flow<Boolean> = profileFlow { prefs ->
-        prefs[preferExternalMetaAddonDetailKey] ?: true
+        prefs[preferExternalMetaAddonDetailKey] ?: (BuildConfig.RECO_MODE != "private")
     }
 
     val hideUnreleasedContent: Flow<Boolean> = profileFlow { prefs ->
@@ -393,6 +399,16 @@ class LayoutPreferenceDataStore @Inject constructor(
                 prefs.remove(disabledHomeCatalogKeysKey)
             } else {
                 prefs[disabledHomeCatalogKeysKey] = gson.toJson(normalizedKeys)
+            }
+        }
+    }
+
+    suspend fun setRecoRowDescriptors(descriptors: List<RecoRowDescriptor>) {
+        store().edit { prefs ->
+            if (descriptors.isEmpty()) {
+                prefs.remove(recoRowDescriptorsJsonKey)
+            } else {
+                prefs[recoRowDescriptorsJsonKey] = gson.toJson(descriptors)
             }
         }
     }
@@ -591,6 +607,16 @@ class LayoutPreferenceDataStore @Inject constructor(
         }
     }
 
+    private fun parseRecoDescriptors(json: String?): List<RecoRowDescriptor> {
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            val type = object : TypeToken<List<RecoRowDescriptor>>() {}.type
+            gson.fromJson<List<RecoRowDescriptor>>(json, type).orEmpty()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     private fun parseCatalogKeys(json: String?): List<String> {
         if (json.isNullOrBlank()) return emptyList()
         return try {
@@ -663,6 +689,7 @@ class LayoutPreferenceDataStore @Inject constructor(
         }.filterValues { it.isNotBlank() }
 
         store().edit { prefs ->
+            prefs[hideUnreleasedContentKey] = payload.hideUnreleasedContent
             if (orderKeys.isNotEmpty()) {
                 prefs[homeCatalogOrderKeysKey] = gson.toJson(orderKeys)
             } else {
@@ -685,10 +712,13 @@ class LayoutPreferenceDataStore @Inject constructor(
         return LocalHomeCatalogSettingsState(
             orderKeys = parseCatalogKeys(prefs[homeCatalogOrderKeysKey]),
             disabledKeys = parseCatalogKeys(prefs[disabledHomeCatalogKeysKey]).toSet(),
-            customTitles = parseCustomTitles(prefs[customCatalogTitlesKey])
+            customTitles = parseCustomTitles(prefs[customCatalogTitlesKey]),
+            hideUnreleasedContent = prefs[hideUnreleasedContentKey] ?: false
         )
     }
 }
+
+data class RecoRowDescriptor(val key: String, val label: String)
 
 internal val legacySearchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
 internal val discoverLocationKey = stringPreferencesKey("discover_location")

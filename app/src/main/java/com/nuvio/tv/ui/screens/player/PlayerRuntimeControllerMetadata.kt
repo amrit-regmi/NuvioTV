@@ -176,6 +176,7 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
             clearNextEpisodeAndCancelPostPlay()
             return
         }
+        streamWarmer.warm(contentType ?: "other", resolvedNext.id)
         val nextInfo = NextEpisodeInfo(
             videoId = resolvedNext.id,
             season = resolvedNext.season ?: 1,
@@ -211,6 +212,8 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
         clearNextEpisodeAndCancelPostPlay()
         return
     }
+    // Pre-warm streams for the next episode the moment we know what it is.
+    streamWarmer.warm(contentType ?: "series", resolvedNext.id)
 
     val hasAired = PlayerNextEpisodeRules.hasEpisodeAired(resolvedNext.released)
     val nextInfo = NextEpisodeInfo(

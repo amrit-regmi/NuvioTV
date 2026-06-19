@@ -7,6 +7,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
 import com.nuvio.tv.core.debrid.DirectDebridResolver
 import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
+import com.nuvio.tv.core.player.PlayerPreWarmer
+import com.nuvio.tv.core.stream.StreamWarmer
+import com.nuvio.tv.core.subtitle.SubtitleWarmer
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.torrent.TorrentService
 import com.nuvio.tv.core.torrent.TorrentSettings
@@ -62,6 +65,9 @@ class PlayerViewModel @Inject constructor(
     private val trailerPlayerPool: com.nuvio.tv.core.player.TrailerPlayerPool,
     private val directDebridResolver: DirectDebridResolver,
     private val directDebridStreamPreparer: DirectDebridStreamPreparer,
+    private val subtitleWarmer: SubtitleWarmer,
+    private val playerPreWarmer: PlayerPreWarmer,
+    private val streamWarmer: StreamWarmer,
     private val streamBadgePresentation: com.nuvio.tv.core.streams.StreamBadgePresentation,
     private val externalPlaybackTracker: com.nuvio.tv.core.player.ExternalPlaybackTracker,
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
@@ -102,6 +108,9 @@ class PlayerViewModel @Inject constructor(
         tmdbSettingsDataStore = tmdbSettingsDataStore,
         directDebridResolver = directDebridResolver,
         directDebridStreamPreparer = directDebridStreamPreparer,
+        subtitleWarmer = subtitleWarmer,
+        playerPreWarmer = playerPreWarmer,
+        streamWarmer = streamWarmer,
         streamBadgePresentation = streamBadgePresentation,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope

@@ -1,5 +1,6 @@
 package com.nuvio.tv.data.local
 
+import com.nuvio.tv.BuildConfig
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -221,8 +222,14 @@ class AddonPreferences @Inject constructor(
         }
     }
 
-    private fun getDefaultAddons(): Set<String> = setOf(
-        "https://v3-cinemeta.strem.io",
-        "https://opensubtitles-v3.strem.io"
-    )
+    private fun getDefaultAddons(): Set<String> {
+        val defaults = mutableSetOf(
+            "https://v3-cinemeta.strem.io",
+            "https://opensubtitles-v3.strem.io"
+        )
+        if (BuildConfig.RECO_MODE == "private") {
+            defaults.add("https://recoengine.regmig.com/catalog-addon")
+        }
+        return defaults
+    }
 }

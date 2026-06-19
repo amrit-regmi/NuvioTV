@@ -3,12 +3,13 @@ package com.nuvio.tv.core.sync
 import android.util.Log
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.core.reco.RecommendationRepository
 import com.nuvio.tv.data.local.ProfileDataStore
 import com.nuvio.tv.data.remote.supabase.SupabaseProfileLockState
 import com.nuvio.tv.data.remote.supabase.SupabaseProfile
 import com.nuvio.tv.data.remote.supabase.SupabaseProfilePinVerifyResult
 import com.nuvio.tv.domain.model.UserProfile
-import io.github.jan.supabase.postgrest.Postgrest
+import com.nuvio.tv.core.network.SyncBackendSupabaseProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.addJsonObject
@@ -29,10 +30,14 @@ sealed class SetProfilePinResult {
 @Singleton
 class ProfileSyncService @Inject constructor(
     private val authManager: AuthManager,
-    private val postgrest: Postgrest,
+    private val supabaseProvider: SyncBackendSupabaseProvider,
     private val profileDataStore: ProfileDataStore,
-    private val profileManager: ProfileManager
+    private val profileManager: ProfileManager,
+    private val recommendationRepository: RecommendationRepository,
 ) {
+    private val postgrest
+        get() = supabaseProvider.postgrest
+
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
         return try {
             block()
@@ -109,14 +114,37 @@ class ProfileSyncService @Inject constructor(
 
     suspend fun deleteProfileData(profileId: Int): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            // Resolve Supabase profile UUID before deleting, so we can notify taste-engine
+            val profileUuid: String? = runCatching {
+                val resp = withJwtRefreshRetry {
+                    postgrest.rpc("sync_pull_profiles")
+                }
+                resp.decodeList<SupabaseProfile>()
+                    .firstOrNull { it.profileIndex == profileId }?.id
+            }.getOrNull()
+
             val params = buildJsonObject {
                 put("p_profile_id", profileId)
             }
             withJwtRefreshRetry {
                 postgrest.rpc("sync_delete_profile_data", params)
             }
-
             Log.d(TAG, "Deleted remote data for profile $profileId")
+
+            // Notify taste-engine to purge all personalized data for this profile.
+            // Training contributions (ALS item factors) are preserved on the backend.
+            if (profileUuid != null) {
+                val jwt = authManager.currentAccessToken()
+                if (jwt != null) {
+                    val purged = recommendationRepository.deleteProfile(jwt, profileUuid)
+                    Log.d(TAG, "Purged taste-engine data for profile $profileUuid: success=$purged")
+                } else {
+                    Log.w(TAG, "No JWT available — taste-engine data not purged for profile $profileUuid")
+                }
+            } else {
+                Log.w(TAG, "Could not resolve profile UUID for profileId=$profileId — taste-engine data not purged")
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to delete remote profile data for profile $profileId", e)

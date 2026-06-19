@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
+import com.nuvio.tv.core.reco.RecoMetadataService
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,6 +22,7 @@ import javax.inject.Inject
 class CastDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val tmdbMetadataService: TmdbMetadataService,
+    private val recoMetadataService: RecoMetadataService,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
     savedStateHandle: SavedStateHandle
@@ -47,11 +50,25 @@ class CastDetailViewModel @Inject constructor(
     private fun loadPersonDetail() {
         viewModelScope.launch {
             try {
-                val detail = tmdbMetadataService.fetchPersonDetail(
-                    personId = personId,
-                    preferCrewCredits = preferCrew,
-                    language = tmdbSettingsDataStore.settings.first().language
-                )
+                val language = tmdbSettingsDataStore.settings.first().language
+                val detail = if (BuildConfig.RECO_MODE == "private") {
+                    // Try reco engine first; fall back to TMDB if person not in our DB
+                    recoMetadataService.fetchPersonDetail(
+                        personId = personId,
+                        preferCrewCredits = preferCrew,
+                        language = language
+                    ) ?: tmdbMetadataService.fetchPersonDetail(
+                        personId = personId,
+                        preferCrewCredits = preferCrew,
+                        language = language
+                    )
+                } else {
+                    tmdbMetadataService.fetchPersonDetail(
+                        personId = personId,
+                        preferCrewCredits = preferCrew,
+                        language = language
+                    )
+                }
                 if (detail != null) {
                     _uiState.value = CastDetailUiState.Success(detail)
                 } else {

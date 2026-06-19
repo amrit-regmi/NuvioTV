@@ -114,7 +114,9 @@ fun ModernHomeContent(
     onSaveFocusState: (Int, Int, String?, Map<String, String>, Map<String, Int>, Int, Int) -> Unit,
     scrollToTopTrigger: Int = 0,
     onRequestLazyCatalogLoad: (String) -> Unit = {},
-    onRowItemFocusedCallback: (String, Int, Boolean) -> Unit = { _, _, _ -> }
+    onRowItemFocusedCallback: (String, Int, Boolean) -> Unit = { _, _, _ -> },
+    onCwItemFocused: (Int) -> Unit = {},
+    blockLeftOnFirstExpandedItem: Boolean = false
 ) {
     val onRowItemFocusedPassedDown = rememberUpdatedState(onRowItemFocusedCallback)
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
@@ -591,8 +593,10 @@ fun ModernHomeContent(
                             description = enrichedItem.description,
                             contentTypeText = activeCarouselItem?.heroPreview?.contentTypeText,
                             isSeries = isSeriesType(enrichedItem.apiType),
-                            yearText = activeCarouselItem?.heroPreview?.yearText,
-                            runtimeText = activeCarouselItem?.heroPreview?.runtimeText,
+                            yearText = extractYearText(enrichedItem.type, enrichedItem.releaseInfo, enrichedItem.released)
+                                ?: activeCarouselItem?.heroPreview?.yearText,
+                            runtimeText = formatHeroRuntime(enrichedItem.runtime)
+                                ?: activeCarouselItem?.heroPreview?.runtimeText,
                             imdbText = enrichedItem.imdbRating?.let { String.format(java.util.Locale.US, "%.1f", it) },
                             ageRatingText = enrichedItem.ageRating,
                             statusText = enrichedItem.status,
@@ -670,33 +674,36 @@ fun ModernHomeContent(
                 val url = collectionHeroVideoUrl?.takeIf { it.isNotBlank() }
                 if (focusKey != null && url != null) "$focusKey::${focusedHeroMediaNonce.intValue}::$url" else null
             }
+            val isScrollStoppedState = remember(verticalRowListState) {
+                derivedStateOf { !verticalRowListState.isScrollInProgress }
+            }
             val shouldPlayCatalogHeroTrailerState = remember(
+                isScrollStoppedState,
                 effectiveAutoplayEnabled,
                 trailerPlaybackTarget,
                 heroTrailerUrlsState,
-                verticalRowListState,
                 isSidebarExpanded,
                 isRapidHorizontalNav
             ) {
                 derivedStateOf {
-                    effectiveAutoplayEnabled &&
+                    isScrollStoppedState.value &&
+                        effectiveAutoplayEnabled &&
                         !isSidebarExpanded.value &&
                         !isRapidHorizontalNav.value &&
-                        !verticalRowListState.isScrollInProgress &&
                         trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
                         !heroTrailerUrlsState.value.first.isNullOrBlank()
                 }
             }
             val shouldPlayCollectionHeroVideoState = remember(
+                isScrollStoppedState,
                 collectionHeroVideoUrl,
                 collectionHeroVideoPlaybackKey,
                 endedCollectionHeroVideoPlaybackKey,
-                verticalRowListState,
                 isSidebarExpanded
             ) {
                 derivedStateOf {
-                    !isSidebarExpanded.value &&
-                        !verticalRowListState.isScrollInProgress &&
+                    isScrollStoppedState.value &&
+                        !isSidebarExpanded.value &&
                         !collectionHeroVideoUrl.isNullOrBlank() &&
                         collectionHeroVideoPlaybackKey != null &&
                         endedCollectionHeroVideoPlaybackKey != collectionHeroVideoPlaybackKey
@@ -723,7 +730,7 @@ fun ModernHomeContent(
                 heroTrailerFirstFrameRendered = false
             }
 
-            val isTrailerPlayingFullscreenState = remember(fullScreenBackdrop, shouldPlayCatalogHeroTrailerState, heroTrailerFirstFrameRendered) {
+            val isTrailerPlayingFullscreenState = remember(fullScreenBackdrop, shouldPlayCatalogHeroTrailerState) {
                 derivedStateOf { fullScreenBackdrop && shouldPlayCatalogHeroTrailerState.value && heroTrailerFirstFrameRendered }
             }
             BackHandler(enabled = isTrailerPlayingFullscreenState.value) {
@@ -733,7 +740,6 @@ fun ModernHomeContent(
             val liveHeroSceneState = remember(
                 resolvedHeroState,
                 shouldPlayHeroTrailerState,
-                heroTrailerFirstFrameRendered,
                 heroMediaDataState,
                 heroMediaMutedState,
                 fullScreenBackdrop
@@ -967,7 +973,8 @@ fun ModernHomeContent(
             val onActiveItemIndexChangeLambda = remember { { index: Int -> focusHolder.activeItemIndex = index; activeItemIndex.intValue = index } }
             val onLastHeroNavigationAtMsChangeLambda = remember { { ms: Long -> lastHeroNavigationAtMs.longValue = ms } }
             val onHeroFocusSettleDelayChangeLambda = remember { { delay: Long -> heroFocusSettleDelayMs.longValue = delay } }
-            val onLastFocusedContinueWatchingIndexChangeLambda = remember { { index: Int -> lastFocusedContinueWatchingIndex.intValue = index } }
+            val onCwItemFocusedUpdated = rememberUpdatedState(onCwItemFocused)
+            val onLastFocusedContinueWatchingIndexChangeLambda = remember { { index: Int -> lastFocusedContinueWatchingIndex.intValue = index; onCwItemFocusedUpdated.value.invoke(index) } }
             val onFocusedCatalogSelectionChangeLambda = remember { { selection: FocusedCatalogSelection? -> focusedCatalogSelection.value = selection } }
             val onFocusedHeroMediaNonceChangeLambda = remember { { nonce: Int -> focusedHeroMediaNonce.intValue = nonce } }
             val onExpansionInteractionNonceChangeLambda = remember { { nonce: Int -> expansionInteractionNonce.intValue = nonce } }
@@ -1066,6 +1073,7 @@ fun ModernHomeContent(
                 focusedHeroMediaNonce = focusedHeroMediaNonce,
                 onFocusedHeroMediaNonceChange = onFocusedHeroMediaNonceChangeLambda,
                 onExpansionInteractionNonceChange = onExpansionInteractionNonceChangeLambda,
+                blockLeftOnFirstExpandedItem = blockLeftOnFirstExpandedItem,
                 isVerticalRowsScrollingState = isVerticalRowsScrollingState,
                 modifier = Modifier.align(Alignment.BottomStart)
             )

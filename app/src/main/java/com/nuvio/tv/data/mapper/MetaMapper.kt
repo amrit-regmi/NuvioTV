@@ -5,8 +5,10 @@ import com.nuvio.tv.data.remote.dto.MetaLinkDto
 import com.nuvio.tv.data.remote.dto.VideoDto
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
+import com.nuvio.tv.domain.model.MetaCompany
 import com.nuvio.tv.domain.model.MetaLink
 import com.nuvio.tv.domain.model.PosterShape
+import com.nuvio.tv.domain.model.StreamStatus
 import com.nuvio.tv.domain.model.Video
 
 fun MetaDto.toDomain(episodeLabel: String = "Episode"): Meta {
@@ -43,9 +45,9 @@ fun MetaDto.toDomain(episodeLabel: String = "Episode"): Meta {
         cast = castList,
         castMembers = directorMembers + writerMembers + castMembers,
         videos = videos?.map { it.toDomain(episodeLabel) } ?: emptyList(),
-        productionCompanies = emptyList(),
+        productionCompanies = productionCompanies?.map { MetaCompany(name = it.name, logo = it.logo, tmdbId = it.id) } ?: emptyList(),
         networks = emptyList(),
-        ageRating = appExtras?.certification?.takeIf { it.isNotBlank() },
+        ageRating = (appExtras?.certification ?: certification)?.takeIf { it.isNotBlank() },
         country = country,
         awards = awards,
         language = language,
@@ -60,7 +62,8 @@ fun MetaDto.toDomain(episodeLabel: String = "Episode"): Meta {
         hasLandscapePoster = hasLandscapePoster,
         hasLogo = hasLogo,
         hasLinks = hasLinks,
-        hasVideos = hasVideos
+        hasVideos = hasVideos,
+        streamStatus = StreamStatus.fromString(streamStatus)
     )
 }
 

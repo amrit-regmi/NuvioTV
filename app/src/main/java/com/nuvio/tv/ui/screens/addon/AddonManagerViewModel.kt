@@ -46,6 +46,7 @@ import com.nuvio.tv.domain.model.TmdbCollectionSource
 import com.nuvio.tv.domain.model.TmdbCollectionSourceType
 import com.nuvio.tv.domain.model.TraktCollectionSource
 import com.nuvio.tv.domain.model.enabledAddons
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -99,6 +100,9 @@ class AddonManagerViewModel @Inject constructor(
     private var disabledHomeCatalogKeys: Set<String> = emptySet()
     private var followAddonsOrderEnabled: Boolean = false
     private var currentCollections: List<Collection> = emptyList()
+    // Full addon list including the built-in catalog-addon (used for catalog ordering only;
+    // the catalog-addon is excluded from installedAddons to hide it from addon management).
+    private var allAddons: List<Addon> = emptyList()
 
     init {
         observeInstalledAddons()
@@ -210,12 +214,20 @@ class AddonManagerViewModel @Inject constructor(
     }
 
     fun removeAddon(baseUrl: String) {
+        if (BuildConfig.RECO_MODE == "private" &&
+                baseUrl.contains("recoengine.regmig.com/catalog-addon", ignoreCase = true)) {
+            return
+        }
         viewModelScope.launch {
             addonRepository.removeAddon(baseUrl)
         }
     }
 
     fun setAddonEnabled(baseUrl: String, enabled: Boolean) {
+        if (BuildConfig.RECO_MODE == "private" &&
+                baseUrl.contains("recoengine.regmig.com/catalog-addon", ignoreCase = true)) {
+            return
+        }
         viewModelScope.launch {
             addonRepository.setAddonEnabled(baseUrl, enabled)
         }
@@ -262,7 +274,7 @@ class AddonManagerViewModel @Inject constructor(
             currentPageStateProvider = {
                 val addons = _uiState.value.installedAddons
                 val orderedCatalogs = buildOrderedCatalogEntries(
-                    addons = addons.enabledAddons(),
+                    addons = allAddons.enabledAddons(),
                     savedOrderKeys = homeCatalogOrderKeys,
                     disabledKeys = disabledHomeCatalogKeys
                 )
@@ -497,7 +509,7 @@ class AddonManagerViewModel @Inject constructor(
         val currentUrls = _uiState.value.installedAddons.map { normalizeUrlForComparison(it.baseUrl) }.toSet()
         val proposedNormalized = change.proposedUrls.map { normalizeUrlForComparison(it) }.toSet()
         val currentCatalogEntries = buildOrderedCatalogEntries(
-            addons = _uiState.value.installedAddons.enabledAddons(),
+            addons = allAddons.enabledAddons(),
             savedOrderKeys = homeCatalogOrderKeys,
             disabledKeys = disabledHomeCatalogKeys
         )
@@ -801,9 +813,14 @@ class AddonManagerViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, error = error.message) }
                 }
                 .collect { addons ->
+                    allAddons = addons
                     _uiState.update { state ->
                         state.copy(
-                            installedAddons = addons,
+                            installedAddons = addons.filter { addon ->
+                                !addon.baseUrl.contains("recoengine.regmig.com/catalog-addon", ignoreCase = true) &&
+                                !(BuildConfig.CATALOG_ADDON_BASE_URL.isNotBlank() &&
+                                  addon.baseUrl.trim().lowercase().contains(BuildConfig.CATALOG_ADDON_BASE_URL.trim().lowercase()))
+                            },
                             isLoading = false,
                             error = null
                         )

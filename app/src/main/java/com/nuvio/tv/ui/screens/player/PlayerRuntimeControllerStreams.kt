@@ -90,9 +90,14 @@ internal fun PlayerRuntimeController.scheduleEpisodeBadgeApplication() {
     }
 }
 
-private fun Stream.sourceBadgeMergeKey(): String =
-    infoHash?.lowercase()?.let { "$addonName|$it:${fileIdx ?: ""}" }
-        ?: "$addonName|${getStreamUrl() ?: "${name}:${title}"}"
+private fun Stream.sourceBadgeMergeKey(): String {
+    infoHash?.lowercase()?.let { return "$addonName|$it:${fileIdx ?: ""}" }
+    val playableUrl = url ?: clientResolve?.let { resolve ->
+        resolve.stream?.raw?.filename ?: resolve.infoHash
+    }
+    if (playableUrl != null) return "$addonName|$playableUrl"
+    return "$addonName|${name}:${title}:${description?.hashCode() ?: 0}"
+}
 
 internal fun PlayerRuntimeController.showEpisodesPanel() {
     _uiState.update {
@@ -327,6 +332,12 @@ private fun PlayerRuntimeController.launchSourceDebridPreparationIfNeeded(
             playerSettings = playerSettings,
             installedAddonNames = installedAddonNames
         ) { original, prepared ->
+            subtitleWarmer.warm(
+                type = contentType ?: return@prepare,
+                videoId = currentVideoId ?: contentId ?: return@prepare,
+                filename = prepared.behaviorHints?.filename,
+                videoSize = prepared.behaviorHints?.videoSize
+            )
             replacePreparedSourceStream(original, prepared)
         }
     }
@@ -566,7 +577,7 @@ private fun PlayerRuntimeController.persistTorrentStreamForReuse(stream: Stream)
     if (!streamReuseLastLinkEnabled) return
 
     val key = streamCacheKey ?: return
-    val infoHash = stream.infoHash ?: return
+    val infoHash = stream.getEffectiveInfoHash() ?: return
     val streamName = (stream.name?.takeIf { it.isNotBlank() } ?: stream.addonName)?.takeIf { it.isNotBlank() }
         ?: title
 
@@ -580,7 +591,7 @@ private fun PlayerRuntimeController.persistTorrentStreamForReuse(stream: Stream)
             videoHash = stream.behaviorHints?.videoHash,
             videoSize = stream.behaviorHints?.videoSize,
             infoHash = infoHash,
-            fileIdx = stream.fileIdx,
+            fileIdx = stream.getEffectiveFileIdx(),
             sources = stream.sources,
             bingeGroup = stream.behaviorHints?.bingeGroup,
             contentLanguage = contentLanguage,
@@ -777,7 +788,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
                 player.playWhenReady = true
                 player.prepare()
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to play selected stream") }
+                _uiState.update { it.copy(error = e.message ?: context.getString(com.nuvio.tv.R.string.player_error_play_stream_failed)) }
             }
         }
     } ?: run {
@@ -822,7 +833,7 @@ internal fun PlayerRuntimeController.selectEpisodesSeason(season: Int) {
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun PlayerRuntimeController.switchToTorrentSourceStream(stream: Stream) {
-    val infoHash = stream.infoHash ?: return
+    val infoHash = stream.getEffectiveInfoHash() ?: return
     sourceStreamsScope?.cancel()
     sourceStreamsScope = null
     sourceStreamsJob = null
@@ -867,7 +878,7 @@ private fun PlayerRuntimeController.switchToTorrentEpisodeStream(
     forcedTargetVideo: Video?,
     isAutoPlay: Boolean
 ) {
-    val infoHash = stream.infoHash ?: return
+    val infoHash = stream.getEffectiveInfoHash() ?: return
     consecutiveAutoPlayCount = nextConsecutiveAutoPlayCount(
         currentCount = consecutiveAutoPlayCount,
         isAutoPlay = isAutoPlay
@@ -1077,6 +1088,12 @@ private fun PlayerRuntimeController.launchEpisodeDebridPreparationIfNeeded(
             playerSettings = playerSettings,
             installedAddonNames = installedAddonNames
         ) { original, prepared ->
+            subtitleWarmer.warm(
+                type = contentType ?: return@prepare,
+                videoId = currentVideoId ?: contentId ?: return@prepare,
+                filename = prepared.behaviorHints?.filename,
+                videoSize = prepared.behaviorHints?.videoSize
+            )
             replacePreparedEpisodeStream(original, prepared)
         }
     }
@@ -1436,6 +1453,7 @@ internal suspend fun PlayerRuntimeController.resolveDirectDebridStreamIfNeeded(
         is DirectDebridPlayableResult.Success -> result.stream
         DirectDebridPlayableResult.MissingApiKey,
         DirectDebridPlayableResult.NotCached,
+        DirectDebridPlayableResult.RateLimited,
         DirectDebridPlayableResult.Stale,
         DirectDebridPlayableResult.Error -> null
     }

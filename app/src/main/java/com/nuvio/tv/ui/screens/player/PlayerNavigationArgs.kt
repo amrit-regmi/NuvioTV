@@ -32,6 +32,7 @@ internal data class PlayerNavigationArgs(
     val fileIdx: Int?,
     val sourcesJson: String?,
     val contentLanguage: String?,
+    val isAutoPlay: Boolean,
     val rememberedAudioLanguage: String?,
     val rememberedAudioName: String?
 ) {
@@ -89,6 +90,7 @@ internal data class PlayerNavigationArgs(
                 fileIdx = savedStateHandle.get<String>("fileIdx")?.toIntOrNull(),
                 sourcesJson = decodedOrNull("sources"),
                 contentLanguage = decodedOrNull("contentLanguage"),
+                isAutoPlay = savedStateHandle.get<String>("autoPlayNav")?.toBooleanStrictOrNull() == true,
                 rememberedAudioLanguage = decodedOrNull("rememberedAudioLanguage"),
                 rememberedAudioName = decodedOrNull("rememberedAudioName")
             )
