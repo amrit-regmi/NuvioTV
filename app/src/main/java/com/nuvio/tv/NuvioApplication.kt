@@ -100,7 +100,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                                 // TMDB and every other image host are left untouched.
                                 .addInterceptor(
                                     com.nuvio.tv.core.reco.RecoAuthInterceptor(
-                                        recoAuthTokenProvider
+                                        { recoAuthTokenProvider }
                                     )
                                 )
                                 .build()

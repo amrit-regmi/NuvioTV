@@ -9,8 +9,8 @@ import okhttp3.Response
  *
  * Why a host-scoped interceptor: the shared [okhttp3.OkHttpClient] is used by many
  * APIs (TMDB, Trakt, GitHub, …). After the F32 cutover the reco backend requires the
- * Nuvio bearer token in private mode on ALL metadata/data endpoints (`/reco/*`,
- * `/people/*`, `/titles/*`, `/companies/*`, `/metadata/*`, `/resolve/*`,
+ * Nuvio bearer token in private mode on ALL metadata/data endpoints (`/reco/...`,
+ * `/people/...`, `/titles/...`, `/companies/...`, `/metadata/...`, `/resolve/...`,
  * `/api/unique-contributions`, `/api/onboarding/candidates`, …). Doing this once here
  * covers every current and future reco call uniformly, instead of editing each call
  * site. See api_bridge.md "F32 — Private-mode metadata lock".
@@ -23,13 +23,17 @@ import okhttp3.Response
  *   double-headed).
  * - Skips the genuinely-public endpoints that must stay anonymous:
  *   `/health` and the catalog-addon Stremio routes (gated by CATALOG_SECRET, not the
- *   user token). `/image/*` and `/metadata/images/*` are NOT skipped here — they are an
+ *   user token). `/image/...` and `/metadata/images/...` are NOT skipped here — they are an
  *   image proxy that the Coil loader authenticates separately; attaching the token when
  *   present is harmless for them.
  * - Skips when there is no token (signed out): the request goes out unauthenticated.
  */
 class RecoAuthInterceptor(
-    private val tokenProvider: RecoAuthTokenProvider,
+    // Supplier (not the instance) so this interceptor can be wired into the shared
+    // OkHttpClient without forcing eager construction of [RecoAuthTokenProvider] —
+    // its dependency subgraph transitively needs OkHttpClient, which would otherwise
+    // create a Hilt dependency cycle. Resolved lazily on first request.
+    private val tokenProvider: () -> RecoAuthTokenProvider,
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -51,7 +55,7 @@ class RecoAuthInterceptor(
             return chain.proceed(request)
         }
 
-        val token = tokenProvider.currentToken()
+        val token = tokenProvider().currentToken()
             ?: return chain.proceed(request)
 
         return chain.proceed(
@@ -65,3 +69,4 @@ class RecoAuthInterceptor(
         path == "/health" ||
             path.startsWith("/catalog-addon")
 }
+

@@ -213,7 +213,7 @@ android {
             // truth for the reco/taste-engine host. All app code derives from BuildConfig.RECO_API_BASE_URL
             // (directly, or via com.nuvio.tv.core.reco.RecoBackend for host/catalog-addon matching).
             buildConfigField("String", "RECO_API_BASE_URL",
-                "\"${localProperties.getProperty("RECO_API_BASE_URL", "https://recoengine.regmig.com")}\"")
+                "\"${localProperties.getProperty("RECO_API_BASE_URL", "https://hamrocinema.regmig.com")}\"")
             buildConfigField("String", "RECO_MODE",
                 "\"${localProperties.getProperty("RECO_MODE", "private")}\"")
             buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
@@ -255,7 +255,7 @@ android {
             // truth for the reco/taste-engine host. All app code derives from BuildConfig.RECO_API_BASE_URL
             // (directly, or via com.nuvio.tv.core.reco.RecoBackend for host/catalog-addon matching).
             buildConfigField("String", "RECO_API_BASE_URL",
-                "\"${localProperties.getProperty("RECO_API_BASE_URL", "https://recoengine.regmig.com")}\"")
+                "\"${localProperties.getProperty("RECO_API_BASE_URL", "https://hamrocinema.regmig.com")}\"")
             buildConfigField("String", "RECO_MODE",
                 "\"${localProperties.getProperty("RECO_MODE", "private")}\"")
             buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
