@@ -5,6 +5,7 @@ import android.util.Log
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.network.safeApiCall
+import com.nuvio.tv.core.reco.RecoBackend
 import com.nuvio.tv.data.mapper.toDomain
 import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.CatalogRow
@@ -17,7 +18,8 @@ import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val BACKEND_ADDON_HOST = "recoengine.regmig.com"
+// F32: single source of truth — derives from BuildConfig.RECO_API_BASE_URL via RecoBackend.
+private val BACKEND_ADDON_HOST = RecoBackend.host
 
 @Singleton
 class CatalogRepositoryImpl @Inject constructor(

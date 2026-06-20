@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.core.reco.RecoBackend
 import com.nuvio.tv.core.sync.AddonSyncService
 import javax.inject.Inject
 
@@ -47,7 +48,8 @@ class AddonRepositoryImpl @Inject constructor(
         private const val LEGACY_MANIFEST_CACHE_KEY = "manifests"
         private const val MANIFEST_SUFFIX = "/manifest.json"
         private const val MANIFEST_CACHE_TTL_MS = 6 * 60 * 60 * 1000L
-        private const val BACKEND_ADDON_HOST = "recoengine.regmig.com"
+        // F32: single source of truth — derives from BuildConfig.RECO_API_BASE_URL via RecoBackend.
+        private val BACKEND_ADDON_HOST = RecoBackend.host
     }
 
     private fun catalogAuthHeader(url: String): String? {
@@ -170,12 +172,12 @@ class AddonRepositoryImpl @Inject constructor(
 
                 // In private mode, the catalog-addon is always-on regardless of user preferences.
                 val effectiveUrls = if (BuildConfig.RECO_MODE == "private") {
-                    val catalogCanonical = canonicalizeUrl("https://recoengine.regmig.com/catalog-addon")
+                    val catalogCanonical = canonicalizeUrl(RecoBackend.catalogAddonUrl)
                     if (urls.none { canonicalizeUrl(it) == catalogCanonical }) listOf(catalogCanonical) + urls
                     else urls
                 } else urls
                 val effectiveEnabledByUrl = if (BuildConfig.RECO_MODE == "private") {
-                    val catalogCanonical = canonicalizeUrl("https://recoengine.regmig.com/catalog-addon")
+                    val catalogCanonical = canonicalizeUrl(RecoBackend.catalogAddonUrl)
                     enabledByUrl + mapOf(catalogCanonical to true)
                 } else enabledByUrl
 
@@ -327,7 +329,7 @@ class AddonRepositoryImpl @Inject constructor(
 
 
         val effectiveFinalList = if (BuildConfig.RECO_MODE == "private") {
-            val privateUrl = canonicalizeUrl("https://recoengine.regmig.com/catalog-addon")
+            val privateUrl = canonicalizeUrl(RecoBackend.catalogAddonUrl)
             if (finalList.none { normalizeUrl(it) == normalizeUrl(privateUrl) }) {
                 listOf(privateUrl) + finalList
             } else finalList

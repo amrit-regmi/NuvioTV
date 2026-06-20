@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.core.reco.RecoBackend
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -228,7 +229,8 @@ class AddonPreferences @Inject constructor(
             "https://opensubtitles-v3.strem.io"
         )
         if (BuildConfig.RECO_MODE == "private") {
-            defaults.add("https://recoengine.regmig.com/catalog-addon")
+            // F32: catalog-addon URL derives from BuildConfig.RECO_API_BASE_URL via RecoBackend.
+            defaults.add(RecoBackend.catalogAddonUrl)
         }
         return defaults
     }

@@ -12,6 +12,7 @@ import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.network.safeApiCall
 import com.nuvio.tv.core.player.FrameRateUtils
 import com.nuvio.tv.core.player.PlayerPreWarmer
+import com.nuvio.tv.core.reco.RecoBackend
 import com.nuvio.tv.data.local.DebridSettingsDataStore
 import com.nuvio.tv.data.mapper.toDomain
 import com.nuvio.tv.core.subtitle.SubtitleWarmer
@@ -53,8 +54,9 @@ private const val BACKGROUND_PROBE_COUNT = 3
 // Real video files are always larger. Any Content-Range total below this threshold is a stub.
 private const val MIN_REAL_VIDEO_BYTES = 1L * 1024 * 1024
 // The backend catalog-addon host is always placed first in addon ordering.
-// This mirrors the default entry in AddonPreferences (recoengine.regmig.com/catalog-addon).
-private const val BACKEND_ADDON_HOST = "recoengine.regmig.com"
+// This mirrors the default entry in AddonPreferences (the catalog-addon on the reco host).
+// F32: single source of truth — derives from BuildConfig.RECO_API_BASE_URL via RecoBackend.
+private val BACKEND_ADDON_HOST = RecoBackend.host
 
 @Singleton
 class StreamWarmer @Inject constructor(

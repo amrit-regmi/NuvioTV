@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.nuvio.tv.R
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.reco.RecoBackend
 import com.nuvio.tv.core.stream.StreamWarmer
 import com.nuvio.tv.core.network.safeApiCall
 import com.nuvio.tv.core.debrid.DebridStreamPresentation
@@ -39,7 +40,8 @@ import javax.inject.Inject
 import com.nuvio.tv.BuildConfig
 
 private const val TAG = "StreamRepositoryImpl"
-private const val BACKEND_ADDON_HOST = "recoengine.regmig.com"
+// F32: single source of truth — derives from BuildConfig.RECO_API_BASE_URL via RecoBackend.
+private val BACKEND_ADDON_HOST = RecoBackend.host
 
 class StreamRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -477,7 +479,8 @@ class StreamRepositoryImpl @Inject constructor(
         val baseQuery = if (queryStart >= 0) cleanBaseUrl.substring(queryStart) else ""
         val encodedType = encodePathSegment(type)
         val encodedVideoId = encodePathSegment(videoId)
-        val streamUrl = if (baseUrl.contains("recoengine")) {
+        // F32: detect the backend addon via the centralized host (RecoBackend.host).
+        val streamUrl = if (baseUrl.contains(BACKEND_ADDON_HOST, ignoreCase = true)) {
             val profileId = deviceProfileDataStore.selectedProfileId.first()
             val profileParam = if (baseQuery.isEmpty()) "?profile=$profileId" else "&profile=$profileId"
             "$basePath/stream/$encodedType/$encodedVideoId.json$baseQuery$profileParam"

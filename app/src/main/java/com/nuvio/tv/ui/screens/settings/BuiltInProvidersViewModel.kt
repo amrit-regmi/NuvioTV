@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.device.DeviceCapabilityDetector
+import com.nuvio.tv.core.reco.RecoBackend
 import com.nuvio.tv.data.local.DeviceProfileDataStore
 import com.nuvio.tv.data.remote.api.CatalogAddonApi
 import com.nuvio.tv.data.remote.api.DeviceProfileDto
@@ -46,7 +47,8 @@ class BuiltInProvidersViewModel @Inject constructor(
 ) : ViewModel() {
 
     companion object {
-        private const val CATALOG_HOST = "recoengine.regmig.com"
+        // F32: single source of truth — derives from BuildConfig.RECO_API_BASE_URL via RecoBackend.
+        private val CATALOG_HOST = RecoBackend.host
     }
 
     private val _uiState = MutableStateFlow(BuiltInProvidersUiState())

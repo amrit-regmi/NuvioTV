@@ -32,6 +32,7 @@ import com.nuvio.tv.core.server.TraktSourceMetadataRequest
 import com.nuvio.tv.core.server.TraktSourceSearchRequest
 import com.nuvio.tv.core.server.TraktSourceSearchResultInfo
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.core.reco.RecoBackend
 import com.nuvio.tv.core.tmdb.TmdbCollectionSourceResolver
 import com.nuvio.tv.core.trakt.TraktPublicListSourceResolver
 import com.nuvio.tv.data.local.CollectionsDataStore
@@ -214,8 +215,9 @@ class AddonManagerViewModel @Inject constructor(
     }
 
     fun removeAddon(baseUrl: String) {
+        // F32: catalog-addon URL derives from BuildConfig.RECO_API_BASE_URL via RecoBackend.
         if (BuildConfig.RECO_MODE == "private" &&
-                baseUrl.contains("recoengine.regmig.com/catalog-addon", ignoreCase = true)) {
+                baseUrl.contains(RecoBackend.catalogAddonUrl, ignoreCase = true)) {
             return
         }
         viewModelScope.launch {
@@ -224,8 +226,9 @@ class AddonManagerViewModel @Inject constructor(
     }
 
     fun setAddonEnabled(baseUrl: String, enabled: Boolean) {
+        // F32: catalog-addon URL derives from BuildConfig.RECO_API_BASE_URL via RecoBackend.
         if (BuildConfig.RECO_MODE == "private" &&
-                baseUrl.contains("recoengine.regmig.com/catalog-addon", ignoreCase = true)) {
+                baseUrl.contains(RecoBackend.catalogAddonUrl, ignoreCase = true)) {
             return
         }
         viewModelScope.launch {
@@ -817,7 +820,8 @@ class AddonManagerViewModel @Inject constructor(
                     _uiState.update { state ->
                         state.copy(
                             installedAddons = addons.filter { addon ->
-                                !addon.baseUrl.contains("recoengine.regmig.com/catalog-addon", ignoreCase = true) &&
+                                // F32: catalog-addon URL derives from RECO_API_BASE_URL via RecoBackend.
+                                !addon.baseUrl.contains(RecoBackend.catalogAddonUrl, ignoreCase = true) &&
                                 !(BuildConfig.CATALOG_ADDON_BASE_URL.isNotBlank() &&
                                   addon.baseUrl.trim().lowercase().contains(BuildConfig.CATALOG_ADDON_BASE_URL.trim().lowercase()))
                             },

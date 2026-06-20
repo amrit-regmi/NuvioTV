@@ -209,6 +209,9 @@ android {
             buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${devProperties.getProperty("PREMIUMIZE_CLIENT_ID", localProperties.getProperty("PREMIUMIZE_CLIENT_ID", ""))}\"")
             buildConfigField("String", "CATALOG_ADDON_BASE_URL", "\"${devProperties.getProperty("CATALOG_ADDON_BASE_URL", localProperties.getProperty("CATALOG_ADDON_BASE_URL", ""))}\"")
             buildConfigField("String", "CATALOG_SECRET", "\"${devProperties.getProperty("CATALOG_SECRET", localProperties.getProperty("CATALOG_SECRET", ""))}\"")
+            // F32: switch to hamrocinema.regmig.com at deploy — this is the SINGLE source of
+            // truth for the reco/taste-engine host. All app code derives from BuildConfig.RECO_API_BASE_URL
+            // (directly, or via com.nuvio.tv.core.reco.RecoBackend for host/catalog-addon matching).
             buildConfigField("String", "RECO_API_BASE_URL",
                 "\"${localProperties.getProperty("RECO_API_BASE_URL", "https://recoengine.regmig.com")}\"")
             buildConfigField("String", "RECO_MODE",
@@ -248,6 +251,9 @@ android {
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", "")}\"")
             buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", "")}\"")
             buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
+            // F32: switch to hamrocinema.regmig.com at deploy — this is the SINGLE source of
+            // truth for the reco/taste-engine host. All app code derives from BuildConfig.RECO_API_BASE_URL
+            // (directly, or via com.nuvio.tv.core.reco.RecoBackend for host/catalog-addon matching).
             buildConfigField("String", "RECO_API_BASE_URL",
                 "\"${localProperties.getProperty("RECO_API_BASE_URL", "https://recoengine.regmig.com")}\"")
             buildConfigField("String", "RECO_MODE",
