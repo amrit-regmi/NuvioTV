@@ -87,6 +87,17 @@ class AccountViewModel @Inject constructor(
         observeProfileNames()
         observeSyncBackend()
         observeFeatureAvailability()
+        observeActiveProfile()
+    }
+
+    // F28: track whether the primary/admin profile is active so device management can be
+    // hidden for secondary profiles, mirroring the dashboard "Connected Devices = primary only" rule.
+    private fun observeActiveProfile() {
+        viewModelScope.launch {
+            profileManager.activeProfileId.collect { activeId ->
+                _uiState.update { it.copy(isPrimaryProfileActive = activeId == 1) }
+            }
+        }
     }
 
     private fun observeFeatureAvailability() {

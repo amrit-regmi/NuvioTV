@@ -58,6 +58,9 @@ data class AccountUiState(
     // Super-admin AVAILABILITY for the connected-devices feature (GET /api/me features map).
     // Fail-open: true by default; false hides the linked-devices UI.
     val connectedDevicesAvailable: Boolean = true,
+    // F28: device management is primary/admin profile only — mirrors the dashboard rule
+    // (Connected Devices = primary/admin only). True only when active profile is primary (id == 1).
+    val isPrimaryProfileActive: Boolean = true,
     // Dashboard ("Manage / Super Admin") deep-link state shown as a QR on the TV.
     val manageDashboardUrl: String? = null,
     val manageDashboardQrBitmap: Bitmap? = null

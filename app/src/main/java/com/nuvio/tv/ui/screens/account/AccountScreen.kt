@@ -63,8 +63,10 @@ fun AccountScreen(
 
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(uiState.authState) {
-        if (uiState.authState is AuthState.FullAccount) {
+    LaunchedEffect(uiState.authState, uiState.isPrimaryProfileActive) {
+        // F28: only the primary/admin profile manages linked devices, so don't even
+        // fetch the device list for secondary profiles.
+        if (uiState.authState is AuthState.FullAccount && uiState.isPrimaryProfileActive) {
             viewModel.loadLinkedDevices()
         }
     }
@@ -172,8 +174,10 @@ fun AccountScreen(
                         value = uiState.syncBackendName
                     )
                 }
-                // Connected-devices feature gated by super-admin availability (GET /api/me).
-                if (uiState.connectedDevicesAvailable) {
+                // Connected-devices feature gated by super-admin availability (GET /api/me)
+                // AND restricted to the primary/admin profile (F28: mirrors the dashboard
+                // "Connected Devices = primary/admin only" rule; hidden for secondary profiles).
+                if (uiState.connectedDevicesAvailable && uiState.isPrimaryProfileActive) {
                     item {
                         LinkedDevicesSection(
                             devices = uiState.linkedDevices,
