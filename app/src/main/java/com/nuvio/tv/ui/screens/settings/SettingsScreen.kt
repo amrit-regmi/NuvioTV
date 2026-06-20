@@ -248,7 +248,9 @@ fun SettingsScreen(
                 SettingsCategory.ACCOUNT -> isPrimaryProfileActive
                 SettingsCategory.LAYOUT -> true
                 SettingsCategory.CONTENT_DISCOVERY -> true
-                SettingsCategory.INTEGRATION -> true
+                // Secondary profiles cannot manage integrations (debrid keys,
+                // addon manager, built-in providers) — primary profile only.
+                SettingsCategory.INTEGRATION -> isPrimaryProfileActive
                 SettingsCategory.ADVANCED -> true
                 SettingsCategory.TRAKT -> BuildConfig.RECO_MODE != "private"
                 else -> true
