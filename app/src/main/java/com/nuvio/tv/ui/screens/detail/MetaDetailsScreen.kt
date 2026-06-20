@@ -758,6 +758,8 @@ fun MetaDetailsScreen(
                     streamPrepareSpeedMbps = uiState.streamPrepareSpeedMbps,
                     streamPrepareEtaMinutes = uiState.streamPrepareEtaMinutes,
                     streamPrepareReady = uiState.streamPrepareReady,
+                    streamPrepareQueued = uiState.streamPrepareQueued,
+                    streamPrepareQueuePosition = uiState.streamPrepareQueuePosition,
                     isThisItemDownloading = uiState.isThisItemDownloading,
                     isStreamableNow = uiState.isStreamableNow,
                     uncachedStreamCount = uiState.uncachedStreamCount
@@ -964,6 +966,8 @@ private fun MetaDetailsContent(
     streamPrepareSpeedMbps: Double? = null,
     streamPrepareEtaMinutes: Int? = null,
     streamPrepareReady: Boolean = false,
+    streamPrepareQueued: Boolean = false,
+    streamPrepareQueuePosition: Int? = null,
     isThisItemDownloading: Boolean = false,
     isStreamableNow: Boolean = false,
     uncachedStreamCount: Int = -1
@@ -1739,6 +1743,8 @@ private fun MetaDetailsContent(
                         streamPrepareSpeedMbps = streamPrepareSpeedMbps,
                         streamPrepareEtaMinutes = streamPrepareEtaMinutes,
                         streamPrepareReady = streamPrepareReady,
+                        streamPrepareQueued = streamPrepareQueued,
+                        streamPrepareQueuePosition = streamPrepareQueuePosition,
                         isThisItemDownloading = isThisItemDownloading,
                         isStreamableNow = isStreamableNow,
                         uncachedStreamCount = uncachedStreamCount

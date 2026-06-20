@@ -2667,7 +2667,9 @@ class MetaDetailsViewModel @Inject constructor(
             streamPreparePercent = null,
             streamPrepareSeedCount = null,
             streamPrepareSpeedMbps = null,
-            streamPrepareEtaMinutes = null
+            streamPrepareEtaMinutes = null,
+            streamPrepareQueued = false,
+            streamPrepareQueuePosition = null
         ) }
 
         prepareStreamJob = viewModelScope.launch(Dispatchers.IO) {
@@ -2751,16 +2753,21 @@ class MetaDetailsViewModel @Inject constructor(
                         streamPrepareSeedCount = null,
                         streamPrepareSpeedMbps = null,
                         streamPrepareEtaMinutes = 0,
+                        streamPrepareQueued = false,
+                        streamPrepareQueuePosition = null,
                         uncachedStreamCount = 0
                     ) }
                     return
                 }
+                val isQueued = item.downloadState.equals("queued", ignoreCase = true)
                 val streamableNow = item.downloadState == "downloading" && percent != null && percent > 0f
                 _uiState.update { it.copy(
                     streamPreparePercent = percent,
                     streamPrepareSeedCount = seeds,
                     streamPrepareSpeedMbps = speedMbps,
                     streamPrepareEtaMinutes = etaMin,
+                    streamPrepareQueued = isQueued,
+                    streamPrepareQueuePosition = item.queuePosition,
                     isStreamableNow = streamableNow
                 ) }
             } catch (e: CancellationException) { throw e } catch (_: Exception) {}

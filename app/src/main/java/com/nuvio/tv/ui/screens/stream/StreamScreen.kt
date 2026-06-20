@@ -1412,6 +1412,14 @@ private fun StreamCard(
                     .padding(horizontal = NuvioTheme.spacing.lg, vertical = NuvioTheme.spacing.xs),
                 horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
             ) {
+                if (activeDownloadState.status == DebridDownloadStatus.QUEUED) {
+                    val pos = activeDownloadState.queuePosition?.takeIf { it > 0 }
+                    Text(
+                        text = if (pos != null) "Queued #$pos" else "Queued",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = NuvioTheme.extendedColors.textSecondary
+                    )
+                }
                 if (pct != null && pct > 0f) {
                     Text(
                         text = "${pct.toInt()}%",
@@ -1582,8 +1590,11 @@ private fun DownloadProgressSheet(
             if (pct != null) "Downloading $pct — checking stream availability..."
             else "Downloading — checking stream availability..."
         }
-        downloadState.status == DebridDownloadStatus.QUEUED ->
-            "Queued — checking stream availability..."
+        downloadState.status == DebridDownloadStatus.QUEUED -> {
+            val pos = downloadState.queuePosition?.takeIf { it > 0 }
+            if (pos != null) "Queued — waiting for a free slot (position $pos)..."
+            else "Queued — waiting for a free slot..."
+        }
         else -> when (downloadState.status) {
             DebridDownloadStatus.QUEUED -> stringResource(R.string.stream_download_queued)
             DebridDownloadStatus.DOWNLOADING -> stringResource(R.string.stream_download_downloading)

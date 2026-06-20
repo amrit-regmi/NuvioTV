@@ -154,6 +154,8 @@ fun HeroContentSection(
     streamPrepareSpeedMbps: Double? = null,
     streamPrepareEtaMinutes: Int? = null,
     streamPrepareReady: Boolean = false,
+    streamPrepareQueued: Boolean = false,
+    streamPrepareQueuePosition: Int? = null,
     isThisItemDownloading: Boolean = false,
     // True when the active download has progressed enough to start buffer streaming
     isStreamableNow: Boolean = false,
@@ -358,8 +360,11 @@ fun HeroContentSection(
                                     )
                                 }
                                 isPreparingStream || isThisItemDownloading -> {
-                                    // Clickable progress indicator — tapping shows download status dialog
-                                    val progressFraction = if (streamPreparePercent != null && streamPreparePercent > 0f) {
+                                    // Clickable progress indicator — tapping shows download status dialog.
+                                    // While queued (waiting for a free TorBox slot) we never show a
+                                    // determinate ring — the download hasn't started yet.
+                                    val progressFraction = if (!streamPrepareQueued &&
+                                        streamPreparePercent != null && streamPreparePercent > 0f) {
                                         streamPreparePercent / 100f
                                     } else null
 
@@ -404,7 +409,14 @@ fun HeroContentSection(
                                                     strokeWidth = 2.5.dp
                                                 )
                                             }
-                                            if (streamPreparePercent != null && streamPreparePercent > 0f) {
+                                            if (streamPrepareQueued) {
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = "Queued",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = NuvioTheme.extendedColors.textSecondary
+                                                )
+                                            } else if (streamPreparePercent != null && streamPreparePercent > 0f) {
                                                 Spacer(modifier = Modifier.height(2.dp))
                                                 Text(
                                                     text = "${streamPreparePercent.toInt()}%",
@@ -423,7 +435,7 @@ fun HeroContentSection(
                                             onDismissRequest = { showDownloadStatusDialog = false },
                                             title = {
                                                 androidx.compose.material3.Text(
-                                                    text = "Download in Progress",
+                                                    text = if (streamPrepareQueued) "Waiting for a Free Slot" else "Download in Progress",
                                                     style = MaterialTheme.typography.titleMedium.copy(
                                                         color = com.nuvio.tv.ui.theme.NuvioTheme.colors.TextPrimary
                                                     )
@@ -431,7 +443,19 @@ fun HeroContentSection(
                                             },
                                             text = {
                                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                    if (streamPreparePercent != null && streamPreparePercent > 0f) {
+                                                    if (streamPrepareQueued) {
+                                                        val posText = streamPrepareQueuePosition
+                                                            ?.takeIf { it > 0 }
+                                                            ?.let { " (position $it in queue)" }
+                                                            .orEmpty()
+                                                        androidx.compose.material3.Text(
+                                                            text = "Queued — waiting for a free download slot$posText.",
+                                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                                color = com.nuvio.tv.ui.theme.NuvioTheme.colors.TextPrimary
+                                                            )
+                                                        )
+                                                    }
+                                                    if (!streamPrepareQueued && streamPreparePercent != null && streamPreparePercent > 0f) {
                                                         androidx.compose.material3.Text(
                                                             text = "Progress: ${streamPreparePercent.toInt()}%",
                                                             style = MaterialTheme.typography.bodyMedium.copy(
@@ -463,7 +487,8 @@ fun HeroContentSection(
                                                             )
                                                         )
                                                     }
-                                                    if ((streamPreparePercent == null || streamPreparePercent <= 0f) &&
+                                                    if (!streamPrepareQueued &&
+                                                        (streamPreparePercent == null || streamPreparePercent <= 0f) &&
                                                         (etaMin == null || etaMin <= 0) &&
                                                         (speedMbps == null || speedMbps <= 0.0) &&
                                                         (seeds == null || seeds <= 0)

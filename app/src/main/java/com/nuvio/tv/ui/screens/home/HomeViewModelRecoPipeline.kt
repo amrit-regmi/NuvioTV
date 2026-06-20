@@ -72,6 +72,15 @@ internal fun HomeViewModel.observeRecoRows() {
                         label = cr.catalogName
                     )
                 }
+                // Expose a stable reason_type+content_type → reco key map so the saved
+                // rowOrder (which references reco rows by id/reason_type + type) can match
+                // the rendered reco rows precisely (not via the dominant-kind heuristic).
+                recoKeyByReasonAndType = rows.mapIndexed { index, row ->
+                    val ct = row.recoContentType()
+                    val rawType = if (ct == "series") "series" else "movie"
+                    val catalogId = "${row.reason_type}_$index"
+                    "${row.reason_type}|$ct" to "reco_engine_${rawType}_$catalogId"
+                }.toMap()
                 recoRowKeys = descriptors.map { it.key }
                 layoutPreferenceDataStore.setRecoRowDescriptors(descriptors)
                 rebuildCatalogOrder(addonsCache)
@@ -81,17 +90,36 @@ internal fun HomeViewModel.observeRecoRows() {
     }
 }
 
-private fun RecoRow.toCatalogRow(index: Int = 0): CatalogRow {
+/**
+ * Resolves the row's content type, preferring the backend-declared [RecoRow.content_type]
+ * over the dominant-kind heuristic over [RecoRow.items]. Returns "movie" or "series".
+ */
+internal fun RecoRow.recoContentType(): String {
+    content_type?.trim()?.lowercase()?.let { ct ->
+        when (ct) {
+            "movie", "movies" -> return "movie"
+            "series", "tv", "show", "shows" -> return "series"
+        }
+    }
     val dominant = items.groupBy { it.kind }.maxByOrNull { it.value.size }?.key ?: "movie"
-    val type = if (dominant == "movie") ContentType.MOVIE else ContentType.SERIES
+    return if (dominant == "series" || dominant == "tv") "series" else "movie"
+}
+
+private fun RecoRow.toCatalogRow(index: Int = 0): CatalogRow {
+    val contentType = recoContentType()
+    val type = if (contentType == "series") ContentType.SERIES else ContentType.MOVIE
+    // Append a content-type suffix so the movie and series variants of the same reco
+    // reason (e.g. "Top picks for you") are visually distinct on the home screen.
+    val typeSuffix = if (contentType == "series") "Series" else "Movies"
+    val displayLabel = if (label.contains(typeSuffix, ignoreCase = true)) label else "$label - $typeSuffix"
     return CatalogRow(
         addonId = "reco_engine",
         addonName = "For You",
         addonBaseUrl = BuildConfig.RECO_API_BASE_URL,
         catalogId = "${reason_type}_$index",
-        catalogName = label,
+        catalogName = displayLabel,
         type = type,
-        rawType = dominant,
+        rawType = contentType,
         items = items.map { it.toMetaPreview() },
         hasMore = false,
     )

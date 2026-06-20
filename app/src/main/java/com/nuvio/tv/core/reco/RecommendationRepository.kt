@@ -41,6 +41,12 @@ data class RecoItem(
 data class RecoRow(
     val label: String,
     val reason_type: String,
+    /**
+     * Backend-declared content type for the row ("movie" | "series"). When present this is
+     * authoritative for labeling and type-matching — preferred over the dominant-kind
+     * heuristic over [items]. Absent on older backends; callers fall back to dominant kind.
+     */
+    val content_type: String? = null,
     val items: List<RecoItem>,
 )
 

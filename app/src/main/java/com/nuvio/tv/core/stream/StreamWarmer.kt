@@ -419,7 +419,11 @@ class StreamWarmer @Inject constructor(
             // Tier 2: resolve clientResolve (direct-debrid) streams in the background.
             // The resolved CDN URL is stored in resolvedUrlCache with a 60-min TTL so that
             // the detail panel can display "⚡ Instant" (already resolved) immediately.
-            val tier2Candidates = reordered.filter { it.isDirectDebrid() && it.getStreamUrl() == null }.take(BACKGROUND_PROBE_COUNT)
+            // IMPORTANT: warm only CACHED streams (isWarmResolvable). We must never trigger a
+            // download (createTorrent) for UNCACHED content during browse/warm — that would
+            // optimistically fill the shared TorBox download slot. Uncached streams are only
+            // downloaded on an explicit user action (DebridDownloadManager / prepare).
+            val tier2Candidates = reordered.filter { it.isWarmResolvable() }.take(BACKGROUND_PROBE_COUNT)
             if (tier2Candidates.isNotEmpty()) {
                 scope.launch(Dispatchers.IO) {
                     for (stream in tier2Candidates) {
@@ -464,7 +468,7 @@ class StreamWarmer @Inject constructor(
             // all and no valid index is found — but TorBox may still be able to resolve them.
             // Resolving here ensures resolvedUrlCache is populated so pollInstantStreams()
             // can detect and surface "⚡ Instant" without needing a re-open.
-            val tier2Candidates = streams.filter { it.isDirectDebrid() && it.getStreamUrl() == null }.take(BACKGROUND_PROBE_COUNT)
+            val tier2Candidates = streams.filter { it.isWarmResolvable() }.take(BACKGROUND_PROBE_COUNT)
             if (tier2Candidates.isNotEmpty()) {
                 scope.launch(Dispatchers.IO) {
                     for (stream in tier2Candidates) {
@@ -626,6 +630,20 @@ class StreamWarmer @Inject constructor(
 @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
 interface StreamWarmerEntryPoint {
     fun streamWarmer(): StreamWarmer
+}
+
+/**
+ * True when this stream can be safely RESOLVED during background warm without triggering a
+ * download. It must be a direct-debrid stream that is already CACHED on the debrid service
+ * ([Stream.isDirectDebrid] already requires `clientResolve.isCached == true`) and not yet
+ * resolved to a CDN URL. Uncached debrid streams ([Stream.isNonCachedDebridStream]) are
+ * intentionally excluded so warm never calls `createTorrent` on uncached content and never
+ * occupies the shared TorBox download slot.
+ */
+private fun Stream.isWarmResolvable(): Boolean {
+    return isDirectDebrid() &&
+        getStreamUrl() == null &&
+        clientResolve?.isCached == true
 }
 
 /**

@@ -93,6 +93,11 @@ data class MetaDetailsUiState(
     val streamPrepareSpeedMbps: Double? = null,
     val streamPrepareEtaMinutes: Int? = null,
     val streamPrepareReady: Boolean = false,
+    // True when the backend reports download_state == "queued" (waiting for a free TorBox
+    // download slot) rather than actively downloading. Drives a distinct overlay state.
+    val streamPrepareQueued: Boolean = false,
+    // 1-based position in the download queue while queued; null = unknown.
+    val streamPrepareQueuePosition: Int? = null,
     // Single-download enforcement: shown when a new download is requested while one is active
     val showCancelDownloadDialog: Boolean = false,
     val cancelDownloadDialogTitle: String? = null,

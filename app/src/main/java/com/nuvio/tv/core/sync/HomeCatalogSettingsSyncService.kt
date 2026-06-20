@@ -34,6 +34,23 @@ private const val PAYLOAD_SAMPLE_LIMIT = 5
 private const val HIDE_UNRELEASED_CONTENT_KEY = "hide_unreleased_content"
 private val HOME_CATALOG_LEGACY_SYNC_PLATFORMS = listOf(TV_LEGACY_SETTINGS_SYNC_PLATFORM, "mobile")
 
+/**
+ * One entry of the unified home row order written by the management dashboard into
+ * Supabase `nuvio_home_catalog_settings.settings_json.rowOrder`.
+ * Shape: `{id, kind, type, enabled}` where:
+ * - `kind` ∈ "builtin" | "reco" | "addon"
+ * - `id`   = catalog id (trending/popular/new_releases/top_rated for builtin), reco
+ *            reason_type (personal/because_watched/…) for reco, or addon catalog id.
+ * - `type` ∈ "movie" | "series" | "both"
+ */
+@Serializable
+data class HomeRowOrderEntry(
+    val id: String = "",
+    val kind: String = "",
+    val type: String = "",
+    val enabled: Boolean = true,
+)
+
 @Serializable
 data class SyncCatalogItem(
     @SerialName("addon_id") val addonId: String,
@@ -152,6 +169,33 @@ class HomeCatalogSettingsSyncService @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull home catalog settings", e)
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Pulls the unified home row order (`settings_json.rowOrder`) for the active profile from
+     * the SAME Supabase row the app already syncs (`sync_pull_home_catalog_settings`, shared
+     * platform). The dashboard writes this key; the app reads it to render home rows in the
+     * exact saved order. Returns null when no saved rowOrder exists (new user → app default).
+     */
+    suspend fun pullRowOrderFromRemote(): List<HomeRowOrderEntry>? = withContext(Dispatchers.IO) {
+        try {
+            val profileId = profileManager.activeProfileId.value
+            val blob = fetchRemoteBlob(profileId, HOME_CATALOG_SHARED_SYNC_PLATFORM)
+                ?: HOME_CATALOG_LEGACY_SYNC_PLATFORMS.firstNotNullOfOrNull { fetchRemoteBlob(profileId, it) }
+            val rowOrderJson = blob?.settingsJson?.get("rowOrder") ?: return@withContext null
+            val parsed = runCatching {
+                json.decodeFromJsonElement(
+                    kotlinx.serialization.builtins.ListSerializer(HomeRowOrderEntry.serializer()),
+                    rowOrderJson
+                )
+            }.getOrNull()
+            val cleaned = parsed?.filter { it.id.isNotBlank() && it.kind.isNotBlank() }
+            Log.d(TAG, "Pull rowOrder profile=$profileId entries=${cleaned?.size ?: -1}")
+            cleaned?.takeIf { it.isNotEmpty() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to pull rowOrder", e)
+            null
         }
     }
 

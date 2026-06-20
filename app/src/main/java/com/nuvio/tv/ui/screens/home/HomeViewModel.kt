@@ -87,6 +87,7 @@ class HomeViewModel @Inject constructor(
     internal val authManager: AuthManager,
     internal val recommendationRepository: RecommendationRepository,
     internal val recoMetadataService: com.nuvio.tv.core.reco.RecoMetadataService,
+    internal val homeCatalogSettingsSyncService: com.nuvio.tv.core.sync.HomeCatalogSettingsSyncService,
     private val streamWarmer: StreamWarmer
 ) : ViewModel() {
     companion object {
@@ -194,6 +195,14 @@ class HomeViewModel @Inject constructor(
     internal var homeCatalogOrderKeys: List<String> = emptyList()
     internal var disabledHomeCatalogKeys: Set<String> = emptySet()
     internal var recoRowKeys: List<String> = emptyList()
+    /** "reason_type|content_type" → reco catalog key, so saved rowOrder reco entries match exactly. */
+    internal var recoKeyByReasonAndType: Map<String, String> = emptyMap()
+    /**
+     * Unified saved home row order pulled from Supabase nuvio_home_catalog_settings
+     * (settings_json.rowOrder = [{id, kind, type, enabled}]). Null = no saved config
+     * (new user) → fall back to the app's default ordering. Empty list is treated as null.
+     */
+    internal var savedRowOrder: List<com.nuvio.tv.core.sync.HomeRowOrderEntry>? = null
     internal var followAddonsOrderEnabled: Boolean = false
     internal var customCatalogTitles: Map<String, String> = emptyMap()
     internal var currentHeroCatalogKeys: List<String> = emptyList()
@@ -313,6 +322,7 @@ class HomeViewModel @Inject constructor(
         observeStartupAuthNotice()
         viewModelScope.launch {
             profileManager.activeProfileReady.first { it }
+            loadSavedRowOrder()
             observeRecoRows()
             observeLayoutPreferences()
             observeModernHomePresentation()
@@ -418,6 +428,7 @@ class HomeViewModel @Inject constructor(
                     _gridFocusState.value = HomeScreenFocusState()
                     // Reset so the new profile's pipeline signals first completion correctly.
                     _initialCwResolved.value = false
+                    loadSavedRowOrder()
                     loadContinueWatching()
                     // Clear watched badges so they don't leak between profiles.
                     watchedSeriesStateHolder.update(emptySet())
@@ -550,6 +561,20 @@ class HomeViewModel @Inject constructor(
     fun onItemFocus(item: MetaPreview) = onItemFocusPipeline(item)
 
     fun preloadAdjacentItem(item: MetaPreview) = preloadAdjacentItemPipeline(item)
+
+    /**
+     * Pulls the unified saved home row order (Supabase rowOrder) for the active profile and,
+     * if present, applies it as the authoritative home ordering. New users with no saved
+     * config keep the existing default behavior.
+     */
+    internal fun loadSavedRowOrder() {
+        viewModelScope.launch {
+            val rowOrder = runCatching { homeCatalogSettingsSyncService.pullRowOrderFromRemote() }.getOrNull()
+            savedRowOrder = rowOrder?.takeIf { it.isNotEmpty() }
+            rebuildCatalogOrder(addonsCache)
+            scheduleUpdateCatalogRows()
+        }
+    }
 
     private fun loadHomeCatalogOrderPreference() = loadHomeCatalogOrderPreferencePipeline()
 

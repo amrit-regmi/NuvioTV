@@ -170,6 +170,26 @@ internal fun HomeViewModel.removeTruncatedRowCacheEntry(key: String) {
 }
 
 internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
+    // Unified saved order from the management dashboard (Supabase rowOrder) takes
+    // precedence over the app's own ordering when present. New users (no saved
+    // config) fall through to the default behavior below.
+    val saved = savedRowOrder
+    if (!saved.isNullOrEmpty()) {
+        val resolved = resolveSavedRowOrderKeys(addons, saved)
+        if (resolved.isNotEmpty()) {
+            // Collections aren't part of the dashboard rowOrder; append pinned/remaining
+            // collections so they still surface (in their saved-or-default relative spot).
+            val collectionKeys = collectionsCache.map { "collection_${it.id}" }
+            val resolvedSet = resolved.toSet()
+            val mergedOrder = resolved + collectionKeys.filterNot { it in resolvedSet }
+            synchronized(catalogStateLock) {
+                catalogOrder.clear()
+                catalogOrder.addAll(mergedOrder)
+            }
+            return
+        }
+    }
+
     val defaultOrder = buildDefaultCatalogOrder(addons)
     val recoKeys = recoRowKeys
     val collectionKeys = collectionsCache.map { "collection_${it.id}" }
@@ -262,6 +282,79 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
             catalogOrder.addAll(mergedOrder)
         }
     }
+}
+
+/** Type tokens the saved rowOrder may carry for a single entry. */
+private fun rowOrderTypes(rawType: String): List<String> {
+    return when (rawType.trim().lowercase()) {
+        "movie", "movies" -> listOf("movie")
+        "series", "tv", "show", "shows" -> listOf("series")
+        "both", "", "all" -> listOf("movie", "series")
+        else -> listOf(rawType.trim().lowercase())
+    }
+}
+
+/**
+ * Resolves the dashboard-saved [HomeRowOrderEntry] list into concrete catalogOrder keys,
+ * in the exact saved order, skipping disabled entries. Builtin rows resolve against the
+ * backend catalog-addon (host = RecoBackend.host); addon rows against any installed addon;
+ * reco rows against the reason_type+content_type → key map populated by the reco pipeline.
+ */
+internal fun HomeViewModel.resolveSavedRowOrderKeys(
+    addons: List<Addon>,
+    saved: List<com.nuvio.tv.core.sync.HomeRowOrderEntry>
+): List<String> {
+    val backendHost = com.nuvio.tv.core.reco.RecoBackend.host
+    // Lookup of available addon catalog keys → so we only emit catalogs that actually exist.
+    val availableCatalogKeys = mutableSetOf<String>()
+    addons.forEach { addon ->
+        addon.catalogs.forEach { catalog ->
+            availableCatalogKeys.add(catalogKey(addon.id, catalog.apiType, catalog.id))
+        }
+    }
+    val builtinAddon = addons.firstOrNull { it.baseUrl.contains(backendHost, ignoreCase = true) }
+
+    val result = mutableListOf<String>()
+    val seen = mutableSetOf<String>()
+
+    fun addKey(key: String) {
+        if (seen.add(key)) result.add(key)
+    }
+
+    saved.forEach { entry ->
+        if (!entry.enabled) return@forEach
+        val types = rowOrderTypes(entry.type)
+        when (entry.kind.trim().lowercase()) {
+            "reco" -> {
+                types.forEach { t ->
+                    recoKeyByReasonAndType["${entry.id}|$t"]?.let { addKey(it) }
+                }
+            }
+            "builtin" -> {
+                types.forEach { t ->
+                    val candidate = builtinAddon?.let { catalogKey(it.id, t, entry.id) }
+                    if (candidate != null && candidate in availableCatalogKeys) {
+                        addKey(candidate)
+                    } else {
+                        // Fallback: any addon exposing this catalog id + type.
+                        addons.firstNotNullOfOrNull { addon ->
+                            addon.catalogs.firstOrNull { it.id == entry.id && it.apiType == t }
+                                ?.let { catalogKey(addon.id, t, it.id) }
+                        }?.let { addKey(it) }
+                    }
+                }
+            }
+            "addon" -> {
+                types.forEach { t ->
+                    addons.firstNotNullOfOrNull { addon ->
+                        addon.catalogs.firstOrNull { it.id == entry.id && it.apiType == t }
+                            ?.let { catalogKey(addon.id, t, it.id) }
+                    }?.let { addKey(it) }
+                }
+            }
+        }
+    }
+    return result
 }
 
 private fun HomeViewModel.buildDefaultCatalogOrder(addons: List<Addon>): List<String> {

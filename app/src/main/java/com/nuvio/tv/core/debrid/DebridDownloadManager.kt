@@ -38,6 +38,8 @@ data class DebridDownloadState(
     val progressPct: Float? = null,
     val seeds: Int? = null,
     val speedMbps: Double? = null,
+    /** 1-based position in the download queue while [status] == QUEUED; null = unknown. */
+    val queuePosition: Int? = null,
     val failureReason: String? = null
 )
 
@@ -233,11 +235,17 @@ class DebridDownloadManager @Inject constructor(
                         clearPrepare()
                         return@launch
                     }
-                    // Update live progress from TorBox via status response
+                    // Update live progress from TorBox via status response. When the backend
+                    // reports download_state == "queued" the download is waiting for a free
+                    // TorBox slot (not actively downloading) — reflect that distinct state +
+                    // queue position so the overlay can render "waiting for a free slot".
+                    val isQueued = item?.downloadState.equals("queued", ignoreCase = true)
                     _activeDownload.value = _activeDownload.value?.copy(
+                        status = if (isQueued) DebridDownloadStatus.QUEUED else DebridDownloadStatus.DOWNLOADING,
                         progressPct = item?.progressPct?.toFloat(),
                         seeds = item?.seeds,
                         speedMbps = item?.downloadSpeedMbps,
+                        queuePosition = if (isQueued) item?.queuePosition else null,
                         etaMinutes = item?.etaSeconds?.let { (it / 60).coerceAtLeast(1) }
                             ?: _activeDownload.value?.etaMinutes
                     )

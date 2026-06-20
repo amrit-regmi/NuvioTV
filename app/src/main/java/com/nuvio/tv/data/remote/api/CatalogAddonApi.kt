@@ -69,8 +69,12 @@ data class CatalogStreamStatusItemDto(
     @Json(name = "progress_pct") val progressPct: Double? = null,
     @Json(name = "seeds") val seeds: Int? = null,
     @Json(name = "download_speed_mbps") val downloadSpeedMbps: Double? = null,
+    @Json(name = "download_speed_bps") val downloadSpeedBps: Double? = null,
     @Json(name = "eta_seconds") val etaSeconds: Int? = null,
-    @Json(name = "download_state") val downloadState: String? = null
+    // download_state ∈ "queued" | "downloading" | … ("queued" = waiting for a free TorBox slot).
+    @Json(name = "download_state") val downloadState: String? = null,
+    // 1-based position in the download queue when download_state == "queued". Absent = unknown.
+    @Json(name = "queue_position") val queuePosition: Int? = null
 )
 
 @JsonClass(generateAdapter = true)
