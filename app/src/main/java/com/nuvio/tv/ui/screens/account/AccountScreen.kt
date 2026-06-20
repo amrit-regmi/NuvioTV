@@ -172,11 +172,14 @@ fun AccountScreen(
                         value = uiState.syncBackendName
                     )
                 }
-                item {
-                    LinkedDevicesSection(
-                        devices = uiState.linkedDevices,
-                        onUnlink = { viewModel.unlinkDevice(it) }
-                    )
+                // Connected-devices feature gated by super-admin availability (GET /api/me).
+                if (uiState.connectedDevicesAvailable) {
+                    item {
+                        LinkedDevicesSection(
+                            devices = uiState.linkedDevices,
+                            onUnlink = { viewModel.unlinkDevice(it) }
+                        )
+                    }
                 }
                 if (SHOW_SYNC_CODE_FEATURES) {
                     item {

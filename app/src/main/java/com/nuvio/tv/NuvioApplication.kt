@@ -17,6 +17,7 @@ import coil3.request.allowRgb565
 import coil3.bitmapFactoryMaxParallelism
 
 import okio.Path.Companion.toOkioPath
+import com.nuvio.tv.core.feature.FeatureAvailabilityManager
 import com.nuvio.tv.core.runtime.PluginRuntimeHooks
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.core.sync.androidtv.AndroidTvChannelSyncService
@@ -33,6 +34,9 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
 
     @Inject lateinit var startupSyncService: StartupSyncService
     @Inject lateinit var androidTvChannelSyncService: AndroidTvChannelSyncService
+    // Eagerly instantiated so its auth-state / profile-switch observers start at app load
+    // and keep the feature-availability map fresh for the UI to gate on.
+    @Inject lateinit var featureAvailabilityManager: FeatureAvailabilityManager
 
     companion object {
         /**

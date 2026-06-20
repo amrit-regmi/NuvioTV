@@ -55,6 +55,9 @@ data class AccountUiState(
     // Whether the logged-in Nuvio user has the super-admin flag (backend GET /api/me).
     // Surfaces the "Manage / Super Admin" entry on the primary profile only.
     val isSuperAdmin: Boolean = false,
+    // Super-admin AVAILABILITY for the connected-devices feature (GET /api/me features map).
+    // Fail-open: true by default; false hides the linked-devices UI.
+    val connectedDevicesAvailable: Boolean = true,
     // Dashboard ("Manage / Super Admin") deep-link state shown as a QR on the TV.
     val manageDashboardUrl: String? = null,
     val manageDashboardQrBitmap: Bitmap? = null

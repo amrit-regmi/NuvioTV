@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.core.feature.FeatureAvailabilityManager
+import com.nuvio.tv.core.feature.FeatureKeys
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.qr.QrCodeGenerator
@@ -69,6 +71,7 @@ class AccountViewModel @Inject constructor(
     private val syncBackendRepository: SyncBackendRepository,
     private val supabaseProvider: SyncBackendSupabaseProvider,
     private val recommendationRepository: RecommendationRepository,
+    private val featureAvailabilityManager: FeatureAvailabilityManager,
     private val profileManager: ProfileManager,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -83,6 +86,17 @@ class AccountViewModel @Inject constructor(
         observeAuthState()
         observeProfileNames()
         observeSyncBackend()
+        observeFeatureAvailability()
+    }
+
+    private fun observeFeatureAvailability() {
+        viewModelScope.launch {
+            featureAvailabilityManager.features.collect { features ->
+                // Fail-open: missing key → available.
+                val available = features[FeatureKeys.CONNECTED_DEVICES] ?: true
+                _uiState.update { it.copy(connectedDevicesAvailable = available) }
+            }
+        }
     }
 
     private fun observeAuthState() {

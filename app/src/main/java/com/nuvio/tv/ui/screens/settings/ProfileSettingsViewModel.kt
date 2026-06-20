@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.core.feature.FeatureAvailabilityManager
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.domain.model.UserProfile
@@ -18,10 +19,18 @@ import javax.inject.Inject
 @HiltViewModel
 class ProfileSettingsViewModel @Inject constructor(
     private val profileManager: ProfileManager,
-    private val profileSyncService: ProfileSyncService
+    private val profileSyncService: ProfileSyncService,
+    featureAvailabilityManager: FeatureAvailabilityManager
 ) : ViewModel() {
 
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
+
+    /**
+     * Per-feature AVAILABILITY map from the super admin (via `/api/me`). Empty = all
+     * available (fail-open). Used to hide/lock UI for features made unavailable, layered
+     * over the existing primary/secondary profile gating.
+     */
+    val featureAvailability: StateFlow<Map<String, Boolean>> = featureAvailabilityManager.features
 
     val isPrimaryProfileActive: StateFlow<Boolean> = profileManager.activeProfileId
         .map { it == 1 }

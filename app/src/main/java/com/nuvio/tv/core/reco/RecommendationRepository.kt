@@ -50,8 +50,18 @@ data class RecoResponse(val rows: List<RecoRow>)
 @Serializable
 data class MeInfo(
     val is_super_admin: Boolean = false,
+    /**
+     * Per-feature AVAILABILITY map resolved from the super admin's kill switches.
+     * A feature reported `false` is UNAVAILABLE — the TV hides/locks its UI.
+     * Empty/missing map means everything is available (fail-open). Known keys:
+     * `personalization`, `stream_providers`, `catalogs`, `connected_devices`.
+     */
+    val features: Map<String, Boolean> = emptyMap(),
 ) {
     val isSuperAdmin: Boolean get() = is_super_admin
+
+    /** Fail-open availability check: missing/unknown key → available. */
+    fun isFeatureAvailable(key: String): Boolean = features[key] ?: true
 }
 
 @Singleton

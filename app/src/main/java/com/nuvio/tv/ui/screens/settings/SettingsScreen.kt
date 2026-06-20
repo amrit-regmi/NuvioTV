@@ -64,6 +64,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
 import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.core.feature.FeatureKeys
 import com.nuvio.tv.domain.model.ExperienceMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -219,6 +220,13 @@ fun SettingsScreen(
     experienceModeViewModel: ExperienceModeSettingsViewModel = hiltViewModel()
 ) {
     val isPrimaryProfileActive by profileViewModel.isPrimaryProfileActive.collectAsStateWithLifecycle()
+    // Super-admin availability map (from /api/me). Fail-open: missing/unknown key = available.
+    val featureAvailability by profileViewModel.featureAvailability.collectAsStateWithLifecycle()
+    fun isFeatureAvailable(key: String): Boolean = featureAvailability[key] ?: true
+    val streamProvidersAvailable = isFeatureAvailable(FeatureKeys.STREAM_PROVIDERS)
+    val catalogsAvailable = isFeatureAvailable(FeatureKeys.CATALOGS)
+    val personalizationAvailable = isFeatureAvailable(FeatureKeys.PERSONALIZATION)
+    val connectedDevicesAvailable = isFeatureAvailable(FeatureKeys.CONNECTED_DEVICES)
     val experienceModeState by remember(experienceModeViewModel) {
         experienceModeViewModel.mode.map<ExperienceMode?, ExperienceModeLoadState> {
             ExperienceModeLoadState.Loaded(it)
@@ -239,7 +247,13 @@ fun SettingsScreen(
     val isEssentialMode = loadedExperienceMode == ExperienceMode.ESSENTIAL
 
     val allSectionSpecs = rememberSettingsSectionSpecs()
-    val visibleSections = remember(isPrimaryProfileActive, isEssentialMode, allSectionSpecs) {
+    val visibleSections = remember(
+        isPrimaryProfileActive,
+        isEssentialMode,
+        allSectionSpecs,
+        catalogsAvailable,
+        streamProvidersAvailable
+    ) {
         allSectionSpecs.filter { section ->
             when (section.category) {
                 SettingsCategory.EXPERIENCE -> false
@@ -247,10 +261,14 @@ fun SettingsScreen(
                 SettingsCategory.PROFILES -> isPrimaryProfileActive
                 SettingsCategory.ACCOUNT -> isPrimaryProfileActive
                 SettingsCategory.LAYOUT -> true
-                SettingsCategory.CONTENT_DISCOVERY -> true
+                // Catalogs (addons + built-in catalog) live here — hide if the super
+                // admin has made catalogs unavailable. Fail-open when available.
+                SettingsCategory.CONTENT_DISCOVERY -> catalogsAvailable
                 // Secondary profiles cannot manage integrations (debrid keys,
                 // addon manager, built-in providers) — primary profile only.
-                SettingsCategory.INTEGRATION -> isPrimaryProfileActive
+                // Integrations cover the debrid / stream-provider config, so also hide
+                // when stream providers are made unavailable by the super admin.
+                SettingsCategory.INTEGRATION -> isPrimaryProfileActive && streamProvidersAvailable
                 SettingsCategory.ADVANCED -> true
                 SettingsCategory.TRAKT -> BuildConfig.RECO_MODE != "private"
                 else -> true
@@ -526,7 +544,8 @@ fun SettingsScreen(
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                             recoFocusRequester = integrationRecoFocusRequester,
                             builtInProvidersFocusRequester = integrationBuiltInProvidersFocusRequester,
-                            autoFocusEnabled = allowDetailAutofocus
+                            autoFocusEnabled = allowDetailAutofocus,
+                            personalizationAvailable = personalizationAvailable
                         )
                         SettingsCategory.ABOUT -> AboutSettingsContent(
                             onNavigateToSupportersContributors = onNavigateToSupportersContributors,
@@ -542,6 +561,9 @@ fun SettingsScreen(
                             onNavigateToPlugins = onNavigateToPlugins,
                             onNavigateToBuiltInProviders = onNavigateToBuiltInProviders,
                             showPlugins = AppFeaturePolicy.pluginsEnabled && !isEssentialMode,
+                            // Built-in providers expose stream-provider + reco config; only
+                            // surface when those features are available.
+                            streamProvidersAvailable = streamProvidersAvailable,
                             onConfigureReco = {
                                 selectedCategory = SettingsCategory.INTEGRATION
                                 integrationSection = IntegrationSettingsSection.Reco
@@ -570,10 +592,13 @@ private fun ContentDiscoverySettingsContent(
     onNavigateToPlugins: () -> Unit,
     onNavigateToBuiltInProviders: () -> Unit,
     showPlugins: Boolean,
+    streamProvidersAvailable: Boolean,
     onConfigureReco: () -> Unit,
     initialFocusRequester: FocusRequester?
 ) {
-    val showBuiltInProviders = com.nuvio.tv.BuildConfig.RECO_MODE == "private"
+    // Built-in providers row only exists in the private build; further gate on
+    // stream-provider availability passed down from the super-admin flags.
+    val showBuiltInProviders = com.nuvio.tv.BuildConfig.RECO_MODE == "private" && streamProvidersAvailable
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -697,10 +722,18 @@ private fun IntegrationSettingsContent(
     animeSkipFocusRequester: FocusRequester,
     recoFocusRequester: FocusRequester,
     builtInProvidersFocusRequester: FocusRequester,
-    autoFocusEnabled: Boolean
+    autoFocusEnabled: Boolean,
+    personalizationAvailable: Boolean
 ) {
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
         onBack()
+    }
+    // If personalization is made unavailable by the super admin, bounce out of the Reco
+    // section back to the hub so its UI is never shown.
+    LaunchedEffect(personalizationAvailable, selectedSection) {
+        if (!personalizationAvailable && selectedSection == IntegrationSettingsSection.Reco) {
+            onBack()
+        }
     }
     val hubEntryFocusRequester = initialFocusRequester ?: hubFocusRequester
 
@@ -794,15 +827,24 @@ private fun IntegrationSettingsContent(
         }
 
         IntegrationSettingsSection.Reco -> {
-            RecoSettingsContent(
-                initialFocusRequester = recoFocusRequester
-            )
+            // Personalization (reco) gated by super-admin availability. When unavailable the
+            // LaunchedEffect above navigates back; render nothing in the interim.
+            if (personalizationAvailable) {
+                RecoSettingsContent(
+                    initialFocusRequester = recoFocusRequester
+                )
+            }
         }
 
         IntegrationSettingsSection.BuiltInProviders -> {
             BuiltInProvidersSettingsContent(
                 initialFocusRequester = builtInProvidersFocusRequester,
-                onConfigureReco = { onSelectSection(IntegrationSettingsSection.Reco) }
+                // Only allow opening the reco configurator when personalization is available.
+                onConfigureReco = if (personalizationAvailable) {
+                    { onSelectSection(IntegrationSettingsSection.Reco) }
+                } else {
+                    {}
+                }
             )
         }
     }
