@@ -93,7 +93,10 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(@ApplicationContext context: Context): OkHttpClient {
+    fun provideOkHttpClient(
+        @ApplicationContext context: Context,
+        recoAuthTokenProvider: com.nuvio.tv.core.reco.RecoAuthTokenProvider,
+    ): OkHttpClient {
         val trustAllManager = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
             override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
@@ -118,6 +121,11 @@ object NetworkModule {
                     .build()
                 chain.proceed(request)
             }
+            // F32 (api_bridge.md): attach the Nuvio/Supabase bearer token to every
+            // reco-backend (RecoBackend.host) request so private-mode metadata/data
+            // endpoints stay accessible. Host-scoped + skips already-authed and public
+            // paths, so TMDB/Trakt/etc. and the catalog-addon secret are untouched.
+            .addInterceptor(com.nuvio.tv.core.reco.RecoAuthInterceptor(recoAuthTokenProvider))
             // Prevent OkHttp from caching error responses (4xx/5xx).
             .addNetworkInterceptor { chain ->
                 val response = chain.proceed(chain.request())

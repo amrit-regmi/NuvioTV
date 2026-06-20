@@ -37,6 +37,8 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
     // Eagerly instantiated so its auth-state / profile-switch observers start at app load
     // and keep the feature-availability map fresh for the UI to gate on.
     @Inject lateinit var featureAvailabilityManager: FeatureAvailabilityManager
+    // Used to attach the Nuvio bearer token to reco-host image requests (F32 image lock).
+    @Inject lateinit var recoAuthTokenProvider: com.nuvio.tv.core.reco.RecoAuthTokenProvider
 
     companion object {
         /**
@@ -91,6 +93,16 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                             OkHttpClient.Builder()
                                 .followRedirects(true)
                                 .followSslRedirects(true)
+                                // F32 (api_bridge.md): attach the Nuvio/Supabase bearer
+                                // token ONLY for reco-backend (RecoBackend.host) image
+                                // requests (/image/*, /metadata/images/*) so posters/
+                                // backdrops keep loading once the backend locks them.
+                                // TMDB and every other image host are left untouched.
+                                .addInterceptor(
+                                    com.nuvio.tv.core.reco.RecoAuthInterceptor(
+                                        recoAuthTokenProvider
+                                    )
+                                )
                                 .build()
                         }
                     )
