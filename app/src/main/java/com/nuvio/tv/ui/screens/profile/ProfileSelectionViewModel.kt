@@ -1,9 +1,13 @@
 package com.nuvio.tv.ui.screens.profile
 
+import android.graphics.Bitmap
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.core.qr.QrCodeGenerator
+import com.nuvio.tv.core.reco.RecommendationRepository
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.SetProfilePinResult
 import com.nuvio.tv.data.local.ProfileLockStateDataStore
@@ -21,12 +25,23 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+data class ProfileConfigQrState(
+    val profileId: Int,
+    val profileName: String,
+    val isLoading: Boolean = false,
+    val url: String? = null,
+    val qrBitmap: Bitmap? = null,
+    val error: Boolean = false
+)
+
 @HiltViewModel
 class ProfileSelectionViewModel @Inject constructor(
     private val profileManager: ProfileManager,
     private val profileSyncService: ProfileSyncService,
     private val avatarRepository: AvatarRepository,
-    private val profileLockStateDataStore: ProfileLockStateDataStore
+    private val profileLockStateDataStore: ProfileLockStateDataStore,
+    private val recommendationRepository: RecommendationRepository,
+    private val authManager: AuthManager
 ) : ViewModel() {
     private var isAvatarCatalogLoading = false
 
@@ -50,6 +65,9 @@ class ProfileSelectionViewModel @Inject constructor(
 
     private val _isPinOperationInProgress = MutableStateFlow(false)
     val isPinOperationInProgress: StateFlow<Boolean> = _isPinOperationInProgress.asStateFlow()
+
+    private val _profileConfigQr = MutableStateFlow<ProfileConfigQrState?>(null)
+    val profileConfigQr: StateFlow<ProfileConfigQrState?> = _profileConfigQr.asStateFlow()
 
     init {
         loadAvatarCatalog()
@@ -141,6 +159,49 @@ class ProfileSelectionViewModel @Inject constructor(
                 delay(2000L * attempt)
             }
         }
+    }
+
+    /**
+     * Requests a short-lived (15 min) configuration URL for a profile and renders it
+     * as a QR so the household can configure the profile on a phone. FE-1.
+     */
+    fun requestProfileConfigUrl(profile: UserProfile) {
+        viewModelScope.launch {
+            _profileConfigQr.value = ProfileConfigQrState(
+                profileId = profile.id,
+                profileName = profile.name,
+                isLoading = true
+            )
+            val token = authManager.currentAccessToken()
+            if (token == null) {
+                _profileConfigQr.value = ProfileConfigQrState(
+                    profileId = profile.id,
+                    profileName = profile.name,
+                    error = true
+                )
+                return@launch
+            }
+            val url = recommendationRepository.issueProfileToken(token, profile.id)
+            if (url == null) {
+                _profileConfigQr.value = ProfileConfigQrState(
+                    profileId = profile.id,
+                    profileName = profile.name,
+                    error = true
+                )
+                return@launch
+            }
+            val qr = runCatching { QrCodeGenerator.generate(url, 420) }.getOrNull()
+            _profileConfigQr.value = ProfileConfigQrState(
+                profileId = profile.id,
+                profileName = profile.name,
+                url = url,
+                qrBitmap = qr
+            )
+        }
+    }
+
+    fun dismissProfileConfigQr() {
+        _profileConfigQr.value = null
     }
 
     fun isProfilePinEnabled(profileId: Int): Boolean {

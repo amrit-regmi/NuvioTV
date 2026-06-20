@@ -76,6 +76,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -92,6 +93,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
@@ -186,6 +188,7 @@ fun ProfileSelectionScreen(
     val isSaving by viewModel.isSaving.collectAsState()
     val profilePinEnabled by viewModel.profilePinEnabled.collectAsState()
     val isPinOperationInProgress by viewModel.isPinOperationInProgress.collectAsState()
+    val profileConfigQr by viewModel.profileConfigQr.collectAsState()
     val avatarImageUrlsById = remember(avatarCatalog) {
         avatarCatalog.associate { it.id to it.imageUrl }
     }
@@ -516,6 +519,20 @@ fun ProfileSelectionScreen(
                 Button(
                     onClick = {
                         longPressedProfile = null
+                        viewModel.requestProfileConfigUrl(profile)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text(stringResource(R.string.profile_configure_on_phone))
+                }
+
+                Button(
+                    onClick = {
+                        longPressedProfile = null
                         pinOverlayError = null
                         pinOverlayState = if (profilePinEnabled[profile.id] == true) {
                             ProfilePinOverlayState.VerifyCurrentForChange(profile)
@@ -606,6 +623,82 @@ fun ProfileSelectionScreen(
                     )
                 ) {
                     Text(stringResource(R.string.profile_delete_btn))
+                }
+            }
+        }
+
+        // FE-1: Per-profile "Configure on phone" QR dialog (short-lived URL, 15 min).
+        profileConfigQr?.let { qrState ->
+            val qrDialogFocusRequester = remember(qrState.profileId) { FocusRequester() }
+            LaunchedEffect(qrState.profileId) {
+                repeat(2) { withFrameNanos { } }
+                runCatching { qrDialogFocusRequester.requestFocus() }
+            }
+            NuvioDialog(
+                onDismiss = { viewModel.dismissProfileConfigQr() },
+                title = stringResource(R.string.profile_configure_on_phone),
+                subtitle = qrState.profileName,
+                width = 420.dp,
+                suppressFirstKeyUp = false
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    when {
+                        qrState.isLoading -> {
+                            Text(
+                                text = stringResource(R.string.profile_configure_generating),
+                                color = NuvioTheme.colors.TextSecondary,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        qrState.error -> {
+                            Text(
+                                text = stringResource(R.string.profile_configure_error),
+                                color = NuvioTheme.colors.TextSecondary,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        qrState.url != null -> {
+                            qrState.qrBitmap?.let { bmp ->
+                                Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = stringResource(R.string.profile_configure_on_phone),
+                                    modifier = Modifier
+                                        .size(200.dp)
+                                        .background(Color.White, RoundedCornerShape(12.dp))
+                                        .padding(8.dp),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+                            Text(
+                                text = qrState.url,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = NuvioTheme.colors.TextSecondary,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = stringResource(R.string.profile_configure_expires),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = NuvioTheme.colors.TextTertiary,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = { viewModel.dismissProfileConfigQr() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(qrDialogFocusRequester),
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.BackgroundCard,
+                            contentColor = NuvioTheme.colors.TextPrimary
+                        )
+                    ) {
+                        Text(stringResource(R.string.profile_configure_close))
+                    }
                 }
             }
         }
