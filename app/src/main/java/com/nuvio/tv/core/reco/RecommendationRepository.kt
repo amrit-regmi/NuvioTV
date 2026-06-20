@@ -47,6 +47,13 @@ data class RecoRow(
 @Serializable
 data class RecoResponse(val rows: List<RecoRow>)
 
+@Serializable
+data class MeInfo(
+    val is_super_admin: Boolean = false,
+) {
+    val isSuperAdmin: Boolean get() = is_super_admin
+}
+
 @Singleton
 class RecommendationRepository @Inject constructor(
     private val httpClient: OkHttpClient,
@@ -108,6 +115,54 @@ class RecommendationRepository @Inject constructor(
                 val body = httpClient.newCall(request).execute().use { it.body?.string() ?: "" }
                 Json.parseToJsonElement(body).jsonObject["url"]?.jsonPrimitive?.contentOrNull
             }.getOrNull()
+        }
+
+    /**
+     * Fetches the logged-in Nuvio user's account flags from the backend.
+     * Currently surfaces [MeInfo.isSuperAdmin] so the TV app can decide whether to
+     * show the "Manage / Super Admin" entry on the primary profile.
+     */
+    suspend fun fetchMe(userId: String, bearerToken: String): MeInfo? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val request = Request.Builder()
+                    .url("${BuildConfig.RECO_API_BASE_URL}/api/me/$userId")
+                    .header("Authorization", "Bearer $bearerToken")
+                    .build()
+                val body = httpClient.newCall(request).execute().use { it.body?.string() ?: "" }
+                json.decodeFromString<MeInfo>(body)
+            }.getOrElse {
+                Log.w("RecoRepo", "fetchMe failed", it)
+                null
+            }
+        }
+
+    /**
+     * Requests a short-lived (15 min) profile configuration URL for the given profile.
+     * Used by the management screen to let the household configure a profile on a phone.
+     */
+    suspend fun issueProfileToken(bearerToken: String, profileId: Int): String? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val bodyJson = buildJsonObject {
+                    put("profile_id", profileId)
+                }
+                val body = bodyJson.toString().toRequestBody("application/json".toMediaType())
+                val request = Request.Builder()
+                    .url("${BuildConfig.RECO_API_BASE_URL}/api/profile-token")
+                    .header("Authorization", "Bearer $bearerToken")
+                    .post(body)
+                    .build()
+                val responseBody = httpClient.newCall(request).execute().use { it.body?.string() ?: "" }
+                val obj = Json.parseToJsonElement(responseBody).jsonObject
+                obj["url"]?.jsonPrimitive?.contentOrNull
+                    ?: obj["token"]?.jsonPrimitive?.contentOrNull?.let { token ->
+                        "https://hamrocinema.regmig.com/configure/profile/$token"
+                    }
+            }.getOrElse {
+                Log.w("RecoRepo", "issueProfileToken failed for profile $profileId", it)
+                null
+            }
         }
 
     suspend fun deleteProfile(bearerToken: String, profileUuid: String): Boolean =

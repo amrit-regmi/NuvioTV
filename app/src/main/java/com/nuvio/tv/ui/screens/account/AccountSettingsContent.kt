@@ -22,9 +22,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -118,6 +123,30 @@ fun AccountSettingsContent(
                     item(key = "account_sync_overview") { SyncOverviewCard(overview) }
                 } else if (uiState.isSyncOverviewLoading) {
                     item(key = "account_sync_overview_loading") { SyncOverviewLoadingCard() }
+                }
+
+                // "Manage / Super Admin" entry — primary profile only (this Account
+                // section is already gated to the primary profile) and only when the
+                // backend reports the logged-in Nuvio user has the super-admin flag.
+                if (uiState.isSuperAdmin) {
+                    if (uiState.manageDashboardUrl != null) {
+                        item(key = "account_manage_dashboard_qr") {
+                            ManageDashboardQrCard(
+                                url = uiState.manageDashboardUrl!!,
+                                qrBitmap = uiState.manageDashboardQrBitmap,
+                                onDismiss = { viewModel.dismissManageDashboardQr() }
+                            )
+                        }
+                    } else {
+                        item(key = "account_manage_dashboard") {
+                            SettingsActionButton(
+                                icon = Icons.Default.AdminPanelSettings,
+                                title = stringResource(R.string.account_manage_super_admin_title),
+                                subtitle = stringResource(R.string.account_manage_super_admin_subtitle),
+                                onClick = { viewModel.showManageDashboardQr() }
+                            )
+                        }
+                    }
                 }
 
                 item(key = "account_sign_out") { SignOutSettingsButton(onClick = { viewModel.signOut() }) }
@@ -351,6 +380,68 @@ private fun SettingsActionButton(
                     color = NuvioTheme.colors.TextSecondary
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ManageDashboardQrCard(
+    url: String,
+    qrBitmap: android.graphics.Bitmap?,
+    onDismiss: () -> Unit
+) {
+    Card(
+        onClick = onDismiss,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.colors(
+            containerColor = NuvioTheme.colors.BackgroundCard,
+            focusedContainerColor = NuvioTheme.colors.FocusBackground
+        ),
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(NuvioTheme.spacing.xxs, NuvioTheme.colors.FocusRing),
+                shape = RoundedCornerShape(NuvioTheme.radii.sm)
+            )
+        ),
+        shape = CardDefaults.shape(shape = RoundedCornerShape(NuvioTheme.radii.sm)),
+        scale = CardDefaults.scale(focusedScale = 1.01f)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.account_manage_super_admin_title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioTheme.colors.TextPrimary,
+                fontWeight = FontWeight.Medium
+            )
+            if (qrBitmap != null) {
+                Image(
+                    bitmap = qrBitmap.asImageBitmap(),
+                    contentDescription = stringResource(R.string.account_manage_super_admin_title),
+                    modifier = Modifier
+                        .size(180.dp)
+                        .background(Color.White, RoundedCornerShape(NuvioTheme.radii.sm))
+                        .padding(8.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+            Text(
+                text = url,
+                style = MaterialTheme.typography.bodySmall,
+                color = NuvioTheme.colors.TextSecondary,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = stringResource(R.string.account_manage_super_admin_qr_hint),
+                fontSize = 10.sp,
+                color = NuvioTheme.colors.TextTertiary,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }

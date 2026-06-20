@@ -11,6 +11,7 @@ import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.qr.QrCodeGenerator
+import com.nuvio.tv.core.reco.RecommendationRepository
 import com.nuvio.tv.core.sync.AddonSyncService
 import com.nuvio.tv.core.sync.LibrarySyncService
 import com.nuvio.tv.core.sync.PluginSyncService
@@ -45,6 +46,8 @@ import java.time.Instant
 import java.util.Base64
 import javax.inject.Inject
 
+private const val MANAGE_DASHBOARD_URL = "https://hamrocinema.regmig.com/configure"
+
 @HiltViewModel
 class AccountViewModel @Inject constructor(
     private val authManager: AuthManager,
@@ -65,6 +68,7 @@ class AccountViewModel @Inject constructor(
     private val traktAuthDataStore: TraktAuthDataStore,
     private val syncBackendRepository: SyncBackendRepository,
     private val supabaseProvider: SyncBackendSupabaseProvider,
+    private val recommendationRepository: RecommendationRepository,
     private val profileManager: ProfileManager,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -96,6 +100,15 @@ class AccountViewModel @Inject constructor(
                 if (state is AuthState.FullAccount) {
                     loadConnectedStats()
                     loadSyncOverview()
+                    loadSuperAdminFlag(state.userId)
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isSuperAdmin = false,
+                            manageDashboardUrl = null,
+                            manageDashboardQrBitmap = null
+                        )
+                    }
                 }
             }
         }
@@ -402,6 +415,40 @@ class AccountViewModel @Inject constructor(
                     isStatsLoading = false
                 )
             }
+        }
+    }
+
+    private fun loadSuperAdminFlag(userId: String) {
+        viewModelScope.launch {
+            val token = authManager.currentAccessToken() ?: return@launch
+            val me = recommendationRepository.fetchMe(userId, token)
+            if (me != null) {
+                _uiState.update { it.copy(isSuperAdmin = me.isSuperAdmin) }
+            }
+        }
+    }
+
+    /**
+     * Shows the "Manage / Super Admin" dashboard as a QR code on the TV.
+     * The TV never renders the super-admin UI itself — it deep-links to the web dashboard.
+     */
+    fun showManageDashboardQr() {
+        viewModelScope.launch {
+            val qrBitmap = runCatching {
+                QrCodeGenerator.generate(MANAGE_DASHBOARD_URL, 420)
+            }.getOrNull()
+            _uiState.update {
+                it.copy(
+                    manageDashboardUrl = MANAGE_DASHBOARD_URL,
+                    manageDashboardQrBitmap = qrBitmap
+                )
+            }
+        }
+    }
+
+    fun dismissManageDashboardQr() {
+        _uiState.update {
+            it.copy(manageDashboardUrl = null, manageDashboardQrBitmap = null)
         }
     }
 

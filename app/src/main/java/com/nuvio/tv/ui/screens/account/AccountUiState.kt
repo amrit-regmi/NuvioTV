@@ -51,5 +51,11 @@ data class AccountUiState(
     val qrLoginBitmap: Bitmap? = null,
     val qrLoginStatus: String? = null,
     val qrLoginExpiresAtMillis: Long? = null,
-    val qrLoginPollIntervalSeconds: Int = 3
+    val qrLoginPollIntervalSeconds: Int = 3,
+    // Whether the logged-in Nuvio user has the super-admin flag (backend GET /api/me).
+    // Surfaces the "Manage / Super Admin" entry on the primary profile only.
+    val isSuperAdmin: Boolean = false,
+    // Dashboard ("Manage / Super Admin") deep-link state shown as a QR on the TV.
+    val manageDashboardUrl: String? = null,
+    val manageDashboardQrBitmap: Bitmap? = null
 )
