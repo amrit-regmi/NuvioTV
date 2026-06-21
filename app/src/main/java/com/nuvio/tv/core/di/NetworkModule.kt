@@ -100,6 +100,9 @@ object NetworkModule {
         // very OkHttpClient. Deferring resolution lets the client build first; the token
         // provider is created only on the first reco-backend request.
         recoAuthTokenProvider: dagger.Lazy<com.nuvio.tv.core.reco.RecoAuthTokenProvider>,
+        // ServerHealthNotifier has no OkHttpClient dependency, but keep it Lazy for symmetry
+        // and to avoid any eager-init surprises; resolved on the first reco-host request.
+        serverHealthNotifier: dagger.Lazy<com.nuvio.tv.core.network.ServerHealthNotifier>,
     ): OkHttpClient {
         val trustAllManager = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
@@ -129,7 +132,12 @@ object NetworkModule {
             // reco-backend (RecoBackend.host) request so private-mode metadata/data
             // endpoints stay accessible. Host-scoped + skips already-authed and public
             // paths, so TMDB/Trakt/etc. and the catalog-addon secret are untouched.
-            .addInterceptor(com.nuvio.tv.core.reco.RecoAuthInterceptor { recoAuthTokenProvider.get() })
+            .addInterceptor(
+                com.nuvio.tv.core.reco.RecoAuthInterceptor(
+                    tokenProvider = { recoAuthTokenProvider.get() },
+                    serverHealthNotifier = { serverHealthNotifier.get() }
+                )
+            )
             // Prevent OkHttp from caching error responses (4xx/5xx).
             .addNetworkInterceptor { chain ->
                 val response = chain.proceed(chain.request())

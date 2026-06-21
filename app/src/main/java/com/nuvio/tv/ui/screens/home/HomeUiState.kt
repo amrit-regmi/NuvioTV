@@ -58,6 +58,10 @@ data class HomeUiState(
     val useEpisodeThumbnailsInCw: Boolean = true,
     val heroEnrichmentEnabled: Boolean = false,
     val startupAuthNotice: StartupAuthNotice? = null,
+    // Non-blocking notice shown when OUR self-hosted backend is unreachable. Distinct from
+    // [startupAuthNotice] / auth state: it never logs the user out and browsing via
+    // third-party addons + cached content continues underneath.
+    val showServerIssuesNotice: Boolean = false,
     val homeRows: List<HomeRow> = emptyList()
 )
 

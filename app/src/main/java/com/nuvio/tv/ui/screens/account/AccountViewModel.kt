@@ -255,11 +255,46 @@ class AccountViewModel @Inject constructor(
                     }
                 },
                 onFailure = { e ->
-                    authManager.signOut(explicit = false)
+                    // Server-down resilience: a network/timeout/5xx during a claim attempt
+                    // must NOT log the user out of their existing account. Only roll the
+                    // session back on a DEFINITIVE backend rejection (non-transient error);
+                    // on a transient/connectivity failure we keep the current auth state and
+                    // just surface the error so the user can retry once the server returns.
+                    if (!isTransientNetworkError(e)) {
+                        authManager.signOut(explicit = false)
+                    } else {
+                        Log.w("AccountViewModel", "claimSyncCode failed transiently; keeping auth state", e)
+                    }
                     _uiState.update { it.copy(isLoading = false, error = userFriendlyError(e)) }
                 }
             )
         }
+    }
+
+    private fun isTransientNetworkError(e: Throwable): Boolean {
+        var current: Throwable? = e
+        while (current != null) {
+            if (current is java.io.IOException) return true
+            val msg = current.message?.lowercase().orEmpty()
+            if (
+                msg.contains("unable to resolve host") ||
+                msg.contains("no address associated") ||
+                msg.contains("failed to connect") ||
+                msg.contains("connection reset") ||
+                msg.contains("connection refused") ||
+                msg.contains("timeout") ||
+                msg.contains("timed out") ||
+                msg.contains("network") ||
+                msg.contains("service unavailable") ||
+                msg.contains("server error") ||
+                msg.contains(" 502") || msg.contains(" 503") || msg.contains(" 504") ||
+                msg.contains("(502") || msg.contains("(503") || msg.contains("(504")
+            ) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
     }
 
     fun signOut() {

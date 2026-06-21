@@ -1,10 +1,12 @@
 package com.nuvio.tv.core.reco
 
+import com.nuvio.tv.core.network.ServerHealthNotifier
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
+import java.io.IOException
 
 /**
  * Attaches `Authorization: Bearer <supabase_access_token>` to every request whose
@@ -42,12 +44,19 @@ class RecoAuthInterceptor(
     // its dependency subgraph transitively needs OkHttpClient, which would otherwise
     // create a Hilt dependency cycle. Resolved lazily on first request.
     private val tokenProvider: () -> RecoAuthTokenProvider,
+    // Supplier of the server-health notifier (lazy for the same cycle-avoidance reason).
+    // Used purely to surface the non-blocking "server issues" notice when OUR backend is
+    // unreachable — it NEVER touches auth state or clears any cache. Defaults to null for
+    // the Coil image client, whose cached/lazy poster loads make a poor outage signal; only
+    // the shared data OkHttpClient supplies a real notifier.
+    private val serverHealthNotifier: (() -> ServerHealthNotifier)? = null,
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
 
-        // Only the reco backend host; leave TMDB/Trakt/etc. alone.
+        // Only the reco backend host; leave TMDB/Trakt/etc. alone. Third-party addon hosts
+        // never reach this branch, so their reachability is independent of our backend.
         if (!request.url.host.equals(RecoBackend.host, ignoreCase = true)) {
             return chain.proceed(request)
         }
@@ -55,26 +64,54 @@ class RecoAuthInterceptor(
         // Don't clobber an Authorization header that a call site already set
         // (existing authed reco calls, or the catalog-addon CATALOG_SECRET client).
         if (request.header("Authorization") != null) {
-            return chain.proceed(request)
+            return proceedTrackingHealth(chain, request)
         }
 
         val path = request.url.encodedPath
         if (isPublicPath(path)) {
-            return chain.proceed(request)
+            return proceedTrackingHealth(chain, request)
         }
 
         // No token = unauthenticated. Our backend (built-in provider, reco, image/metadata
         // proxy, shared TorBox key, …) is gated behind a full Nuvio account, so we must NOT
         // communicate with it at all when signed out. Short-circuit with a local 401 instead
         // of letting the request leave the device. Public paths (handled above) still pass.
+        // This is a deliberate local block, NOT a server outage, so it does not notify.
         val token = tokenProvider().currentToken()
             ?: return blockedUnauthenticated(request)
 
-        return chain.proceed(
+        return proceedTrackingHealth(
+            chain,
             request.newBuilder()
                 .header("Authorization", "Bearer $token")
                 .build()
         )
+    }
+
+    /**
+     * Proceeds with an OUR-host request and observes whether the backend looks down.
+     *
+     * - A connection failure / timeout / DNS error throws [IOException]: we report the
+     *   outage (non-blocking notice) and RE-THROW so callers keep their existing graceful
+     *   fallbacks (cached content, third-party addons) — we never swallow into a logout.
+     * - A 5xx response is reported as an outage but passed through unchanged.
+     * - Any other response (2xx/3xx/4xx) re-arms the notice; 4xx is an app-level condition
+     *   (auth/not-found), not a server outage.
+     */
+    private fun proceedTrackingHealth(chain: Interceptor.Chain, request: okhttp3.Request): Response {
+        val notifier = serverHealthNotifier?.invoke()
+        val response = try {
+            chain.proceed(request)
+        } catch (e: IOException) {
+            notifier?.reportOurHostUnreachable()
+            throw e
+        }
+        if (response.code in 500..599) {
+            notifier?.reportOurHostUnreachable()
+        } else {
+            notifier?.reportOurHostHealthy()
+        }
+        return response
     }
 
     private fun blockedUnauthenticated(request: okhttp3.Request): Response =

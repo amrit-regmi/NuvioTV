@@ -419,6 +419,27 @@ fun HomeScreen(
                 )
             }
         }
+
+        // Non-blocking "server issues" notice: shown only when OUR backend is unreachable.
+        // Neutral (not error-red) and never gates anything — browsing continues underneath.
+        if (uiState.showServerIssuesNotice && startupAuthNotice == null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = NuvioTheme.spacing.xl)
+                    .background(
+                        color = Color(0xFF2A2E3A),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.server_issues_notice),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioTheme.colors.TextPrimary
+                )
+            }
+        }
     }
 
     val selectedPoster = posterOptionsTarget

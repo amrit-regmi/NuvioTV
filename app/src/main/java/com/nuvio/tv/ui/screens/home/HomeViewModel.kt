@@ -88,7 +88,8 @@ class HomeViewModel @Inject constructor(
     internal val recommendationRepository: RecommendationRepository,
     internal val recoMetadataService: com.nuvio.tv.core.reco.RecoMetadataService,
     internal val homeCatalogSettingsSyncService: com.nuvio.tv.core.sync.HomeCatalogSettingsSyncService,
-    private val streamWarmer: StreamWarmer
+    private val streamWarmer: StreamWarmer,
+    internal val serverHealthNotifier: com.nuvio.tv.core.network.ServerHealthNotifier
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -285,6 +286,7 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var startupGracePeriodActive: Boolean = true
     internal var startupAuthNoticeJob: Job? = null
+    internal var serverIssuesNoticeJob: Job? = null
 
     // Lazy catalog loading
     internal val eagerCatalogLoadCount: Int = 4
@@ -325,6 +327,7 @@ class HomeViewModel @Inject constructor(
         }
 
         observeStartupAuthNotice()
+        observeServerHealth()
         viewModelScope.launch {
             profileManager.activeProfileReady.first { it }
             loadSavedRowOrder()
@@ -645,6 +648,29 @@ class HomeViewModel @Inject constructor(
                     clearStartupAuthNotice(notice)
                 }
                 authSessionNoticeDataStore.consumeNotice(notice)
+            }
+        }
+    }
+
+    /**
+     * Surfaces the non-blocking "Server is currently experiencing issues" banner when OUR
+     * backend is unreachable. [ServerHealthNotifier] already de-bounces (one emit per
+     * outage), so this just shows the banner briefly. It NEVER touches auth state — the user
+     * stays signed in and keeps browsing via third-party addons / cached content.
+     */
+    private fun observeServerHealth() {
+        viewModelScope.launch {
+            serverHealthNotifier.serverIssues.collect {
+                _uiState.update { state ->
+                    if (state.showServerIssuesNotice) state else state.copy(showServerIssuesNotice = true)
+                }
+                serverIssuesNoticeJob?.cancel()
+                serverIssuesNoticeJob = viewModelScope.launch {
+                    delay(4000)
+                    _uiState.update { state ->
+                        if (state.showServerIssuesNotice) state.copy(showServerIssuesNotice = false) else state
+                    }
+                }
             }
         }
     }

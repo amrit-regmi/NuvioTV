@@ -100,6 +100,7 @@
     <string name="home_no_catalog_addons">No catalog addons installed. Install a catalog addon to see content.</string>
     <string name="auth_notice_nuvio_logged_out">You have been signed out of Nuvio. Please sign in again.</string>
     <string name="auth_notice_trakt_logged_out">You have been signed out of Trakt. Please reconnect.</string>
+    <string name="server_issues_notice">Server is currently experiencing issues.</string>
     <string name="error_generic">An error occurred</string>
 
     <string name="action_retry">Retry</string>
