@@ -150,6 +150,7 @@ import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
 import com.nuvio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nuvio.tv.ui.screens.addon.EssentialAddonSetupScreen
+import com.nuvio.tv.ui.screens.onboarding.PersonalizeNudgeDialog
 import com.nuvio.tv.ui.screens.profile.ProfileSelectionScreen
 import com.nuvio.tv.ui.theme.NuvioComponents
 import com.nuvio.tv.ui.theme.NuvioMotion
@@ -178,6 +179,9 @@ val LocalSidebarExpanded = compositionLocalOf { false }
 val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
 
 private const val SIDEBAR_AUTO_COLLAPSE_DELAY_MS = 4_000L
+
+// Web-only personalization deep link surfaced by the post-first-login nudge.
+private const val PERSONALIZE_WEB_URL = "https://hamrocinema.regmig.com/configure/settings#sec-personalization"
 
 data class DrawerItem(
     val route: String,
@@ -330,6 +334,10 @@ class MainActivity : ComponentActivity() {
                 appOnboardingDataStore.hasSeenAuthQrOnFirstLaunch.map<Boolean, Boolean?> { it }
             }
             val hasSeenAuthQrOnFirstLaunch by hasSeenAuthQrFlow.collectAsState(initial = null)
+            val hasSeenPersonalizeNudgeFlow = remember(appOnboardingDataStore) {
+                appOnboardingDataStore.hasSeenPersonalizeNudge
+            }
+            val hasSeenPersonalizeNudge by hasSeenPersonalizeNudgeFlow.collectAsState(initial = true)
             val authState by authManager.authState.collectAsState()
             val context = LocalContext.current
 
@@ -508,11 +516,22 @@ class MainActivity : ComponentActivity() {
                         return@Surface
                     }
 
-                    if (
-                        hasSeenAuthQrOnFirstLaunch == false &&
-                        authState !is AuthState.FullAccount &&
-                        !onboardingCompletedThisSession
-                    ) {
+                    // Unauthenticated use is blocked. Show the auth/login screen whenever there is
+                    // no full account, EXCEPT for the brief Loading state (handled above). This covers
+                    // both the first-launch onboarding AND a post-logout return: signing out flips
+                    // authState to SignedOut, which must land the user back on the login screen rather
+                    // than a stale Settings/Home backstack.
+                    val mustAuthenticate = authState !is AuthState.FullAccount &&
+                        (hasSeenAuthQrOnFirstLaunch == false && !onboardingCompletedThisSession ||
+                            authState is AuthState.SignedOut)
+                    if (mustAuthenticate) {
+                        // After an explicit logout, allow the auth screen to reappear on a later
+                        // logout within the same process by clearing the "completed this session" flag.
+                        if (authState is AuthState.SignedOut) {
+                            if (onboardingCompletedThisSession) onboardingCompletedThisSession = false
+                            // Re-arm profile selection so a subsequent login re-runs the profile gate.
+                            if (hasSelectedProfileThisSession) hasSelectedProfileThisSession = false
+                        }
                         AuthQrSignInScreen(
                             onBackPress = {},
                             onContinue = {
@@ -834,6 +853,25 @@ class MainActivity : ComponentActivity() {
                             title = ov.title,
                             message = stringResource(R.string.external_auto_next_loading),
                             modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    // Post-first-login nudge: once the user has a full account and has reached the
+                    // main UI, prompt them (once, dismissable) to set up web personalization. Web-only
+                    // per product: it deep-links via QR rather than an in-app wizard. Suppressed while
+                    // the auto-next loader is up to avoid stacking overlays.
+                    val showPersonalizeNudge = authState is AuthState.FullAccount &&
+                        !hasSeenPersonalizeNudge &&
+                        autoNextOverlay == null
+                    if (showPersonalizeNudge) {
+                        BackHandler(enabled = true) {
+                            lifecycleScope.launch { appOnboardingDataStore.setHasSeenPersonalizeNudge(true) }
+                        }
+                        PersonalizeNudgeDialog(
+                            personalizeUrl = PERSONALIZE_WEB_URL,
+                            onDismiss = {
+                                lifecycleScope.launch { appOnboardingDataStore.setHasSeenPersonalizeNudge(true) }
+                            }
                         )
                     }
                 }

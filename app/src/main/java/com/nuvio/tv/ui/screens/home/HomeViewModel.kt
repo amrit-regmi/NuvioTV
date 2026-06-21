@@ -86,6 +86,7 @@ class HomeViewModel @Inject constructor(
     internal val tvRecommendationManager: TvRecommendationManager,
     internal val authManager: AuthManager,
     internal val recommendationRepository: RecommendationRepository,
+    internal val featureAvailabilityManager: com.nuvio.tv.core.feature.FeatureAvailabilityManager,
     internal val recoMetadataService: com.nuvio.tv.core.reco.RecoMetadataService,
     internal val homeCatalogSettingsSyncService: com.nuvio.tv.core.sync.HomeCatalogSettingsSyncService,
     private val streamWarmer: StreamWarmer,

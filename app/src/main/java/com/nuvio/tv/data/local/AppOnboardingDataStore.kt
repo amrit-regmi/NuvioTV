@@ -20,6 +20,8 @@ class AppOnboardingDataStore @Inject constructor(
 ) {
     private val dataStore = context.appOnboardingDataStore
     private val hasSeenAuthQrOnFirstLaunchKey = booleanPreferencesKey("has_seen_auth_qr_on_first_launch")
+    // One-time "Personalize your recommendations" nudge shown after the user's FIRST login.
+    private val hasSeenPersonalizeNudgeKey = booleanPreferencesKey("has_seen_personalize_nudge")
 
     val hasSeenAuthQrOnFirstLaunch: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[hasSeenAuthQrOnFirstLaunchKey] ?: false
@@ -28,6 +30,16 @@ class AppOnboardingDataStore @Inject constructor(
     suspend fun setHasSeenAuthQrOnFirstLaunch(value: Boolean) {
         dataStore.edit { prefs ->
             prefs[hasSeenAuthQrOnFirstLaunchKey] = value
+        }
+    }
+
+    val hasSeenPersonalizeNudge: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[hasSeenPersonalizeNudgeKey] ?: false
+    }
+
+    suspend fun setHasSeenPersonalizeNudge(value: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[hasSeenPersonalizeNudgeKey] = value
         }
     }
 }

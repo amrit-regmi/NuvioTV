@@ -1,12 +1,10 @@
 package com.nuvio.tv.data.local
 
-import com.nuvio.tv.BuildConfig
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nuvio.tv.core.profile.ProfileManager
-import com.nuvio.tv.core.reco.RecoBackend
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -224,14 +222,10 @@ class AddonPreferences @Inject constructor(
     }
 
     private fun getDefaultAddons(): Set<String> {
-        val defaults = mutableSetOf(
-            "https://v3-cinemeta.strem.io",
-            "https://opensubtitles-v3.strem.io"
-        )
-        if (BuildConfig.RECO_MODE == "private") {
-            // F32: catalog-addon URL derives from BuildConfig.RECO_API_BASE_URL via RecoBackend.
-            defaults.add(RecoBackend.catalogAddonUrl)
-        }
-        return defaults
+        // Default user-facing addon list starts EMPTY.
+        // Built-in providers (e.g. the catalog-addon) are injected separately and
+        // server-controlled in AddonRepositoryImpl when authenticated; they are NOT
+        // user addons and must not be seeded here.
+        return emptySet()
     }
 }

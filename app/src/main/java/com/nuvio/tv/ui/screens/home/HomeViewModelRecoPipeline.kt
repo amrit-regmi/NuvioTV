@@ -37,13 +37,32 @@ internal fun HomeViewModel.observeRecoRows() {
             }
     }
 
+    // Per-user feature gating: if the super admin has made recommendations/personalization
+    // unavailable (or locked it for this user), drop reco rows and never call the reco endpoint.
+    viewModelScope.launch {
+        featureAvailabilityManager.features
+            .map { it[com.nuvio.tv.core.feature.FeatureKeys.PERSONALIZATION] ?: true }
+            .distinctUntilChanged()
+            .collectLatest { available ->
+                if (!available) _recoRows.value = emptyList()
+            }
+    }
+
     viewModelScope.launch {
         combine(
             authManager.authState.filterIsInstance<AuthState.FullAccount>(),
             profileManager.activeProfileId,
-        ) { account, profileId -> account to profileId }
+            featureAvailabilityManager.features
+                .map { it[com.nuvio.tv.core.feature.FeatureKeys.PERSONALIZATION] ?: true }
+                .distinctUntilChanged(),
+        ) { account, profileId, personalizationAvailable -> Triple(account, profileId, personalizationAvailable) }
             .distinctUntilChanged()
-            .collectLatest { (account, profileId) ->
+            .collectLatest { (account, profileId, personalizationAvailable) ->
+                // Feature gating: do NOT call the reco endpoint when personalization is unavailable.
+                if (!personalizationAvailable) {
+                    _recoRows.value = emptyList()
+                    return@collectLatest
+                }
                 val token = authManager.currentAccessToken() ?: return@collectLatest
                 val rows = recommendationRepository.fetchRows(account.userId, token, profileId.toString())
                 val catalogRows = rows.mapIndexed { index, row -> row.toCatalogRow(index) }

@@ -49,6 +49,10 @@ class FeatureAvailabilityManager @Inject constructor(
     /** Observable availability map. Empty = all available (fail-open). */
     val features: StateFlow<Map<String, Boolean>> = _features.asStateFlow()
 
+    private val _requireOwnTorboxKey = MutableStateFlow(false)
+    /** When true, the account must supply its own TorBox key (no shared key). Fail-open: false. */
+    val requireOwnTorboxKey: StateFlow<Boolean> = _requireOwnTorboxKey.asStateFlow()
+
     @Volatile private var lastUserId: String? = null
 
     init {
@@ -62,6 +66,7 @@ class FeatureAvailabilityManager @Inject constructor(
                     // Signed out / loading → reset to fail-open.
                     lastUserId = null
                     _features.value = emptyMap()
+                    _requireOwnTorboxKey.value = false
                 }
             }
         }
@@ -83,8 +88,11 @@ class FeatureAvailabilityManager @Inject constructor(
             val token = authManager.currentAccessToken() ?: return@launch
             val me = recommendationRepository.fetchMe(userId, token)
             if (me != null) {
-                _features.value = me.features
-                Log.d("FeatureAvail", "features=${me.features}")
+                // effectiveFeatures folds in feature_status.locked_by_admin / available so a
+                // section locked for this user reads as unavailable for all existing gating.
+                _features.value = me.effectiveFeatures
+                _requireOwnTorboxKey.value = me.requireOwnTorboxKey
+                Log.d("FeatureAvail", "features=${me.effectiveFeatures} requireOwnTorboxKey=${me.requireOwnTorboxKey}")
             }
             // On null (call failed) we keep prior state / fail-open default.
         }

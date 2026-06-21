@@ -54,6 +54,14 @@ data class RecoRow(
 data class RecoResponse(val rows: List<RecoRow>)
 
 @Serializable
+data class FeatureStatus(
+    /** Whether the section is available to this account (super-admin kill switch). */
+    val available: Boolean = true,
+    /** Whether the section is locked by the admin for this specific user. */
+    val locked_by_admin: Boolean = false,
+)
+
+@Serializable
 data class MeInfo(
     val is_super_admin: Boolean = false,
     /**
@@ -63,11 +71,39 @@ data class MeInfo(
      * `personalization`, `stream_providers`, `catalogs`, `connected_devices`.
      */
     val features: Map<String, Boolean> = emptyMap(),
+    /**
+     * Richer per-feature status: `{key: {available, locked_by_admin}}`. When present this is
+     * authoritative — a section is effectively available only when `available && !locked_by_admin`.
+     * Absent on older backends; callers fall back to [features]. Fail-open on missing keys.
+     */
+    val feature_status: Map<String, FeatureStatus> = emptyMap(),
+    /**
+     * When true, the shared/admin TorBox key is NOT available to this account; the user must
+     * supply their own TorBox key for stream resolution.
+     */
+    val require_own_torbox_key: Boolean = false,
 ) {
     val isSuperAdmin: Boolean get() = is_super_admin
+    val requireOwnTorboxKey: Boolean get() = require_own_torbox_key
+
+    /**
+     * Effective AVAILABILITY map combining [features] and [feature_status].
+     * A section is available only when its boolean is not false AND it is not locked_by_admin.
+     * Fail-open: keys absent from both maps are available (resolved at call sites via `?: true`).
+     */
+    val effectiveFeatures: Map<String, Boolean>
+        get() {
+            val keys = features.keys + feature_status.keys
+            return keys.associateWith { key ->
+                val flag = features[key] ?: true
+                val status = feature_status[key]
+                val statusAvailable = status?.let { it.available && !it.locked_by_admin } ?: true
+                flag && statusAvailable
+            }
+        }
 
     /** Fail-open availability check: missing/unknown key → available. */
-    fun isFeatureAvailable(key: String): Boolean = features[key] ?: true
+    fun isFeatureAvailable(key: String): Boolean = effectiveFeatures[key] ?: true
 }
 
 @Singleton
