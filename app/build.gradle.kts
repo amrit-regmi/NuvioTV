@@ -215,8 +215,13 @@ android {
             buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Minify/shrink disabled to avoid R8 OOM on the fixed Gradle heap
+            // (owner constraint: do not change org.gradle.jvmargs). A non-minified
+            // release is acceptable for this small private app. This is still a real
+            // release variant: isDebuggable=false (default) and applicationId has no
+            // ".debug" suffix.
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
