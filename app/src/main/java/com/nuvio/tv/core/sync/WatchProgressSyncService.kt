@@ -3,7 +3,6 @@ package com.nuvio.tv.core.sync
 import android.util.Log
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.profile.ProfileManager
-import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.local.WatchProgressSource
 import com.nuvio.tv.data.local.WatchProgressPreferences
@@ -44,7 +43,6 @@ class WatchProgressSyncService @Inject constructor(
     private val authManager: AuthManager,
     private val supabaseProvider: SyncBackendSupabaseProvider,
     private val watchProgressPreferences: WatchProgressPreferences,
-    private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val profileManager: ProfileManager
 ) {
@@ -88,9 +86,8 @@ class WatchProgressSyncService @Inject constructor(
     }
 
     suspend fun shouldUseSupabaseWatchProgressSync(): Boolean {
-        val hasEffectiveTraktConnection = traktAuthDataStore.isEffectivelyAuthenticated.first()
-        val source = traktSettingsDataStore.watchProgressSource.first()
-        return !(hasEffectiveTraktConnection && source == WatchProgressSource.TRAKT)
+        // Trakt integration removed; Nuvio Sync (Supabase) is always the source.
+        return true
     }
 
     private suspend fun fetchDeltaCursor(profileId: Int): Long {

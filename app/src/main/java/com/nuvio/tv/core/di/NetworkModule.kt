@@ -7,7 +7,6 @@ import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.data.remote.api.CatalogAddonApi
 import com.nuvio.tv.data.remote.api.DonationsApi
 import com.nuvio.tv.data.remote.api.GitHubReleaseApi
-import com.nuvio.tv.data.remote.api.TraktApi
 import com.nuvio.tv.data.remote.api.TrailerApi
 import com.nuvio.tv.data.remote.api.ImdbTapframeApi
 import com.nuvio.tv.data.remote.api.ParentalGuideApi
@@ -38,11 +37,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Named
 import javax.inject.Singleton
-
-private object TraktHttpTrace {
-    private val requestCounter = AtomicLong(0L)
-    fun nextRequestId(): Long = requestCounter.incrementAndGet()
-}
 
 private fun normalizedBaseUrl(rawUrl: String, fallback: String): String {
     val trimmed = rawUrl.trim()
@@ -172,67 +166,6 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    @Named("trakt")
-    fun provideTraktOkHttpClient(
-        okHttpClient: OkHttpClient
-    ): OkHttpClient = okHttpClient.newBuilder()
-        .addInterceptor { chain ->
-            val request = chain.request()
-            val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
-            val newRequest = request.newBuilder()
-                .header("Content-Type", "application/json")
-                .header("User-Agent", "Nuvio/$version")
-                .header("trakt-api-key", BuildConfig.TRAKT_CLIENT_ID)
-                .header("trakt-api-version", "2")
-                .build()
-
-            if (!BuildConfig.DEBUG) {
-                return@addInterceptor chain.proceed(newRequest)
-            }
-
-            val requestId = TraktHttpTrace.nextRequestId()
-            val target = buildString {
-                append(newRequest.url.encodedPath)
-                newRequest.url.encodedQuery?.let { query ->
-                    append('?')
-                    append(query)
-                }
-            }
-            val startNs = System.nanoTime()
-            Log.d("TraktHttp", "REQ #$requestId ${newRequest.method} $target")
-
-            try {
-                val response = chain.proceed(newRequest)
-                val durationMs = (System.nanoTime() - startNs) / 1_000_000L
-                val retryAfter = response.header("Retry-After")
-                val rateLimit = response.header("X-Ratelimit")
-                val page = response.header("X-Pagination-Page")
-                val pageCount = response.header("X-Pagination-Page-Count")
-                val pageInfo = if (page != null || pageCount != null) {
-                    " page=${page ?: "-"} pageCount=${pageCount ?: "-"}"
-                } else {
-                    ""
-                }
-                val retryInfo = retryAfter?.let { " retryAfter=${it}s" } ?: ""
-                val rateInfo = rateLimit?.let { " rate=$it" } ?: ""
-                Log.d(
-                    "TraktHttp",
-                    "RES #$requestId ${response.code} ${newRequest.method} $target ${durationMs}ms$retryInfo$pageInfo$rateInfo"
-                )
-                response
-            } catch (error: Exception) {
-                val durationMs = (System.nanoTime() - startNs) / 1_000_000L
-                Log.w(
-                    "TraktHttp",
-                    "ERR #$requestId ${newRequest.method} $target ${durationMs}ms ${error.javaClass.simpleName}: ${error.message}"
-                )
-                throw error
-            }
-        }
-        .build()
-
-    @Provides
-    @Singleton
     fun provideRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
             .baseUrl("https://placeholder.nuvio.tv/")
@@ -250,19 +183,6 @@ object NetworkModule {
         // the proxy 401s without it. The server injects the api_key and strips any we send.
         Retrofit.Builder()
             .baseUrl(RecoBackend.tmdbProxyBaseUrl)
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-
-    @Provides
-    @Singleton
-    @Named("trakt")
-    fun provideTraktRetrofit(
-        @Named("trakt") okHttpClient: OkHttpClient,
-        moshi: Moshi
-    ): Retrofit =
-        Retrofit.Builder()
-            .baseUrl(BuildConfig.TRAKT_API_URL.ifBlank { "https://api.trakt.tv/" })
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
@@ -360,11 +280,6 @@ object NetworkModule {
     @Singleton
     fun provideTmdbApi(@Named("tmdb") retrofit: Retrofit): TmdbApi =
         retrofit.create(TmdbApi::class.java)
-
-    @Provides
-    @Singleton
-    fun provideTraktApi(@Named("trakt") retrofit: Retrofit): TraktApi =
-        retrofit.create(TraktApi::class.java)
 
     @Provides
     @Singleton

@@ -20,7 +20,7 @@ enum class WatchProgressSource {
 
     companion object {
         fun fromStorage(value: String?): WatchProgressSource {
-            return entries.firstOrNull { it.name == value } ?: TRAKT
+            return entries.firstOrNull { it.name == value } ?: NUVIO_SYNC
         }
     }
 }
@@ -42,9 +42,9 @@ class TraktSettingsDataStore @Inject constructor(
         const val DEFAULT_CONTINUE_WATCHING_DAYS_CAP = 60
         const val DEFAULT_SHOW_UNAIRED_NEXT_UP = true
         const val DEFAULT_SHOW_META_COMMENTS = true
-        val DEFAULT_WATCH_PROGRESS_SOURCE = WatchProgressSource.TRAKT
-        val DEFAULT_LIBRARY_SOURCE_MODE = LibrarySourceMode.TRAKT
-        val DEFAULT_MORE_LIKE_THIS_SOURCE = MoreLikeThisSourcePreference.TRAKT
+        val DEFAULT_WATCH_PROGRESS_SOURCE = WatchProgressSource.NUVIO_SYNC
+        val DEFAULT_LIBRARY_SOURCE_MODE = LibrarySourceMode.LOCAL
+        val DEFAULT_MORE_LIKE_THIS_SOURCE = MoreLikeThisSourcePreference.TMDB
         const val MIN_CONTINUE_WATCHING_DAYS_CAP = 7
         const val MAX_CONTINUE_WATCHING_DAYS_CAP = 365
         const val DEFAULT_RATE_MOVIES_AFTER_WATCHING = true

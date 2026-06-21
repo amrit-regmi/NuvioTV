@@ -43,7 +43,6 @@ import com.nuvio.tv.ui.screens.settings.PlaybackSettingsScreen
 import com.nuvio.tv.ui.screens.settings.SettingsScreen
 import com.nuvio.tv.ui.screens.settings.SupportersContributorsScreen
 import com.nuvio.tv.ui.screens.settings.ThemeSettingsScreen
-import com.nuvio.tv.ui.screens.settings.TraktScreen
 import com.nuvio.tv.ui.screens.settings.TmdbSettingsScreen
 import com.nuvio.tv.ui.screens.stream.StreamScreen
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
@@ -1126,7 +1125,6 @@ fun NuvioNavHost(
         composable(Screen.Settings.route) {
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
-                onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) },
                 onNavigateToAddons = { navController.navigate(Screen.AddonManager.route) },
                 onNavigateToPlugins = { navController.navigate(Screen.Plugins.route) },
                 onNavigateToBuiltInProviders = { navController.navigate(Screen.BuiltInProviders.route) },
@@ -1145,12 +1143,6 @@ fun NuvioNavHost(
             ProfileSelectionScreen(
                 onProfileSelected = {},
                 screenMode = ProfileSelectionMode.Management,
-                onBackPress = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.Trakt.route) {
-            TraktScreen(
                 onBackPress = { navController.popBackStack() }
             )
         }

@@ -1281,8 +1281,6 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
     currentEpisode = targetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
     currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
     persistSelectedStreamForReuse(stream = stream, url = url, headers = newHeaders)
-    currentTraktEpisodeMapping = null
-    currentTraktEpisodeMappingKey = null
     lastSavedPosition = 0L
 
     _uiState.update {

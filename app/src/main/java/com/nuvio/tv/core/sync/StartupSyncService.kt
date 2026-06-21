@@ -7,7 +7,6 @@ import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.local.LibraryPreferences
 import com.nuvio.tv.data.local.StartupSyncPreferences
-import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.data.repository.AddonRepositoryImpl
 import com.nuvio.tv.data.repository.LibraryRepositoryImpl
@@ -46,8 +45,6 @@ class StartupSyncService @Inject constructor(
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
     private val libraryRepository: LibraryRepositoryImpl,
-    private val traktAuthDataStore: TraktAuthDataStore,
-    private val traktSettingsDataStore: com.nuvio.tv.data.local.TraktSettingsDataStore,
     private val watchProgressPreferences: WatchProgressPreferences,
     private val libraryPreferences: LibraryPreferences,
     private val profileManager: ProfileManager,
@@ -262,33 +259,14 @@ class StartupSyncService @Inject constructor(
             Log.d(TAG, "Pulling remote data for profile $profileId")
             pullBroadRemoteData(profileId, includeProfileSettings)
 
-            val isTraktConnected = traktAuthDataStore.isEffectivelyAuthenticated.first()
-            val shouldUseSupabaseWatchProgressSync = watchProgressSyncService.shouldUseSupabaseWatchProgressSync()
             watchProgressSyncService.restoreLastPushTimestamp()
             watchedItemsSyncService.restoreLastPushTimestamp()
-            Log.d(
-                TAG,
-                "Watch progress sync: isTraktConnected=$isTraktConnected shouldUseSupabaseWatchProgressSync=$shouldUseSupabaseWatchProgressSync"
+            pullWatchedItemsDelta(profileId, traktMode = false)
+            syncWatchProgressDelta(
+                profileId = profileId,
+                pushUnsynced = true,
+                failureMessage = "Failed to sync watch progress, continuing"
             )
-            if (!isTraktConnected) {
-                pullWatchedItemsDelta(profileId, traktMode = false)
-                syncWatchProgressDelta(
-                    profileId = profileId,
-                    pushUnsynced = true,
-                    failureMessage = "Failed to sync watch progress, continuing"
-                )
-            } else if (shouldUseSupabaseWatchProgressSync) {
-                libraryRepository.hasCompletedInitialPull = true
-                pullWatchedItemsDelta(profileId, traktMode = true)
-                syncWatchProgressDelta(
-                    profileId = profileId,
-                    pushUnsynced = false,
-                    failureMessage = "Failed to sync watch progress while Trakt is connected, continuing"
-                )
-            } else {
-                libraryRepository.hasCompletedInitialPull = true
-                Log.d(TAG, "Skipping Supabase watched items, watch progress, and library sync for profile $profileId because Trakt is connected and watch progress source is Trakt")
-            }
             startupSyncPreferences.markFullPull(
                 profileId = profileId,
                 userId = userId,
@@ -313,33 +291,14 @@ class StartupSyncService @Inject constructor(
         try {
             Log.d(TAG, "Running warm remote sync for profile $profileId")
             pullBroadRemoteData(profileId, includeProfileSettings)
-            val isTraktConnected = traktAuthDataStore.isEffectivelyAuthenticated.first()
-            val shouldUseSupabaseWatchProgressSync = watchProgressSyncService.shouldUseSupabaseWatchProgressSync()
             watchProgressSyncService.restoreLastPushTimestamp()
             watchedItemsSyncService.restoreLastPushTimestamp()
-            Log.d(
-                TAG,
-                "Warm watch progress sync: isTraktConnected=$isTraktConnected shouldUseSupabaseWatchProgressSync=$shouldUseSupabaseWatchProgressSync"
+            pullWatchedItemsDelta(profileId, traktMode = false)
+            syncWatchProgressDelta(
+                profileId = profileId,
+                pushUnsynced = true,
+                failureMessage = "Failed to sync warm watch progress, continuing"
             )
-            if (!isTraktConnected) {
-                pullWatchedItemsDelta(profileId, traktMode = false)
-                syncWatchProgressDelta(
-                    profileId = profileId,
-                    pushUnsynced = !isTraktConnected,
-                    failureMessage = "Failed to sync warm watch progress, continuing"
-                )
-            } else if (shouldUseSupabaseWatchProgressSync) {
-                libraryRepository.hasCompletedInitialPull = true
-                pullWatchedItemsDelta(profileId, traktMode = true)
-                syncWatchProgressDelta(
-                    profileId = profileId,
-                    pushUnsynced = false,
-                    failureMessage = "Failed to sync warm watch progress while Trakt is connected, continuing"
-                )
-            } else {
-                watchProgressRepository.hasCompletedInitialPull = true
-                Log.d(TAG, "Skipping warm Supabase watch progress sync for profile $profileId because Trakt is connected and watch progress source is Trakt")
-            }
             startupSyncPreferences.markFullPull(
                 profileId = profileId,
                 userId = userId,
@@ -373,10 +332,7 @@ class StartupSyncService @Inject constructor(
 
         coroutineScope {
             val libraryJob = async {
-                val librarySource = traktSettingsDataStore.librarySourceMode.first()
-                val isTraktLibrary = librarySource == LibrarySourceMode.TRAKT &&
-                    traktAuthDataStore.isEffectivelyAuthenticated.first()
-                if (!isTraktLibrary) {
+                run {
                     libraryRepository.isSyncingFromRemote = true
                     try {
                         val remoteLibraryItems = librarySyncService.pullFromRemote().getOrElse { throw it }
@@ -390,8 +346,6 @@ class StartupSyncService @Inject constructor(
                     } finally {
                         libraryRepository.isSyncingFromRemote = false
                     }
-                } else {
-                    libraryRepository.hasCompletedInitialPull = true
                 }
             }
 

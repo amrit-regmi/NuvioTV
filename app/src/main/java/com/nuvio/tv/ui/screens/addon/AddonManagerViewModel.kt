@@ -34,7 +34,6 @@ import com.nuvio.tv.core.server.TraktSourceSearchResultInfo
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.reco.RecoBackend
 import com.nuvio.tv.core.tmdb.TmdbCollectionSourceResolver
-import com.nuvio.tv.core.trakt.TraktPublicListSourceResolver
 import com.nuvio.tv.data.local.CollectionsDataStore
 import com.nuvio.tv.data.local.ExperienceModeDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
@@ -75,7 +74,6 @@ class AddonManagerViewModel @Inject constructor(
     private val startupSyncService: StartupSyncService,
     private val profileManager: ProfileManager,
     private val tmdbCollectionSourceResolver: TmdbCollectionSourceResolver,
-    private val traktPublicListSourceResolver: TraktPublicListSourceResolver,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -480,33 +478,10 @@ class AddonManagerViewModel @Inject constructor(
         }
     }
 
-    private fun fetchTraktSourceMetadata(request: TraktSourceMetadataRequest): TraktSourceMetadataInfo? {
-        return runBlocking {
-            runCatching {
-                val metadata = traktPublicListSourceResolver.listImportMetadata(request.input)
-                TraktSourceMetadataInfo(
-                    title = metadata.title,
-                    coverImageUrl = metadata.coverImageUrl,
-                    traktListId = metadata.traktListId
-                )
-            }.getOrNull()
-        }
-    }
+    // Trakt public-list resolution removed with the Trakt integration.
+    private fun fetchTraktSourceMetadata(request: TraktSourceMetadataRequest): TraktSourceMetadataInfo? = null
 
-    private fun searchTraktSources(request: TraktSourceSearchRequest): List<TraktSourceSearchResultInfo> {
-        return runBlocking {
-            runCatching {
-                traktPublicListSourceResolver.searchPublicLists(request.query).map {
-                    TraktSourceSearchResultInfo(
-                        id = it.traktListId,
-                        title = it.title,
-                        subtitle = it.subtitle,
-                        coverImageUrl = it.coverImageUrl
-                    )
-                }
-            }.getOrElse { emptyList() }
-        }
-    }
+    private fun searchTraktSources(request: TraktSourceSearchRequest): List<TraktSourceSearchResultInfo> = emptyList()
 
     private fun handleChangeProposed(change: PendingAddonChange) {
         val currentUrls = _uiState.value.installedAddons.map { normalizeUrlForComparison(it.baseUrl) }.toSet()

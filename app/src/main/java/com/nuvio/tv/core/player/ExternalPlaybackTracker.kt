@@ -7,13 +7,6 @@ import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
-import com.nuvio.tv.data.repository.TraktScrobbleService
-import com.nuvio.tv.data.repository.TraktScrobbleItem
-import com.nuvio.tv.data.repository.TraktEpisodeMappingService
-import com.nuvio.tv.data.repository.TraktAuthService
-import com.nuvio.tv.data.repository.parseContentIds
-import com.nuvio.tv.data.repository.extractYear
-import com.nuvio.tv.data.repository.toTraktIds
 import com.nuvio.tv.ui.screens.player.PlayerNextEpisodeRules
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -113,9 +106,6 @@ data class ExternalAutoNextOverlay(
 class ExternalPlaybackTracker @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val watchProgressRepository: WatchProgressRepository,
-    private val traktScrobbleService: TraktScrobbleService,
-    private val traktEpisodeMappingService: TraktEpisodeMappingService,
-    private val traktAuthService: TraktAuthService,
     private val metaRepository: MetaRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore
 ) {
@@ -707,7 +697,7 @@ class ExternalPlaybackTracker @Inject constructor(
         }
     }
 
-    // ===================== Progress save + Trakt scrobble =====================
+    // ===================== Progress save =====================
 
     private fun saveProgress(
         metadata: ExternalPlaybackMetadata,
@@ -738,61 +728,6 @@ class ExternalPlaybackTracker @Inject constructor(
                 "content=${metadata.contentId}, video=${metadata.videoId}, " +
                 "progressPct=${progress.progressPercentage}, isInProgress=${progress.isInProgress()}")
             watchProgressRepository.saveProgress(progress)
-
-            // Trakt scrobble
-            if (traktAuthService.getCurrentAuthState().isAuthenticated &&
-                traktAuthService.hasRequiredCredentials()) {
-                val progressPercent = if (effectiveDuration > 0L) {
-                    (positionMs.toFloat() / effectiveDuration.toFloat() * 100f).coerceIn(0f, 100f)
-                } else {
-                    0f
-                }
-                if (progressPercent > 0f) {
-                    val scrobbleItem = buildScrobbleItem(metadata)
-                    if (scrobbleItem != null) {
-                        Log.d(TAG, "Sending Trakt scrobble: ${progressPercent}%")
-                        traktScrobbleService.scrobbleStart(scrobbleItem, progressPercent = 0f)
-                        traktScrobbleService.scrobbleStop(scrobbleItem, progressPercent = progressPercent)
-                    }
-                }
-            }
-        }
-    }
-
-    private suspend fun buildScrobbleItem(metadata: ExternalPlaybackMetadata): TraktScrobbleItem? {
-        val parsedIds = parseContentIds(metadata.contentId)
-        val ids = toTraktIds(parsedIds)
-        if (ids.trakt == null && ids.imdb.isNullOrBlank() && ids.tmdb == null) return null
-
-        val parsedYear = extractYear(metadata.year)
-        val isEpisode = metadata.contentType.lowercase() in listOf("series", "tv") &&
-            metadata.season != null && metadata.episode != null
-
-        return if (isEpisode) {
-            val mapped = traktEpisodeMappingService.prefetchEpisodeMapping(
-                contentId = metadata.contentId,
-                contentType = metadata.contentType,
-                videoId = metadata.videoId,
-                season = metadata.season,
-                episode = metadata.episode
-            )
-            val effectiveSeason = mapped?.season ?: metadata.season ?: return null
-            val effectiveEpisode = mapped?.episode ?: metadata.episode ?: return null
-
-            TraktScrobbleItem.Episode(
-                showTitle = metadata.contentName,
-                showYear = parsedYear,
-                showIds = ids,
-                season = effectiveSeason,
-                number = effectiveEpisode,
-                episodeTitle = metadata.episodeTitle
-            )
-        } else {
-            TraktScrobbleItem.Movie(
-                title = metadata.contentName,
-                year = parsedYear,
-                ids = ids
-            )
         }
     }
 }

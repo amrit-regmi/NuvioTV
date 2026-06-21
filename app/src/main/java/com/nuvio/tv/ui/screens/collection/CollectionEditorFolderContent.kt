@@ -128,24 +128,6 @@ fun FolderEditorContent(
         return
     }
 
-    if (uiState.showTraktSourcePicker) {
-        BackHandler { viewModel.hideTraktSourcePicker() }
-        TraktSourcePickerContent(
-            uiState = uiState,
-            isEditing = uiState.editingTraktSourceIndex != null,
-            onInputChange = { viewModel.setTraktInput(it) },
-            onTitleChange = { viewModel.setTraktTitleInput(it) },
-            onMediaTypeChange = { viewModel.setTraktMediaType(it) },
-            onMediaBothChange = { viewModel.setTraktMediaBoth(it) },
-            onSortChange = { viewModel.setTraktSortBy(it) },
-            onSortHowChange = { viewModel.setTraktSortHow(it) },
-            onSearch = { viewModel.searchTraktLists() },
-            onAddFromInput = { viewModel.addTraktSourceFromInput() },
-            onAddResult = { viewModel.addTraktSourceFromResult(it) },
-            onBack = { viewModel.hideTraktSourcePicker() }
-        )
-        return
-    }
 
     if (uiState.showEmojiPicker) {
         BackHandler { viewModel.hideEmojiPicker() }
@@ -746,26 +728,6 @@ fun FolderEditorContent(
                                     Icon(Icons.Default.Edit, stringResource(R.string.cd_edit))
                                 }
                             }
-                            if (traktSource != null) {
-                                Button(
-                                    onClick = { viewModel.editTraktSource(index) },
-                                    colors = ButtonDefaults.colors(
-                                        containerColor = NuvioTheme.colors.BackgroundCard,
-                                        contentColor = NuvioTheme.colors.TextSecondary,
-                                        focusedContainerColor = NuvioTheme.colors.FocusBackground,
-                                        focusedContentColor = NuvioTheme.colors.TextPrimary
-                                    ),
-                                    border = ButtonDefaults.border(
-                                        focusedBorder = Border(
-                                            border = BorderStroke(NuvioTheme.spacing.xxs, NuvioTheme.colors.FocusRing),
-                                            shape = RoundedCornerShape(NuvioTheme.radii.md)
-                                        )
-                                    ),
-                                    shape = ButtonDefaults.shape(RoundedCornerShape(NuvioTheme.radii.md))
-                                ) {
-                                    Icon(Icons.Default.Edit, stringResource(R.string.cd_edit))
-                                }
-                            }
                             Button(
                                 onClick = { viewModel.moveCatalogSourceUp(index) },
                                 colors = ButtonDefaults.colors(
@@ -840,11 +802,6 @@ fun FolderEditorContent(
                         Icon(Icons.Default.Add, stringResource(R.string.cd_add))
                         Spacer(modifier = Modifier.width(NuvioTheme.spacing.sm))
                         Text(stringResource(R.string.collections_editor_add_tmdb_source))
-                    }
-                    NuvioButton(onClick = { viewModel.showTraktSourcePicker() }) {
-                        Icon(Icons.Default.Add, stringResource(R.string.cd_add))
-                        Spacer(modifier = Modifier.width(NuvioTheme.spacing.sm))
-                        Text(stringResource(R.string.collections_editor_add_trakt_source))
                     }
                 }
             }

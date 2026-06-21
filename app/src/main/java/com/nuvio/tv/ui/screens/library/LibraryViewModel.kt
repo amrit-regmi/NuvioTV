@@ -16,8 +16,6 @@ import com.nuvio.tv.core.debrid.supports
 import com.nuvio.tv.data.local.DebridSettingsDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.LibraryPreferences
-import com.nuvio.tv.data.local.TraktAuthDataStore
-import com.nuvio.tv.data.repository.TraktLibraryService
 import com.nuvio.tv.domain.model.AuthState
 import com.nuvio.tv.domain.model.LibraryEntry
 import com.nuvio.tv.domain.model.LibraryListTab
@@ -133,7 +131,6 @@ class LibraryViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val libraryPreferences: LibraryPreferences,
     private val authManager: AuthManager,
-    private val traktAuthDataStore: TraktAuthDataStore,
     private val watchProgressRepository: com.nuvio.tv.domain.repository.WatchProgressRepository,
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
@@ -463,7 +460,7 @@ class LibraryViewModel @Inject constructor(
                 libraryRepository.listTabs,
                 libraryPreferences.sortOption,
                 authManager.authState,
-                traktAuthDataStore.isEffectivelyAuthenticated
+                kotlinx.coroutines.flow.flowOf(false)
             ) { args ->
                 val sourceMode = args[0] as LibrarySourceMode
                 val isSyncing = args[1] as Boolean
@@ -655,7 +652,7 @@ class LibraryViewModel @Inject constructor(
             add(targetIndex, removeAt(selectedIndex))
         }
         val orderedIds = reordered.mapNotNull { tab ->
-            tab.traktListId?.toString() ?: tab.key.removePrefix(TraktLibraryService.PERSONAL_KEY_PREFIX)
+            tab.traktListId?.toString() ?: tab.key.removePrefix("personal:")
         }
 
         viewModelScope.launch {

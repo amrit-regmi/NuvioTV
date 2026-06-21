@@ -137,7 +137,6 @@ import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.StartupAuthNotice
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.remote.supabase.AvatarRepository
-import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.AuthState
@@ -222,9 +221,6 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var addonRepository: AddonRepository
-
-    @Inject
-    lateinit var traktProgressService: TraktProgressService
 
     @Inject
     lateinit var startupSyncService: StartupSyncService
@@ -897,7 +893,6 @@ class MainActivity : ComponentActivity() {
             startupSyncService.requestForegroundSync()
             if (isFirstResumeAfterCreate) {
                 isFirstResumeAfterCreate = false
-                traktProgressService.invalidateAndRefresh()
                 val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
                 val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY)
                 val snapshot = deviceCapabilityDetector.detect(display)
@@ -908,8 +903,6 @@ class MainActivity : ComponentActivity() {
                         registerDeviceCapabilities(snapshot)
                     }
                 }
-            } else {
-                traktProgressService.refreshNow()
             }
         }
     }

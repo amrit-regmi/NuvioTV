@@ -79,7 +79,6 @@ internal enum class SettingsCategory {
     INTEGRATION,
     PLAYBACK,
     ADVANCED,
-    TRAKT,
     ABOUT,
     DEBUG
 }
@@ -176,13 +175,6 @@ private fun rememberSettingsSectionSpecs() = listOf(
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
-        category = SettingsCategory.TRAKT,
-        title = "Trakt",
-        rawIconRes = R.raw.trakt_tv_glyph,
-        subtitle = stringResource(R.string.settings_trakt_subtitle),
-        destination = SettingsSectionDestination.External
-    ),
-    SettingsSectionSpec(
         category = SettingsCategory.ABOUT,
         title = stringResource(R.string.about_title),
         icon = Icons.Default.Info,
@@ -208,7 +200,6 @@ private fun rememberSettingsSectionSpecs() = listOf(
 @Composable
 fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
-    onNavigateToTrakt: () -> Unit = {},
     onNavigateToAddons: () -> Unit = {},
     onNavigateToPlugins: () -> Unit = {},
     onNavigateToBuiltInProviders: () -> Unit = {},
@@ -270,7 +261,6 @@ fun SettingsScreen(
                 // when stream providers are made unavailable by the super admin.
                 SettingsCategory.INTEGRATION -> isPrimaryProfileActive && streamProvidersAvailable
                 SettingsCategory.ADVANCED -> true
-                SettingsCategory.TRAKT -> BuildConfig.RECO_MODE != "private"
                 else -> true
             }
         }
@@ -409,7 +399,6 @@ fun SettingsScreen(
                                     if (section.destination == SettingsSectionDestination.External) {
                                         when (section.category) {
                                             SettingsCategory.ACCOUNT -> onNavigateToAuthQrSignIn()
-                                            SettingsCategory.TRAKT -> onNavigateToTrakt()
                                             else -> Unit
                                         }
                                     } else {
@@ -578,7 +567,6 @@ fun SettingsScreen(
                             onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
                         )
                         SettingsCategory.DEBUG -> DebugSettingsContent()
-                        SettingsCategory.TRAKT -> Unit
                     }
                 }
             }

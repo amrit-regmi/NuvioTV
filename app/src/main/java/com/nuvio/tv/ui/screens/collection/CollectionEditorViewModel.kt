@@ -7,8 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
 import com.nuvio.tv.core.sync.CollectionSyncService
 import com.nuvio.tv.core.tmdb.TmdbCollectionSourceResolver
-import com.nuvio.tv.core.trakt.TraktPublicListSearchResult
-import com.nuvio.tv.core.trakt.TraktPublicListSourceResolver
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.nuvio.tv.data.remote.api.TmdbCollectionSearchResult
 import com.nuvio.tv.data.remote.api.TmdbCompanySearchResult
@@ -35,6 +33,18 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+/**
+ * Lightweight result shape retained after the Trakt integration was removed.
+ * Trakt public-list search/import no longer fetches from the network; these
+ * lists stay empty, but the type is kept so existing UI/state compiles.
+ */
+data class TraktPublicListSearchResult(
+    val traktListId: Long,
+    val title: String,
+    val subtitle: String? = null,
+    val coverImageUrl: String? = null
+)
 
 data class CollectionEditorUiState(
     val isNew: Boolean = true,
@@ -121,7 +131,6 @@ class CollectionEditorViewModel @Inject constructor(
     private val collectionsDataStore: CollectionsDataStore,
     private val addonRepository: AddonRepository,
     private val tmdbCollectionSourceResolver: TmdbCollectionSourceResolver,
-    private val traktPublicListSourceResolver: TraktPublicListSourceResolver,
     private val collectionSyncService: CollectionSyncService
 ) : ViewModel() {
 
@@ -539,54 +548,18 @@ class CollectionEditorViewModel @Inject constructor(
         _uiState.update { it.copy(traktSortHow = sortHow) }
     }
 
+    // Trakt public-list search/import removed with the Trakt integration.
     fun searchTraktLists() {
-        val state = _uiState.value
-        val query = state.traktInput.trim()
-        if (query.isBlank()) {
-            _uiState.update { it.copy(traktSearchError = string(R.string.collections_editor_error_trakt_list_name_id_or_url)) }
-            return
-        }
-        viewModelScope.launch {
-            _uiState.update { it.copy(traktSearchError = null) }
-            val results = if (query.isTraktListIdentifierInput()) {
-                runCatching {
-                    val metadata = traktPublicListSourceResolver.listImportMetadata(query)
-                    val id = metadata.traktListId ?: error(string(R.string.collections_editor_error_load_trakt_list))
-                    listOf(
-                        TraktPublicListSearchResult(
-                            traktListId = id,
-                            title = metadata.title ?: "${string(R.string.collections_editor_trakt_list)} $id",
-                            subtitle = appContext.getString(R.string.collection_editor_resolved_trakt_list),
-                            coverImageUrl = metadata.coverImageUrl
-                        )
-                    )
-                }
-            } else {
-                runCatching { traktPublicListSourceResolver.searchPublicLists(query) }
-            }
-            _uiState.update {
-                val mapped = results.getOrDefault(emptyList())
-                it.copy(
-                    traktSearchResults = mapped,
-                    traktSearchError = results.exceptionOrNull()?.message
-                        ?: if (mapped.isEmpty()) string(R.string.collection_editor_no_trakt_lists_found) else null
-                )
-            }
+        _uiState.update {
+            it.copy(
+                traktSearchResults = emptyList(),
+                traktSearchError = string(R.string.collection_editor_no_trakt_lists_found)
+            )
         }
     }
 
     private fun loadTraktFeaturedLists() {
-        viewModelScope.launch {
-            val trending = runCatching { traktPublicListSourceResolver.trendingPublicLists() }
-            val popular = runCatching { traktPublicListSourceResolver.popularPublicLists() }
-            _uiState.update {
-                it.copy(
-                    traktTrendingResults = trending.getOrDefault(it.traktTrendingResults),
-                    traktPopularResults = popular.getOrDefault(it.traktPopularResults),
-                    traktSearchError = trending.exceptionOrNull()?.message ?: popular.exceptionOrNull()?.message ?: it.traktSearchError
-                )
-            }
-        }
+        // No-op: Trakt featured lists are no longer fetched.
     }
 
     fun editTmdbSource(index: Int) {
@@ -867,39 +840,10 @@ class CollectionEditorViewModel @Inject constructor(
         )
     }
 
+    // Importing Trakt public lists by URL/ID removed with the Trakt integration.
     fun addTraktSourceFromInput() {
-        val state = _uiState.value
-        if (state.traktInput.isBlank()) {
-            _uiState.update { it.copy(traktSearchError = string(R.string.collections_editor_error_trakt_list_id_or_url)) }
-            return
-        }
-        viewModelScope.launch {
-            val metadata = runCatching { traktPublicListSourceResolver.listImportMetadata(state.traktInput) }
-            val resolved = metadata.getOrNull()
-            if (metadata.isFailure || resolved?.traktListId == null) {
-                _uiState.update {
-                    it.copy(
-                        traktSearchError = metadata.exceptionOrNull()?.message
-                            ?: string(R.string.collections_editor_error_load_trakt_list)
-                    )
-                }
-                return@launch
-            }
-            val title = state.traktTitleInput.ifBlank {
-                resolved.title ?: "${string(R.string.collections_editor_trakt_list)} ${resolved.traktListId}"
-            }
-            addTraktSourcesToFolder(
-                selectedTraktMediaTypes(state).map { mediaType ->
-                    TraktCollectionSource(
-                        title = titleForMedia(title, mediaType, state.traktMediaBoth),
-                        traktListId = resolved.traktListId,
-                        mediaType = mediaType,
-                        sortBy = state.traktSortBy,
-                        sortHow = state.traktSortHow
-                    )
-                },
-                coverImageUrl = resolved.coverImageUrl
-            )
+        _uiState.update {
+            it.copy(traktSearchError = string(R.string.collections_editor_error_load_trakt_list))
         }
     }
 

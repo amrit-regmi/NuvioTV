@@ -39,13 +39,6 @@ import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.StreamRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
-import com.nuvio.tv.data.repository.TraktScrobbleService
-import com.nuvio.tv.data.repository.TraktScrobbleItem
-import com.nuvio.tv.data.repository.TraktEpisodeMappingService
-import com.nuvio.tv.data.repository.TraktAuthService
-import com.nuvio.tv.data.repository.parseContentIds
-import com.nuvio.tv.data.repository.extractYear
-import com.nuvio.tv.data.repository.toTraktIds
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -83,9 +76,6 @@ class StreamScreenViewModel @Inject constructor(
     private val bingeGroupCacheDataStore: BingeGroupCacheDataStore,
     private val torrentSettings: TorrentSettings,
     private val watchProgressRepository: WatchProgressRepository,
-    private val traktScrobbleService: TraktScrobbleService,
-    private val traktEpisodeMappingService: TraktEpisodeMappingService,
-    private val traktAuthService: TraktAuthService,
     private val directDebridResolver: DirectDebridResolver,
     private val directDebridStreamPreparer: DirectDebridStreamPreparer,
     private val subtitleWarmer: SubtitleWarmer,
@@ -1838,66 +1828,7 @@ class StreamScreenViewModel @Inject constructor(
             Log.d(TAG, "Saving external player progress: pos=${positionMs}ms, dur=${effectiveDuration}ms, " +
                 "content=$contentId, video=$videoId")
             watchProgressRepository.saveProgress(progress)
-
-            // Send Trakt scrobble (start + stop) so the playback session is recorded.
-            // Only attempt if Trakt is authenticated to avoid unnecessary API calls.
-            if (traktAuthService.getCurrentAuthState().isAuthenticated &&
-                traktAuthService.hasRequiredCredentials()) {
-                val progressPercent = if (effectiveDuration > 0L) {
-                    (positionMs.toFloat() / effectiveDuration.toFloat() * 100f).coerceIn(0f, 100f)
-                } else {
-                    0f
-                }
-                if (progressPercent > 0f) {
-                    val scrobbleItem = buildScrobbleItem(playbackInfo)
-                    if (scrobbleItem != null) {
-                        Log.d(TAG, "Sending Trakt scrobble for external player: ${progressPercent}%")
-                        traktScrobbleService.scrobbleStart(scrobbleItem, progressPercent = 0f)
-                        traktScrobbleService.scrobbleStop(scrobbleItem, progressPercent = progressPercent)
-                    }
-                }
-            }
-        }
-    }
-
-    private suspend fun buildScrobbleItem(playbackInfo: StreamPlaybackInfo): TraktScrobbleItem? {
-        val rawContentId = playbackInfo.contentId ?: return null
-        val parsedIds = parseContentIds(rawContentId)
-        val ids = toTraktIds(parsedIds)
-        if (ids.trakt == null && ids.imdb.isNullOrBlank() && ids.tmdb == null) return null
-
-        val parsedYear = extractYear(playbackInfo.year)
-        val normalizedType = playbackInfo.contentType?.lowercase()
-        val isEpisode = normalizedType in listOf("series", "tv") &&
-            playbackInfo.season != null && playbackInfo.episode != null
-
-        return if (isEpisode) {
-            // Use episode mapping to translate addon season/episode to Trakt numbering
-            // (handles anime, specials, different season structures)
-            val mapped = traktEpisodeMappingService.prefetchEpisodeMapping(
-                contentId = rawContentId,
-                contentType = playbackInfo.contentType,
-                videoId = playbackInfo.videoId,
-                season = playbackInfo.season,
-                episode = playbackInfo.episode
-            )
-            val effectiveSeason = mapped?.season ?: playbackInfo.season ?: return null
-            val effectiveEpisode = mapped?.episode ?: playbackInfo.episode ?: return null
-
-            TraktScrobbleItem.Episode(
-                showTitle = playbackInfo.contentName ?: playbackInfo.title,
-                showYear = parsedYear,
-                showIds = ids,
-                season = effectiveSeason,
-                number = effectiveEpisode,
-                episodeTitle = playbackInfo.episodeTitle
-            )
-        } else {
-            TraktScrobbleItem.Movie(
-                title = playbackInfo.contentName ?: playbackInfo.title,
-                year = parsedYear,
-                ids = ids
-            )
+            // Trakt scrobbling removed with the Trakt integration.
         }
     }
 

@@ -9,7 +9,6 @@ import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.tmdb.TmdbCollectionSourceResolver
 import com.nuvio.tv.core.util.isUnreleased
-import com.nuvio.tv.core.trakt.TraktPublicListSourceResolver
 import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.data.local.CollectionsDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
@@ -118,7 +117,6 @@ class FolderDetailViewModel @Inject constructor(
     private val metaRepository: com.nuvio.tv.domain.repository.MetaRepository,
     private val trailerService: TrailerService,
     private val tmdbCollectionSourceResolver: TmdbCollectionSourceResolver,
-    private val traktPublicListSourceResolver: TraktPublicListSourceResolver,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController
 ) : ViewModel() {
 
@@ -830,62 +828,22 @@ class FolderDetailViewModel @Inject constructor(
         }
     }
 
+    // Trakt public-list collection sources are no longer resolved (integration removed).
+    // Existing Trakt sources render as an empty, non-loading tab.
     private fun loadTraktSourceForTab(tabIndex: Int, source: TraktCollectionSource, page: Int, append: Boolean) {
-        if (append) {
-            _uiState.update { s ->
-                val tabs = s.tabs.toMutableList()
-                val row = tabs.getOrNull(tabIndex)?.catalogRow
-                if (row != null) tabs[tabIndex] = tabs[tabIndex].copy(catalogRow = row.copy(isLoading = true))
-                s.copy(tabs = tabs)
+        _uiState.update { s ->
+            val tabs = s.tabs.toMutableList()
+            val current = tabs.getOrNull(tabIndex)
+            if (current != null) {
+                tabs[tabIndex] = current.copy(
+                    isLoading = false,
+                    catalogRow = current.catalogRow?.copy(isLoading = false, hasMore = false)
+                )
             }
-            rebuildAllTab()
-            rebuildFollowLayoutState()
+            s.copy(tabs = tabs)
         }
-        viewModelScope.launch {
-            traktPublicListSourceResolver.resolve(source, page).collect { result ->
-                when (result) {
-                    is NetworkResult.Success -> {
-                        _uiState.update { s ->
-                            val tabs = s.tabs.toMutableList()
-                            val currentRow = tabs.getOrNull(tabIndex)?.catalogRow
-                            val filteredData = result.data.filteredForRelease(s.hideUnreleasedContent)
-                            val row = if (append && currentRow != null) {
-                                val existingIds = currentRow.items.map { "${it.apiType}:${it.id}" }.toHashSet()
-                                val newItems = filteredData.items.filter { "${it.apiType}:${it.id}" !in existingIds }
-                                filteredData.copy(
-                                    items = currentRow.items + newItems,
-                                    hasMore = filteredData.hasMore && newItems.isNotEmpty(),
-                                    isLoading = false
-                                )
-                            } else {
-                                filteredData
-                            }
-                            if (tabIndex < tabs.size) tabs[tabIndex] = tabs[tabIndex].copy(catalogRow = row, isLoading = false)
-                            s.copy(tabs = tabs)
-                        }
-                        rebuildAllTab()
-                        rebuildFollowLayoutState()
-                    }
-                    is NetworkResult.Error -> {
-                        _uiState.update { s ->
-                            val tabs = s.tabs.toMutableList()
-                            val current = tabs.getOrNull(tabIndex)
-                            if (current != null) {
-                                tabs[tabIndex] = current.copy(
-                                    isLoading = false,
-                                    error = result.message,
-                                    catalogRow = current.catalogRow?.copy(isLoading = false)
-                                )
-                            }
-                            s.copy(tabs = tabs)
-                        }
-                        rebuildAllTab()
-                        rebuildFollowLayoutState()
-                    }
-                    NetworkResult.Loading -> {}
-                }
-            }
-        }
+        rebuildAllTab()
+        rebuildFollowLayoutState()
     }
 
     private fun buildAddonTabLabels(source: AddonCatalogCollectionSource, catalogName: String?): Pair<String, String> {
