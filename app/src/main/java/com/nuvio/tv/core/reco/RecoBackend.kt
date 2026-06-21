@@ -33,4 +33,35 @@ object RecoBackend {
 
     /** Canonical built-in catalog-addon URL served by the backend. */
     val catalogAddonUrl: String = "$baseUrl/catalog-addon"
+
+    /**
+     * Drop-in replacement base for `https://api.themoviedb.org/3/`. The backend TMDB
+     * proxy is local-first + Tor-on-miss + cached, injects the server-side api_key, and
+     * requires the user Bearer token (attached by RecoAuthInterceptor since same host).
+     * FIX 1: TmdbService/TmdbApi go through this instead of TMDB directly.
+     */
+    val tmdbProxyBaseUrl: String = "$baseUrl/tmdb/3/"
+
+    /**
+     * Rewrites a TMDB image URL (or bare `/path.jpg`) to go through our `/image` proxy
+     * so Coil never hits `image.tmdb.org` directly. Mirrors the reco pipeline's rewrite.
+     * In non-private/open mode (RECO_MODE != "private") returns the original TMDB URL.
+     *
+     * Accepts either a full `https://image.tmdb.org/t/p/<size>/<path>` URL or a bare
+     * `/<path>` and produces `${baseUrl}/image/t/p/<size>/<path>` (or `${baseUrl}/image/<path>`).
+     */
+    fun proxiedTmdbImageUrl(url: String?): String? {
+        val raw = url?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        if (com.nuvio.tv.BuildConfig.RECO_MODE != "private") return raw
+        // Already proxied through our backend — leave as-is.
+        if (raw.startsWith("$baseUrl/image")) return raw
+        val path = when {
+            raw.startsWith("https://image.tmdb.org") ->
+                raw.substringAfter("image.tmdb.org")
+            raw.startsWith("http") -> return raw // some non-TMDB absolute URL, leave it
+            raw.startsWith("/") -> raw
+            else -> "/$raw"
+        }
+        return "$baseUrl/image$path"
+    }
 }

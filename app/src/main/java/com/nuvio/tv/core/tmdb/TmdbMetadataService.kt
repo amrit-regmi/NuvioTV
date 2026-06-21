@@ -1025,7 +1025,11 @@ class TmdbMetadataService(
 
     private fun buildImageUrl(path: String?, size: String): String? {
         val clean = path?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        return "https://image.tmdb.org/t/p/$size$clean"
+        // FIX 1: route TMDB images through our /image proxy (private mode) so Coil
+        // never hits image.tmdb.org directly.
+        return com.nuvio.tv.core.reco.RecoBackend.proxiedTmdbImageUrl(
+            "https://image.tmdb.org/t/p/$size$clean"
+        )
     }
 
     private fun normalizeTmdbLanguage(language: String?): String {
@@ -1425,7 +1429,8 @@ data class TmdbEntityRailPageResult(
 private fun TmdbEpisode.toEnrichment(): TmdbEpisodeEnrichment {
     val title = name?.takeIf { it.isNotBlank() }
     val overview = overview?.takeIf { it.isNotBlank() }
-    val thumbnail = stillPath?.takeIf { it.isNotBlank() }?.let { "https://image.tmdb.org/t/p/w500$it" }
+    val thumbnail = stillPath?.takeIf { it.isNotBlank() }
+        ?.let { com.nuvio.tv.core.reco.RecoBackend.proxiedTmdbImageUrl("https://image.tmdb.org/t/p/w500$it") }
     val airDate = airDate?.takeIf { it.isNotBlank() }
     return TmdbEpisodeEnrichment(
         title = title,

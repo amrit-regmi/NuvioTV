@@ -44,23 +44,22 @@ class TrailerServiceYouTubeSessionCacheTest {
         every { tmdbService.apiKey() } returns "tmdb-key"
         val service = TrailerService(trailerApi, tmdbApi, extractor, tmdbSettingsDataStore, tmdbService)
 
-        val cached = TrailerPlaybackSource(
-            videoUrl = "https://cdn.example/video.mp4",
-            audioUrl = "https://cdn.example/audio.m4a"
+        // FIX 2: backend-first — the backend resolves the trailer, so the direct
+        // in-app YouTube extractor is never called, and the result is session-cached.
+        coEvery { trailerApi.getTrailer(any(), any(), any()) } returnsMany listOf(
+            Response.success(TrailerResponse(url = "https://cdn.example/video.mp4")),
+            Response.success(TrailerResponse(url = "https://cdn.example/should-not-be-used.mp4"))
         )
-        coEvery { extractor.extractPlaybackSource(any()) } returnsMany listOf(
-            cached,
+        coEvery { extractor.extractPlaybackSource(any()) } returns
             TrailerPlaybackSource(videoUrl = "https://cdn.example/should-not-be-used.mp4")
-        )
 
         val first = service.getTrailerPlaybackSourceFromYouTubeUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         val second = service.getTrailerPlaybackSourceFromYouTubeUrl("https://youtu.be/dQw4w9WgXcQ")
 
         assertEquals("https://cdn.example/video.mp4", first?.videoUrl)
         assertEquals("https://cdn.example/video.mp4", second?.videoUrl)
-        assertEquals("https://cdn.example/audio.m4a", second?.audioUrl)
-        coVerify(exactly = 1) { extractor.extractPlaybackSource(any()) }
-        coVerify(exactly = 0) { trailerApi.getTrailer(any(), any(), any()) }
+        coVerify(exactly = 1) { trailerApi.getTrailer(any(), any(), any()) }
+        coVerify(exactly = 0) { extractor.extractPlaybackSource(any()) }
     }
 
     @Test
@@ -74,18 +73,21 @@ class TrailerServiceYouTubeSessionCacheTest {
         every { tmdbService.apiKey() } returns "tmdb-key"
         val service = TrailerService(trailerApi, tmdbApi, extractor, tmdbSettingsDataStore, tmdbService)
 
+        // FIX 2: backend-first, in-app extraction as fallback. Backend returns nothing
+        // both times, so the extractor fallback runs each call. A failed first attempt
+        // must NOT be cached, so the retry can still succeed.
+        coEvery { trailerApi.getTrailer(any(), any(), any()) } returns Response.success(TrailerResponse(url = null))
         coEvery { extractor.extractPlaybackSource("https://www.youtube.com/watch?v=dQw4w9WgXcQ") } returnsMany listOf(
             null,
             TrailerPlaybackSource(videoUrl = "https://cdn.example/video-after-retry.mp4")
         )
-        coEvery { trailerApi.getTrailer(any(), any(), any()) } returns Response.success(TrailerResponse(url = null))
 
         val first = service.getTrailerPlaybackSourceFromYouTubeUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         val second = service.getTrailerPlaybackSourceFromYouTubeUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
 
         assertNull(first)
         assertEquals("https://cdn.example/video-after-retry.mp4", second?.videoUrl)
+        coVerify(exactly = 2) { trailerApi.getTrailer(any(), any(), any()) }
         coVerify(exactly = 2) { extractor.extractPlaybackSource("https://www.youtube.com/watch?v=dQw4w9WgXcQ") }
-        coVerify(exactly = 1) { trailerApi.getTrailer(any(), any(), any()) }
     }
 }

@@ -230,7 +230,35 @@ class TrailerService(
                 }
             }
 
-            Log.d(TAG, "Attempting in-app YouTube extraction for ${summarizeUrl(youtubeUrl)}")
+            // FIX 2: backend-FIRST. Try our backend trailer resolver before any direct
+            // YouTube extraction so we don't leak the user's IP/requests to Google. The
+            // direct in-app YouTube extractor is now the FALLBACK (only if backend fails
+            // or returns nothing).
+            Log.d(TAG, "Attempting backend trailer resolver for ${summarizeUrl(youtubeUrl)}")
+            val backendSource = runCatching {
+                val response = trailerApi.getTrailer(youtubeUrl = youtubeUrl, title = title, year = year)
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "Backend trailer resolver failed (${response.code()}) for ${summarizeUrl(youtubeUrl)}")
+                    null
+                } else {
+                    response.body()?.url?.takeIf { isValidUrl(it) }
+                }
+            }.getOrNull()
+            if (backendSource != null) {
+                val source = TrailerPlaybackSource(videoUrl = backendSource)
+                if (!youtubeKey.isNullOrBlank()) {
+                    youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
+                        playbackSource = source,
+                        cachedAt = Instant.now(clock),
+                        expiresAt = extractUrlExpireInstant(source)
+                    )
+                }
+                Log.d(TAG, "Using backend trailer source for ${summarizeUrl(youtubeUrl)}")
+                return@withContext source
+            }
+
+            // Fallback to direct in-app YouTube extraction if the backend fails/empty.
+            Log.w(TAG, "Backend resolver empty, falling back to in-app YouTube extraction for ${summarizeUrl(youtubeUrl)}")
             val localSource = inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl)
             if (localSource != null) {
                 if (!youtubeKey.isNullOrBlank()) {
@@ -242,33 +270,14 @@ class TrailerService(
                 }
                 Log.d(
                     TAG,
-                    "Using in-app YouTube source for ${summarizeUrl(youtubeUrl)} " +
+                    "Using in-app YouTube source (fallback) for ${summarizeUrl(youtubeUrl)} " +
                         "(audioPresent=${!localSource.audioUrl.isNullOrBlank()})"
                 )
                 return@withContext localSource
             }
 
-            // Fallback to remote trailer resolver if in-app extraction fails.
-            Log.w(TAG, "In-app extraction failed, falling back to backend resolver for ${summarizeUrl(youtubeUrl)}")
-            val response = trailerApi.getTrailer(youtubeUrl = youtubeUrl, title = title, year = year)
-            if (!response.isSuccessful) {
-                Log.w(TAG, "Backend trailer fallback failed (${response.code()}) for ${summarizeUrl(youtubeUrl)}")
-                return@withContext null
-            }
-
-            val fallbackUrl = response.body()?.url ?: return@withContext null
-            if (!isValidUrl(fallbackUrl)) return@withContext null
-
-            if (!youtubeKey.isNullOrBlank()) {
-                val fallbackSource = TrailerPlaybackSource(videoUrl = fallbackUrl)
-                youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
-                    playbackSource = fallbackSource,
-                    cachedAt = Instant.now(clock),
-                    expiresAt = extractUrlExpireInstant(fallbackSource)
-                )
-            }
-            Log.d(TAG, "Using backend fallback source for ${summarizeUrl(youtubeUrl)}")
-            TrailerPlaybackSource(videoUrl = fallbackUrl)
+            Log.w(TAG, "Both backend and in-app extraction failed for ${summarizeUrl(youtubeUrl)}")
+            null
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {

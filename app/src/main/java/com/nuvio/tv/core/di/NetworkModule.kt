@@ -249,8 +249,12 @@ object NetworkModule {
     @Singleton
     @Named("tmdb")
     fun provideTmdbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        // FIX 1: route TMDB through our backend proxy (RecoBackend.tmdbProxyBaseUrl,
+        // a drop-in for api.themoviedb.org/3/). Uses the SHARED okHttpClient so
+        // RecoAuthInterceptor attaches the user Bearer token (same host = our backend);
+        // the proxy 401s without it. The server injects the api_key and strips any we send.
         Retrofit.Builder()
-            .baseUrl("https://api.themoviedb.org/3/")
+            .baseUrl(RecoBackend.tmdbProxyBaseUrl)
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
