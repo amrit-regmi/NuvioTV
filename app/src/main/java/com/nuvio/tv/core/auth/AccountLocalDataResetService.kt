@@ -2,6 +2,8 @@ package com.nuvio.tv.core.auth
 
 import android.content.Context
 import android.util.Log
+import com.nuvio.tv.core.debrid.SharedTorboxKeyService
+import com.nuvio.tv.core.stream.StreamWarmer
 import com.nuvio.tv.core.sync.androidtv.AndroidTvChannelManager
 import com.nuvio.tv.data.local.ProfileDataStore
 import com.nuvio.tv.data.local.ProfileDataStoreFactory
@@ -9,6 +11,7 @@ import com.nuvio.tv.data.local.ProfileLockStateDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,9 +24,21 @@ class AccountLocalDataResetService @Inject constructor(
     private val profileDataStoreFactory: ProfileDataStoreFactory,
     private val profileDataStore: ProfileDataStore,
     private val profileLockStateDataStore: ProfileLockStateDataStore,
-    private val androidTvChannelManager: AndroidTvChannelManager
+    private val androidTvChannelManager: AndroidTvChannelManager,
+    // Provider to break the Hilt dependency cycle:
+    // AuthManager -> AccountLocalDataResetService -> StreamWarmer ->
+    // TorboxDirectDebridResolver -> AuthManager. Resolved lazily at sign-out time.
+    private val streamWarmerProvider: Provider<StreamWarmer>,
+    private val sharedTorboxKeyServiceProvider: Provider<SharedTorboxKeyService>
 ) {
     suspend fun clearAfterSignOut() = withContext(Dispatchers.IO) {
+        // Built-in provider / shared-backend caches: shared TorBox key + warmed
+        // (shared-key-resolved) streams must be wiped so a signed-out user can no
+        // longer use anything that depended on our backend or shared key.
+        runCatching { sharedTorboxKeyServiceProvider.get().invalidate() }
+            .onFailure { Log.w(ACCOUNT_RESET_TAG, "Failed to invalidate shared TorBox key cache", it) }
+        runCatching { streamWarmerProvider.get().clearAllCaches() }
+            .onFailure { Log.w(ACCOUNT_RESET_TAG, "Failed to clear stream warmer caches", it) }
         runCatching { androidTvChannelManager.clearAll() }
             .onFailure { Log.w(ACCOUNT_RESET_TAG, "Failed to clear Android TV channel data", it) }
         runCatching { profileDataStoreFactory.clearProfileScopedData() }

@@ -584,6 +584,19 @@ class StreamWarmer @Inject constructor(
     }
 
     /**
+     * Drops every in-memory cache the warmer holds: warmed stream lists, resolved
+     * (shared-key) CDN URLs, and the proxy-stub blocklist. Called on sign-out so a
+     * signed-out user can never replay streams that were resolved with our shared
+     * TorBox key / built-in provider.
+     */
+    fun clearAllCaches() {
+        synchronized(resolvedUrlCache) { resolvedUrlCache.clear() }
+        synchronized(cache) { cache.clear() }
+        synchronized(stubUrls) { stubUrls.clear() }
+        Log.d(TAG, "Cleared all stream warmer caches (sign-out)")
+    }
+
+    /**
      * Evicts all stream cache entries for a given content type and videoId.
      * Call this after a download completes so the next navigation triggers a fresh
      * stream list fetch and reflects the newly-cached state on TorBox.

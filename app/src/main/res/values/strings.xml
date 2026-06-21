@@ -1740,7 +1740,7 @@
     <string name="account_manage_super_admin_qr_hint">Scan with your phone, or open the link in a browser. Press OK to close.</string>
     <string name="account_error_signin_required">Sign in with an account first.</string>
     <string name="account_signin_create_title">Sign In / Create Account</string>
-    <string name="account_signin_create_desc">Use email and password to create or sign into your account.</string>
+    <string name="account_signin_create_desc">Use your username or email and password to sign into your account.</string>
     <string name="account_generate_sync_desc">Create a code on this device so other devices can link to it.</string>
     <string name="account_enter_sync_desc">Link this device to another device using a sync code.</string>
     <string name="account_signed_in_as">Signed in as</string>

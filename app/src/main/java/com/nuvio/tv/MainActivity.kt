@@ -909,6 +909,12 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun registerDeviceCapabilities(snapshot: com.nuvio.tv.core.device.DeviceCapabilityDetector.Snapshot) {
         try {
+            // Built-in provider / our backend is gated behind a full Nuvio account.
+            // Never POST device-profile to our backend when unauthenticated.
+            if (authManager.authState.value !is AuthState.FullAccount) {
+                Log.d("MainActivity", "Skipping device-profile registration (unauthenticated)")
+                return
+            }
             val deviceId = deviceProfileDataStore.getOrCreateDeviceId()
             val maxResolution = when {
                 snapshot.supports4k -> "2160p"

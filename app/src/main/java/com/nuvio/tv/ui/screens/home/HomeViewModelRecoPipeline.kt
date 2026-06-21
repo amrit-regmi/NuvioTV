@@ -15,12 +15,27 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 private const val TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w500"
 
 internal fun HomeViewModel.observeRecoRows() {
     if (BuildConfig.RECO_MODE != "private") return
+
+    // Built-in reco rows are gated behind a full Nuvio account. The moment auth is no
+    // longer a FullAccount (sign-out / anonymous QR session), drop any cached reco rows
+    // so a signed-out user never sees built-in recommendations.
+    viewModelScope.launch {
+        authManager.authState
+            .map { it is AuthState.FullAccount }
+            .distinctUntilChanged()
+            .collectLatest { isFullAccount ->
+                if (!isFullAccount) {
+                    _recoRows.value = emptyList()
+                }
+            }
+    }
 
     viewModelScope.launch {
         combine(

@@ -1,6 +1,7 @@
 package com.nuvio.tv.core.debrid
 
 import android.util.Log
+import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.data.local.DebridSettingsDataStore
 import com.nuvio.tv.data.remote.api.TorboxApi
 import com.nuvio.tv.data.remote.dto.TorboxCreateTorrentDataDto
@@ -25,7 +26,8 @@ class TorboxDirectDebridResolver @Inject constructor(
     private val dataStore: DebridSettingsDataStore,
     private val api: TorboxApi,
     private val fileSelector: TorboxFileSelector,
-    private val sharedTorboxKeyService: SharedTorboxKeyService
+    private val sharedTorboxKeyService: SharedTorboxKeyService,
+    private val authManager: AuthManager
 ) {
     private val rateLimitedUntilMs = AtomicLong(0L)
 
@@ -40,10 +42,20 @@ class TorboxDirectDebridResolver @Inject constructor(
      * Resolves the effective Torbox API key: user's own key takes priority,
      * falls back to the shared key fetched from the catalog-addon backend.
      * Returns null if no key is available.
+     *
+     * The shared key is gated behind a FULL Nuvio account ([AuthManager.isAuthenticated]).
+     * When unauthenticated (signed out, or only the anonymous QR session) the shared key
+     * is never used — only the user's OWN TorBox key can resolve streams. This keeps the
+     * built-in/shared backend access locked to authenticated users while leaving the
+     * user's own debrid key working.
      */
     private suspend fun resolveApiKey(): String? {
         val userKey = dataStore.settings.first().torboxApiKey.trim()
         if (userKey.isNotBlank()) return userKey
+        if (!authManager.isAuthenticated) {
+            Log.d(TAG, "Unauthenticated: shared TorBox key disabled; only the user's own key is allowed")
+            return null
+        }
         return sharedTorboxKeyService.getKey()
     }
 

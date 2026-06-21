@@ -1,7 +1,10 @@
 package com.nuvio.tv.core.reco
 
 import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Protocol
 import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 /**
  * Attaches `Authorization: Bearer <supabase_access_token>` to every request whose
@@ -60,8 +63,12 @@ class RecoAuthInterceptor(
             return chain.proceed(request)
         }
 
+        // No token = unauthenticated. Our backend (built-in provider, reco, image/metadata
+        // proxy, shared TorBox key, …) is gated behind a full Nuvio account, so we must NOT
+        // communicate with it at all when signed out. Short-circuit with a local 401 instead
+        // of letting the request leave the device. Public paths (handled above) still pass.
         val token = tokenProvider().currentToken()
-            ?: return chain.proceed(request)
+            ?: return blockedUnauthenticated(request)
 
         return chain.proceed(
             request.newBuilder()
@@ -69,6 +76,15 @@ class RecoAuthInterceptor(
                 .build()
         )
     }
+
+    private fun blockedUnauthenticated(request: okhttp3.Request): Response =
+        Response.Builder()
+            .request(request)
+            .protocol(Protocol.HTTP_1_1)
+            .code(401)
+            .message("Unauthenticated: Nuvio backend access requires sign-in")
+            .body("".toResponseBody("text/plain".toMediaType()))
+            .build()
 
     private fun isPublicPath(path: String): Boolean =
         path == "/health" ||

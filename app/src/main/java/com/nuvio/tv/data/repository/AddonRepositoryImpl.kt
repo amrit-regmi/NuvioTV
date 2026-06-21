@@ -158,20 +158,33 @@ class AddonRepositoryImpl @Inject constructor(
         combine(
             preferences.installedAddonUrls,
             preferences.userSetNames,
-            preferences.addonEnabledStates
-        ) { urls, names, enabledStates -> Triple(urls, names, enabledStates) }
+            preferences.addonEnabledStates,
+            // Re-emit when auth state flips so the built-in catalog-addon is added on
+            // sign-in and removed on sign-out (the gating below depends on isAuthenticated).
+            authManager.authState
+        ) { urls, names, enabledStates, _ -> Triple(urls, names, enabledStates) }
         .flatMapLatest { (urls, userNames, enabledStates) ->
             flow {
                 val enabledByUrl = enabledStates.mapKeys { (url, _) -> canonicalizeUrl(url) }
 
-                // In private mode, the catalog-addon is always-on regardless of user preferences.
-                val effectiveUrls = if (BuildConfig.RECO_MODE == "private") {
-                    val catalogCanonical = canonicalizeUrl(RecoBackend.catalogAddonUrl)
-                    if (urls.none { canonicalizeUrl(it) == catalogCanonical }) listOf(catalogCanonical) + urls
-                    else urls
+                // In private mode, the catalog-addon (our built-in provider) is always-on —
+                // BUT only for authenticated users. It is gated behind a full Nuvio account:
+                // when signed out (or only the anonymous QR session) we must NOT inject it,
+                // never call our backend for it, and treat the built-in provider as
+                // unavailable. The user's OWN installed third-party addons (in `urls`) are
+                // untouched and keep working. Filter out any catalog-addon URL that may have
+                // been synced into `urls` so an unauthenticated user can't reach it either.
+                val isAuthed = authManager.isAuthenticated
+                val catalogCanonical = canonicalizeUrl(RecoBackend.catalogAddonUrl)
+                val baseUrls = if (BuildConfig.RECO_MODE == "private" && !isAuthed) {
+                    urls.filter { canonicalizeUrl(it) != catalogCanonical }
                 } else urls
-                val effectiveEnabledByUrl = if (BuildConfig.RECO_MODE == "private") {
-                    val catalogCanonical = canonicalizeUrl(RecoBackend.catalogAddonUrl)
+
+                val effectiveUrls = if (BuildConfig.RECO_MODE == "private" && isAuthed) {
+                    if (baseUrls.none { canonicalizeUrl(it) == catalogCanonical }) listOf(catalogCanonical) + baseUrls
+                    else baseUrls
+                } else baseUrls
+                val effectiveEnabledByUrl = if (BuildConfig.RECO_MODE == "private" && isAuthed) {
                     enabledByUrl + mapOf(catalogCanonical to true)
                 } else enabledByUrl
 

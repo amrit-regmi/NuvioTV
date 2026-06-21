@@ -24,8 +24,15 @@ class DirectDebridResolver @Inject constructor(
     private val realDebridResolver: RealDebridDirectDebridResolver,
     private val premiumizeResolver: PremiumizeDirectDebridResolver,
     private val localDebridService: LocalDebridService,
-    private val sharedTorboxKeyService: SharedTorboxKeyService
+    private val sharedTorboxKeyService: SharedTorboxKeyService,
+    private val authManager: com.nuvio.tv.core.auth.AuthManager
 ) {
+    // The shared TorBox key is gated behind a full Nuvio account. When unauthenticated,
+    // treat the shared key as unavailable so the built-in/shared TorBox provider is never
+    // offered or attempted; the user's OWN key path is unaffected.
+    private fun sharedTorboxAvailable(): Boolean =
+        sharedTorboxKeyService.isConfigured() && authManager.isAuthenticated
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutex = Mutex()
     private val resolvedCache = mutableMapOf<String, CachedDirectDebridResolve>()
@@ -141,7 +148,7 @@ class DirectDebridResolver @Inject constructor(
 
         // Fallback: if stream is for Torbox and a shared key is configured, allow resolution
         // even if the user has no personal Torbox key.
-        if (providerId == DebridProviders.TORBOX_ID && sharedTorboxKeyService.isConfigured()) {
+        if (providerId == DebridProviders.TORBOX_ID && sharedTorboxAvailable()) {
             return true
         }
 
@@ -201,7 +208,7 @@ class DirectDebridResolver @Inject constructor(
         // Determine effective API key: user's own key, or a marker for shared key
         val apiKey: String = settings.apiKeyFor(providerId).trim().let { userKey ->
             if (userKey.isNotBlank()) userKey
-            else if (providerId == DebridProviders.TORBOX_ID && sharedTorboxKeyService.isConfigured()) {
+            else if (providerId == DebridProviders.TORBOX_ID && sharedTorboxAvailable()) {
                 "shared" // stable marker — actual key is resolved at resolve time
             } else return null
         }
