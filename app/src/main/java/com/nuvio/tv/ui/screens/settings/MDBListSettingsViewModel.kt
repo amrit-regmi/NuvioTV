@@ -3,7 +3,6 @@ package com.nuvio.tv.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.data.local.MDBListSettingsDataStore
-import com.nuvio.tv.data.remote.api.MDBListApi
 import com.nuvio.tv.domain.model.MDBListSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -19,8 +18,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class MDBListSettingsViewModel @Inject constructor(
-    private val dataStore: MDBListSettingsDataStore,
-    private val mdbListApi: MDBListApi
+    private val dataStore: MDBListSettingsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MDBListSettingsUiState())
@@ -60,18 +58,12 @@ class MDBListSettingsViewModel @Inject constructor(
             onSuccess()
             return
         }
+        // Ratings now come from OUR backend (no api.mdblist.com validation call). The key is
+        // stored locally for back-compat but is no longer used in the request path — the
+        // backend holds the MDBLIST_API_KEY server-side. Save without a third-party round-trip.
         viewModelScope.launch {
-            _validating.value = true
-            val valid = try {
-                mdbListApi.getUser(trimmed).isSuccessful
-            } catch (e: Exception) { false }
-            _validating.value = false
-            if (valid) {
-                dataStore.setApiKey(trimmed)
-                onSuccess()
-            } else {
-                _validationError.tryEmit(Unit)
-            }
+            dataStore.setApiKey(trimmed)
+            onSuccess()
         }
     }
 

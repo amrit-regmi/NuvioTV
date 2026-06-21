@@ -4,17 +4,12 @@ import android.content.Context
 import android.util.Log
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.data.remote.api.AddonApi
-import com.nuvio.tv.data.remote.api.AniSkipApi
-import com.nuvio.tv.data.remote.api.AnimeSkipApi
-import com.nuvio.tv.data.remote.api.ArmApi
 import com.nuvio.tv.data.remote.api.CatalogAddonApi
 import com.nuvio.tv.data.remote.api.DonationsApi
 import com.nuvio.tv.data.remote.api.GitHubReleaseApi
 import com.nuvio.tv.data.remote.api.TraktApi
 import com.nuvio.tv.data.remote.api.TrailerApi
-import com.nuvio.tv.data.remote.api.IntroDbApi
 import com.nuvio.tv.data.remote.api.ImdbTapframeApi
-import com.nuvio.tv.data.remote.api.MDBListApi
 import com.nuvio.tv.data.remote.api.ParentalGuideApi
 import com.nuvio.tv.data.remote.api.PremiumizeApi
 import com.nuvio.tv.data.remote.api.RealDebridApi
@@ -386,67 +381,11 @@ object NetworkModule {
     fun provideParentalGuideApi(@Named("parentalGuide") retrofit: Retrofit): ParentalGuideApi =
         retrofit.create(ParentalGuideApi::class.java)
 
-    // --- Skip Intro APIs ---
-
-    @Provides
-    @Singleton
-    @Named("introDb")
-    fun provideIntroDbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
-        Retrofit.Builder()
-            .baseUrl(BuildConfig.INTRODB_API_URL.ifEmpty { "https://localhost/" })
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-
-    @Provides
-    @Singleton
-    fun provideIntroDbApi(@Named("introDb") retrofit: Retrofit): IntroDbApi =
-        retrofit.create(IntroDbApi::class.java)
-
-    @Provides
-    @Singleton
-    @Named("aniSkip")
-    fun provideAniSkipRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
-        Retrofit.Builder()
-            .baseUrl("https://api.aniskip.com/v2/")
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-
-    @Provides
-    @Singleton
-    fun provideAniSkipApi(@Named("aniSkip") retrofit: Retrofit): AniSkipApi =
-        retrofit.create(AniSkipApi::class.java)
-
-    @Provides
-    @Singleton
-    @Named("arm")
-    fun provideArmRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
-        Retrofit.Builder()
-            .baseUrl("https://arm.haglund.dev/api/v2/")
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-
-    @Provides
-    @Singleton
-    fun provideArmApi(@Named("arm") retrofit: Retrofit): ArmApi =
-        retrofit.create(ArmApi::class.java)
-
-    @Provides
-    @Singleton
-    @Named("animeSkipGql")
-    fun provideAnimeSkipGqlRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
-        Retrofit.Builder()
-            .baseUrl("https://api.anime-skip.com/")
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-
-    @Provides
-    @Singleton
-    fun provideAnimeSkipApi(@Named("animeSkipGql") retrofit: Retrofit): AnimeSkipApi =
-        retrofit.create(AnimeSkipApi::class.java)
+    // --- Skip Intro ---
+    // Skip-intro timestamps now come from OUR backend via CatalogAddonApi
+    // (`/catalog-addon/skip/{type}/{id}.json`). The direct third-party providers
+    // (IntroDb / AniSkip / Anime-Skip / ARM) have been removed — no runtime calls
+    // to api.introdb.app / api.aniskip.com / api.anime-skip.com / arm.haglund.dev.
 
     // --- GitHub Releases API (in-app updates) ---
 
@@ -523,22 +462,10 @@ object NetworkModule {
     fun provideTrailerApi(@Named("trailer") retrofit: Retrofit): TrailerApi =
         retrofit.create(TrailerApi::class.java)
 
-    // --- MDBList API ---
-
-    @Provides
-    @Singleton
-    @Named("mdblist")
-    fun provideMDBListRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
-        Retrofit.Builder()
-            .baseUrl("https://api.mdblist.com/")
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-
-    @Provides
-    @Singleton
-    fun provideMDBListApi(@Named("mdblist") retrofit: Retrofit): MDBListApi =
-        retrofit.create(MDBListApi::class.java)
+    // --- MDBList ratings ---
+    // Ratings now come from OUR backend via CatalogAddonApi
+    // (`/catalog-addon/ratings/{id}.json`). The direct api.mdblist.com client has been
+    // removed — no runtime calls to api.mdblist.com.
 
     // --- SeriesGraph API ---
 

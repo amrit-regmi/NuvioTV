@@ -48,7 +48,53 @@ interface CatalogAddonApi {
     suspend fun updateDeviceProfile(
         @Body body: DeviceProfileUpdateDto
     ): Response<Unit>
+
+    // Skip-intro timestamps served by OUR backend (DB-only, Tor-scraped nightly, auth-gated).
+    // id is `tt…:S:E`. RecoAuthInterceptor attaches the user Bearer token (same host).
+    // Empty `{}` body on a miss → no skip button (graceful).
+    @GET("skip/{type}/{id}.json")
+    suspend fun getSkip(
+        @Path("type") type: String,
+        @Path(value = "id", encoded = true) id: String
+    ): Response<CatalogSkipDto>
+
+    // MDBList-style ratings served by OUR backend (auth-gated). id is the imdb id.
+    // `{ratings:[]}` on a miss → degrade gracefully (no extra ratings).
+    @GET("ratings/{id}.json")
+    suspend fun getRatings(
+        @Path(value = "id", encoded = true) id: String
+    ): Response<CatalogRatingsDto>
 }
+
+// --- Skip-intro DTOs (normalized {intro,recap,outro,source} shape from our backend) ---
+
+@JsonClass(generateAdapter = true)
+data class CatalogSkipDto(
+    @Json(name = "intro") val intro: CatalogSkipSegmentDto? = null,
+    @Json(name = "recap") val recap: CatalogSkipSegmentDto? = null,
+    @Json(name = "outro") val outro: CatalogSkipSegmentDto? = null,
+    @Json(name = "source") val source: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class CatalogSkipSegmentDto(
+    @Json(name = "start") val start: Double? = null,
+    @Json(name = "end") val end: Double? = null
+)
+
+// --- Ratings DTOs ({ratings:[{source,value,votes}]} from our backend) ---
+
+@JsonClass(generateAdapter = true)
+data class CatalogRatingsDto(
+    @Json(name = "ratings") val ratings: List<CatalogRatingItemDto> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class CatalogRatingItemDto(
+    @Json(name = "source") val source: String? = null,
+    @Json(name = "value") val value: Double? = null,
+    @Json(name = "votes") val votes: Long? = null
+)
 
 @JsonClass(generateAdapter = true)
 data class CatalogTorboxKeyDto(

@@ -3,8 +3,6 @@ package com.nuvio.tv.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.data.local.AnimeSkipSettingsDataStore
-import com.nuvio.tv.data.remote.api.AnimeSkipApi
-import com.nuvio.tv.data.remote.api.AnimeSkipRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,8 +17,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AnimeSkipSettingsViewModel @Inject constructor(
-    private val dataStore: AnimeSkipSettingsDataStore,
-    private val animeSkipApi: AnimeSkipApi
+    private val dataStore: AnimeSkipSettingsDataStore
 ) : ViewModel() {
 
     private val _clientId = MutableStateFlow("")
@@ -55,24 +52,12 @@ class AnimeSkipSettingsViewModel @Inject constructor(
             onSuccess()
             return
         }
+        // Skip-intro now comes from OUR backend (no api.anime-skip.com validation call).
+        // The client id is stored locally for back-compat but is no longer used in the
+        // request path. Save without a third-party round-trip.
         viewModelScope.launch {
-            _validating.value = true
-            val valid = try {
-                val response = animeSkipApi.query(
-                    clientId = trimmed,
-                    body = AnimeSkipRequest(
-                        query = "{ findShowsByExternalId(service: ANILIST, serviceId: \"1\") { id } }"
-                    )
-                )
-                response.isSuccessful && response.body()?.data != null
-            } catch (e: Exception) { false }
-            _validating.value = false
-            if (valid) {
-                dataStore.setClientId(trimmed)
-                onSuccess()
-            } else {
-                _validationError.tryEmit(Unit)
-            }
+            dataStore.setClientId(trimmed)
+            onSuccess()
         }
     }
 }
