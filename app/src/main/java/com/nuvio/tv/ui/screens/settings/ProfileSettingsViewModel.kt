@@ -32,9 +32,15 @@ class ProfileSettingsViewModel @Inject constructor(
      */
     val featureAvailability: StateFlow<Map<String, Boolean>> = featureAvailabilityManager.features
 
+    // Seed with the ACTUAL current primary state (not an optimistic `true`). The Settings rail
+    // gates the primary-only ACCOUNT (device management) and PROFILES sections on this flow via
+    // remember(...); an optimistic `true` seed briefly (or, if activeProfileId never re-emits,
+    // persistently) exposes the device/profile management UI under a secondary profile. Mirrors
+    // AccountViewModel.observeActiveProfile, which deliberately seeds from the real value so a
+    // secondary profile NEVER sees the primary-only sections. (FIX: device UI primary-only.)
     val isPrimaryProfileActive: StateFlow<Boolean> = profileManager.activeProfileId
         .map { it == 1 }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, profileManager.isPrimaryProfileActive)
 
     val canAddProfile: Boolean
         get() = profileManager.canCreateProfile

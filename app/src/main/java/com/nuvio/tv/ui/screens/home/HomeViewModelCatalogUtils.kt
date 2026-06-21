@@ -175,19 +175,25 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
     // config) fall through to the default behavior below.
     val saved = savedRowOrder
     if (!saved.isNullOrEmpty()) {
+        // The dashboard-saved rowOrder is the AUTHORITATIVE per-profile intent: the home
+        // shows EXACTLY the rows enabled there and nothing else. We must NOT fall through to
+        // the default "render every installed addon catalog" path when [resolved] is empty —
+        // doing so leaks the general/addon catalog into profiles that disabled everything
+        // (e.g. the Kids profile, whose only enabled row is a reco row that may resolve empty
+        // until the reco pipeline has populated recoKeyByReasonAndType, or is gated off).
+        // When a saved config exists, an empty resolution means "show only collections",
+        // never "show all catalogs".
         val resolved = resolveSavedRowOrderKeys(addons, saved)
-        if (resolved.isNotEmpty()) {
-            // Collections aren't part of the dashboard rowOrder; append pinned/remaining
-            // collections so they still surface (in their saved-or-default relative spot).
-            val collectionKeys = collectionsCache.map { "collection_${it.id}" }
-            val resolvedSet = resolved.toSet()
-            val mergedOrder = resolved + collectionKeys.filterNot { it in resolvedSet }
-            synchronized(catalogStateLock) {
-                catalogOrder.clear()
-                catalogOrder.addAll(mergedOrder)
-            }
-            return
+        // Collections aren't part of the dashboard rowOrder; append pinned/remaining
+        // collections so they still surface (in their saved-or-default relative spot).
+        val collectionKeys = collectionsCache.map { "collection_${it.id}" }
+        val resolvedSet = resolved.toSet()
+        val mergedOrder = resolved + collectionKeys.filterNot { it in resolvedSet }
+        synchronized(catalogStateLock) {
+            catalogOrder.clear()
+            catalogOrder.addAll(mergedOrder)
         }
+        return
     }
 
     val defaultOrder = buildDefaultCatalogOrder(addons)
