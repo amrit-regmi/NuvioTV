@@ -78,10 +78,13 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
 
     private val gson = Gson()
     private val mutex = Mutex()
-    @Volatile private var lastNextUpWriteMs = 0L
-    @Volatile private var lastInProgressWriteMs = 0L
-    @Volatile private var lastNextUpHash = 0
-    @Volatile private var lastInProgressHash = 0
+    // Throttle/dedup state is keyed per profile. A process-wide hash could suppress a
+    // legitimate snapshot write for one profile because the value matched another
+    // profile's last write, leaving stale on-disk data after a profile switch.
+    private val lastNextUpWriteMsByProfile = java.util.concurrent.ConcurrentHashMap<Int, Long>()
+    private val lastInProgressWriteMsByProfile = java.util.concurrent.ConcurrentHashMap<Int, Long>()
+    private val lastNextUpHashByProfile = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+    private val lastInProgressHashByProfile = java.util.concurrent.ConcurrentHashMap<Int, Int>()
 
     /** Incremented when cache is cleared; observers can collect to trigger refresh. */
     private val _cacheCleared = kotlinx.coroutines.flow.MutableStateFlow(0)
@@ -118,18 +121,19 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
      * @param force bypass throttle and content-change check (use at end of pipeline or for clears)
      */
     suspend fun saveNextUpSnapshot(items: List<CachedNextUpItem>, force: Boolean = false) = withContext(Dispatchers.IO) {
+        val profileId = profileManager.activeProfileId.value
         val contentHash = items.hashCode()
         if (!force) {
-            if (contentHash == lastNextUpHash) return@withContext
+            if (contentHash == lastNextUpHashByProfile[profileId]) return@withContext
             val now = System.currentTimeMillis()
-            if (now - lastNextUpWriteMs < THROTTLE_MS) return@withContext
+            if (now - (lastNextUpWriteMsByProfile[profileId] ?: 0L) < THROTTLE_MS) return@withContext
         }
         mutex.withLock {
             try {
                 val file = nextUpFile()
                 atomicWrite(file, gson.toJson(items))
-                lastNextUpWriteMs = System.currentTimeMillis()
-                lastNextUpHash = contentHash
+                lastNextUpWriteMsByProfile[profileId] = System.currentTimeMillis()
+                lastNextUpHashByProfile[profileId] = contentHash
                 _snapshotVersion.value++
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to write next-up cache: ${e.message}")
@@ -164,18 +168,19 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
      * @param force bypass throttle and content-change check (use at end of pipeline or for clears)
      */
     suspend fun saveInProgressSnapshot(items: List<CachedInProgressItem>, force: Boolean = false) = withContext(Dispatchers.IO) {
+        val profileId = profileManager.activeProfileId.value
         val contentHash = items.hashCode()
         if (!force) {
-            if (contentHash == lastInProgressHash) return@withContext
+            if (contentHash == lastInProgressHashByProfile[profileId]) return@withContext
             val now = System.currentTimeMillis()
-            if (now - lastInProgressWriteMs < THROTTLE_MS) return@withContext
+            if (now - (lastInProgressWriteMsByProfile[profileId] ?: 0L) < THROTTLE_MS) return@withContext
         }
         mutex.withLock {
             try {
                 val file = inProgressFile()
                 atomicWrite(file, gson.toJson(items))
-                lastInProgressWriteMs = System.currentTimeMillis()
-                lastInProgressHash = contentHash
+                lastInProgressWriteMsByProfile[profileId] = System.currentTimeMillis()
+                lastInProgressHashByProfile[profileId] = contentHash
                 _snapshotVersion.value++
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to write in-progress cache: ${e.message}")

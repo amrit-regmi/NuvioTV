@@ -77,17 +77,21 @@ class WatchProgressPreferences @Inject constructor(
      * JSON parsing, grouping, and sorting are performed off the main thread.
      * Results are cached — re-parsing only happens when the raw JSON actually changes.
      */
-    @Volatile private var cachedProgressJson: String? = null
-    @Volatile private var cachedProgressResult: List<WatchProgress>? = null
+    // Cache is keyed by profileId. A process-wide (non-profile-scoped) cache would
+    // serve one profile's continue-watching list to another profile when their raw
+    // JSON happened to match (e.g. both empty), or when concurrent collectors of this
+    // flow raced across a profile switch. Keep one cache slot per profile.
+    private data class ProgressCacheEntry(val json: String, val result: List<WatchProgress>)
+    private val cachedProgressByProfile = java.util.concurrent.ConcurrentHashMap<Int, ProgressCacheEntry>()
 
     val allProgress: Flow<List<WatchProgress>> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { preferences ->
             val json = preferences[watchProgressKey] ?: "{}"
 
-            // Fast path: if JSON hasn't changed, return cached result immediately.
-            val cached = cachedProgressResult
-            if (json == cachedProgressJson && cached != null) {
-                return@map cached
+            // Fast path: if JSON hasn't changed for THIS profile, return cached result.
+            val cached = cachedProgressByProfile[pid]
+            if (cached != null && cached.json == json) {
+                return@map cached.result
             }
 
             val allItems = parseProgressMap(json)
@@ -108,31 +112,29 @@ class WatchProgressPreferences @Inject constructor(
 
             val result = latestByContent.sortedByDescending { it.lastWatched }
 
-            // Cache for next emission
-            cachedProgressJson = json
-            cachedProgressResult = result
+            // Cache for next emission, keyed per profile.
+            cachedProgressByProfile[pid] = ProgressCacheEntry(json, result)
             result
         }.flowOn(Dispatchers.Default)
     }
 
-    @Volatile private var cachedRawProgressJson: String? = null
-    @Volatile private var cachedRawProgressResult: List<WatchProgress>? = null
+    // Per-profile cache (see cachedProgressByProfile rationale above).
+    private val cachedRawProgressByProfile = java.util.concurrent.ConcurrentHashMap<Int, ProgressCacheEntry>()
 
     val allRawProgress: Flow<List<WatchProgress>> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { preferences ->
             val json = preferences[watchProgressKey] ?: "{}"
 
-            val cached = cachedRawProgressResult
-            if (json == cachedRawProgressJson && cached != null) {
-                return@map cached
+            val cached = cachedRawProgressByProfile[pid]
+            if (cached != null && cached.json == json) {
+                return@map cached.result
             }
 
             val result = parseProgressMap(json)
                 .values
                 .sortedByDescending { it.lastWatched }
 
-            cachedRawProgressJson = json
-            cachedRawProgressResult = result
+            cachedRawProgressByProfile[pid] = ProgressCacheEntry(json, result)
             result
         }.flowOn(Dispatchers.Default)
     }
