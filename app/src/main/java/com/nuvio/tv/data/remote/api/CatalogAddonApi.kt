@@ -14,7 +14,9 @@ import retrofit2.http.Path
 interface CatalogAddonApi {
     @GET("torbox-key")
     suspend fun getTorboxKey(
-        @Header("Authorization") authorization: String
+        // Nullable + null in callers: RecoAuthInterceptor attaches the user's Supabase
+        // Bearer token (F72). Do NOT pass `Bearer <CATALOG_SECRET>` here.
+        @Header("Authorization") authorization: String? = null
     ): Response<CatalogTorboxKeyDto>
 
     @GET("stream/{type}/{videoId}/status")

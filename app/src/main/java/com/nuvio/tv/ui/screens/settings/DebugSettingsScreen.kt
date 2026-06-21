@@ -417,11 +417,14 @@ private fun DebugSignInCard(
             color = NuvioTheme.colors.TextSecondary
         )
 
+        // TASK 2: accept a username OR an email. The typed value is sent verbatim as the
+        // `email` field to POST /auth/v1/token?grant_type=password; the backend (F31) resolves
+        // a bare username → real login email. Use a plain text keyboard so usernames are easy.
         InputField(
             value = email,
             onValueChange = { email = it },
             placeholder = stringResource(R.string.debug_email_placeholder),
-            keyboardType = KeyboardType.Email
+            keyboardType = KeyboardType.Text
         )
 
         InputField(

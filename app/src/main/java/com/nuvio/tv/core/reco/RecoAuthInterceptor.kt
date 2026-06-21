@@ -19,13 +19,18 @@ import okhttp3.Response
  * - Only touches requests to [RecoBackend.host]; all other hosts pass through untouched.
  * - Skips when a request already carries an `Authorization` header (so the call sites
  *   that already attach the bearer token — RecommendationRepository, RecoRatingService —
- *   or the catalog-addon client which sends its own `Bearer <CATALOG_SECRET>` are never
- *   double-headed).
+ *   are never double-headed).
  * - Skips the genuinely-public endpoints that must stay anonymous:
- *   `/health` and the catalog-addon Stremio routes (gated by CATALOG_SECRET, not the
- *   user token). `/image/...` and `/metadata/images/...` are NOT skipped here — they are an
- *   image proxy that the Coil loader authenticates separately; attaching the token when
- *   present is harmless for them.
+ *   `/health` and the catalog-addon `/manifest.json` (Stremio needs the manifest to
+ *   install; it stays public). `/image/...` and `/metadata/images/...` are NOT skipped
+ *   here — they are an image proxy that the Coil loader authenticates separately;
+ *   attaching the token when present is harmless for them.
+ * - F72 (api_bridge.md): catalog-addon DATA routes (`/catalog-addon/catalog`, `/meta`,
+ *   `/stream`, `/subtitles`, `/device-profile`, `/torbox-key`, …) now REQUIRE the user
+ *   token in private mode — the app must NO LONGER send `Bearer <CATALOG_SECRET>`. So
+ *   these paths are no longer treated as public here; the user token is attached just
+ *   like any other reco-host data call. Only `/catalog-addon/.../manifest.json` stays
+ *   public.
  * - Skips when there is no token (signed out): the request goes out unauthenticated.
  */
 class RecoAuthInterceptor(
@@ -67,6 +72,8 @@ class RecoAuthInterceptor(
 
     private fun isPublicPath(path: String): Boolean =
         path == "/health" ||
-            path.startsWith("/catalog-addon")
+            // Only the catalog-addon MANIFEST stays public (Stremio install needs it).
+            // All other /catalog-addon/* DATA routes require the user token (F72).
+            (path.startsWith("/catalog-addon") && path.endsWith("/manifest.json"))
 }
 

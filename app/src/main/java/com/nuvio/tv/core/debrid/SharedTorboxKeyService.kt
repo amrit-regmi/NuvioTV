@@ -30,9 +30,6 @@ class SharedTorboxKeyService @Inject constructor(
      * Results are cached for 30 minutes.
      */
     suspend fun getKey(): String? = mutex.withLock {
-        val secret = BuildConfig.CATALOG_SECRET.trim()
-        if (secret.isBlank()) return@withLock null
-
         val now = System.currentTimeMillis()
         val age = now - cachedAtMs
         if (cachedKey != null && age in 0..CACHE_TTL_MS) {
@@ -40,7 +37,8 @@ class SharedTorboxKeyService @Inject constructor(
         }
 
         return@withLock try {
-            val response = catalogAddonApi.getTorboxKey("Bearer $secret")
+            // F72: pass null so RecoAuthInterceptor attaches the user's Supabase token.
+            val response = catalogAddonApi.getTorboxKey(null)
             if (response.isSuccessful) {
                 val key = response.body()?.key?.trim()?.takeIf { it.isNotBlank() }
                 if (key != null) {
@@ -63,10 +61,10 @@ class SharedTorboxKeyService @Inject constructor(
     }
 
     /**
-     * Returns true if a shared Torbox key is potentially available
-     * (i.e., CATALOG_SECRET is configured and a key has been or can be fetched).
+     * Returns true if a shared Torbox key is potentially available (i.e., the
+     * catalog-addon backend is configured and a key can be fetched with the user token).
      */
-    fun isConfigured(): Boolean = BuildConfig.CATALOG_SECRET.trim().isNotBlank()
+    fun isConfigured(): Boolean = BuildConfig.CATALOG_ADDON_BASE_URL.trim().isNotBlank()
 
     /** Invalidate the cached key (e.g., on auth failure). */
     fun invalidate() {

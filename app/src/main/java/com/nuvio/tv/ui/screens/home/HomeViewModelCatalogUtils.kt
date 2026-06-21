@@ -326,8 +326,10 @@ internal fun HomeViewModel.resolveSavedRowOrderKeys(
         val types = rowOrderTypes(entry.type)
         when (entry.kind.trim().lowercase()) {
             "reco" -> {
+                // A reco category+type can map to MULTIPLE rows (e.g. 2× because_watched);
+                // render ALL of them at this slot, in backend order.
                 types.forEach { t ->
-                    recoKeyByReasonAndType["${entry.id}|$t"]?.let { addKey(it) }
+                    recoKeyByReasonAndType["${entry.id}|$t"]?.forEach { addKey(it) }
                 }
             }
             "builtin" -> {

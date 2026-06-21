@@ -945,9 +945,10 @@ class MainActivity : ComponentActivity() {
                 append("\"download_speed_mbps\":$downloadSpeedMbps")
                 append("}")
             }
+            // F72: no CATALOG_SECRET Bearer — the shared httpClient's RecoAuthInterceptor
+            // attaches the user's Supabase token to this catalog-addon (reco-host) call.
             val request = Request.Builder()
                 .url("${BuildConfig.CATALOG_ADDON_BASE_URL}device-profile")
-                .header("Authorization", "Bearer ${BuildConfig.CATALOG_SECRET}")
                 .put(body.toRequestBody("application/json".toMediaType()))
                 .build()
             httpClient.newCall(request).execute().use { response ->

@@ -195,8 +195,13 @@ class HomeViewModel @Inject constructor(
     internal var homeCatalogOrderKeys: List<String> = emptyList()
     internal var disabledHomeCatalogKeys: Set<String> = emptySet()
     internal var recoRowKeys: List<String> = emptyList()
-    /** "reason_type|content_type" → reco catalog key, so saved rowOrder reco entries match exactly. */
-    internal var recoKeyByReasonAndType: Map<String, String> = emptyMap()
+    /**
+     * "reason_type|content_type" → ORDERED list of reco catalog keys for that category+type.
+     * A category can emit MULTIPLE rows of the same content_type (e.g. 2× because_watched
+     * Movies); all of them are kept here in backend order so the saved rowOrder slot renders
+     * every row of that category, not just one.
+     */
+    internal var recoKeyByReasonAndType: Map<String, List<String>> = emptyMap()
     /**
      * Unified saved home row order pulled from Supabase nuvio_home_catalog_settings
      * (settings_json.rowOrder = [{id, kind, type, enabled}]). Null = no saved config

@@ -295,23 +295,14 @@ object NetworkModule {
         } else {
             "http://localhost/"
         }
-        val secret = BuildConfig.CATALOG_SECRET.trim()
-        val authClient = if (secret.isNotBlank()) {
-            okHttpClient.newBuilder()
-                .addInterceptor { chain ->
-                    chain.proceed(
-                        chain.request().newBuilder()
-                            .header("Authorization", "Bearer $secret")
-                            .build()
-                    )
-                }
-                .build()
-        } else {
-            okHttpClient
-        }
+        // F72 (api_bridge.md): do NOT attach `Bearer <CATALOG_SECRET>` here. The shared
+        // okHttpClient already carries RecoAuthInterceptor, which attaches the user's
+        // Supabase `Authorization: Bearer <access_token>` to catalog-addon (reco-host)
+        // DATA calls. The baked secret as Bearer is no longer sufficient (it was the hole)
+        // and would block the user token (RecoAuthInterceptor skips already-authed requests).
         return Retrofit.Builder()
             .baseUrl(baseUrl)
-            .client(authClient)
+            .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
     }

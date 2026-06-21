@@ -72,15 +72,19 @@ internal fun HomeViewModel.observeRecoRows() {
                         label = cr.catalogName
                     )
                 }
-                // Expose a stable reason_type+content_type → reco key map so the saved
+                // Expose a stable reason_type+content_type → reco keys map so the saved
                 // rowOrder (which references reco rows by id/reason_type + type) can match
                 // the rendered reco rows precisely (not via the dominant-kind heuristic).
+                // A category may emit MULTIPLE rows of the same content_type (e.g. 2×
+                // because_watched Movies); group them so EVERY row renders at that slot,
+                // in backend order (groupBy preserves first-seen iteration order).
                 recoKeyByReasonAndType = rows.mapIndexed { index, row ->
                     val ct = row.recoContentType()
                     val rawType = if (ct == "series") "series" else "movie"
                     val catalogId = "${row.reason_type}_$index"
                     "${row.reason_type}|$ct" to "reco_engine_${rawType}_$catalogId"
-                }.toMap()
+                }
+                    .groupBy({ it.first }, { it.second })
                 recoRowKeys = descriptors.map { it.key }
                 layoutPreferenceDataStore.setRecoRowDescriptors(descriptors)
                 rebuildCatalogOrder(addonsCache)

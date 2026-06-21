@@ -1,7 +1,6 @@
 package com.nuvio.tv.core.debrid
 
 import android.util.Log
-import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.data.remote.api.CatalogAddonApi
 import com.nuvio.tv.domain.model.Stream
 import kotlinx.coroutines.CancellationException
@@ -100,11 +99,11 @@ class DebridDownloadManager @Inject constructor(
         val current = _activePrepare.value
         _activePrepare.value = null
         if (current != null) {
-            val secret = BuildConfig.CATALOG_SECRET.trim()
-            val auth = if (secret.isNotBlank()) "Bearer $secret" else null
             scope.launch {
                 try {
-                    catalogAddonApi.cancelPrepare(current.type, current.imdbId, auth)
+                    // F72/TASK B: pass null so RecoAuthInterceptor attaches the user's
+                    // Supabase token (enables per-user TorBox key + private-mode gating).
+                    catalogAddonApi.cancelPrepare(current.type, current.imdbId, null)
                 } catch (e: Exception) {
                     Log.w(TAG, "cancelPrepare failed: ${e.message}")
                 }
@@ -145,12 +144,11 @@ class DebridDownloadManager @Inject constructor(
 
         pollJob = scope.launch {
             try {
-                // Step 1: Call /prepare to queue the download on the backend
-                val secret = BuildConfig.CATALOG_SECRET.trim()
-                val authorization = if (secret.isNotBlank()) "Bearer $secret" else null
-
+                // Step 1: Call /prepare to queue the download on the backend.
+                // F72/TASK B: pass null so RecoAuthInterceptor attaches the user's
+                // Supabase token (enables per-user TorBox key + private-mode gating).
                 val prepareResponse = try {
-                    catalogAddonApi.prepareStream(apiType, videoId, authorization)
+                    catalogAddonApi.prepareStream(apiType, videoId, null)
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     Log.w(TAG, "prepareStream failed: ${e.message}")

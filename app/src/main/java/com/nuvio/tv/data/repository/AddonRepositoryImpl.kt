@@ -52,16 +52,10 @@ class AddonRepositoryImpl @Inject constructor(
         private val BACKEND_ADDON_HOST = RecoBackend.host
     }
 
-    private fun catalogAuthHeader(url: String): String? {
-        val secret = BuildConfig.CATALOG_SECRET.trim()
-        if (secret.isBlank()) return null
-        val lower = url.lowercase()
-        val catalogBase = BuildConfig.CATALOG_ADDON_BASE_URL.trim().lowercase()
-        return if (lower.contains(BACKEND_ADDON_HOST) ||
-                   (catalogBase.isNotBlank() && lower.contains(catalogBase))) {
-            "Bearer $secret"
-        } else null
-    }
+    // F72 (api_bridge.md): never send `Bearer <CATALOG_SECRET>` to the catalog-addon.
+    // The manifest stays public anyway; for any authed catalog-addon call the shared
+    // okHttpClient's RecoAuthInterceptor attaches the user's Supabase access token.
+    private fun catalogAuthHeader(url: String): String? = null
 
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var syncJob: Job? = null

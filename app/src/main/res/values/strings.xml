@@ -1224,8 +1224,8 @@
     <string name="debug_buffer_logs_subtitle">Emit periodic player buffer diagnostics to logcat (disabled by default)</string>
     <string name="debug_section_account">Account</string>
     <string name="debug_manual_signin_title">Manual Sign In</string>
-    <string name="debug_manual_signin_subtitle">Sign in with email and password (Supabase auth)</string>
-    <string name="debug_email_placeholder">Email</string>
+    <string name="debug_manual_signin_subtitle">Sign in with username or email and password (Supabase auth)</string>
+    <string name="debug_email_placeholder">Username or Email</string>
     <string name="debug_password_placeholder">Password</string>
     <string name="debug_signing_in">Signing in\u2026</string>
     <string name="debug_sign_in">Sign In</string>

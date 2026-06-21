@@ -454,19 +454,12 @@ class StreamRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Returns "Bearer <secret>" when the addon URL belongs to our backend, null otherwise.
-     * Mirrors the same helper in StreamWarmer and AddonRepositoryImpl.
+     * F72 (api_bridge.md): never send `Bearer <CATALOG_SECRET>` to the catalog-addon.
+     * Returning null leaves the Authorization header unset so the shared okHttpClient's
+     * RecoAuthInterceptor can attach the user's Supabase `Bearer <access_token>` instead
+     * (the baked secret as Bearer is no longer accepted in private mode).
      */
-    private fun catalogAuth(baseUrl: String): String? {
-        val secret = BuildConfig.CATALOG_SECRET.trim()
-        if (secret.isBlank()) return null
-        val lower = baseUrl.lowercase()
-        val catalogBase = BuildConfig.CATALOG_ADDON_BASE_URL.trim().lowercase()
-        return if (lower.contains(BACKEND_ADDON_HOST) ||
-                   (catalogBase.isNotBlank() && lower.contains(catalogBase))) {
-            "Bearer $secret"
-        } else null
-    }
+    private fun catalogAuth(baseUrl: String): String? = null
 
     override suspend fun getStreamsFromAddon(
         baseUrl: String,
