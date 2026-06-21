@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -52,8 +53,17 @@ fun PersonalizeNudgeDialog(
         runCatching { QrCodeGenerator.generate(personalizeUrl, 360) }.getOrNull()
     }
     val dismissFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        runCatching { dismissFocusRequester.requestFocus() }
+    var dismissFocused by remember { mutableStateOf(false) }
+    // Retry focus until the "Maybe later" button actually gains focus: a single requestFocus()
+    // can race the dialog's layout/attach, leaving the remote unable to interact (the reported
+    // "couldn't click Maybe later" bug).
+    LaunchedEffect(dismissFocused) {
+        if (dismissFocused) return@LaunchedEffect
+        repeat(20) {
+            runCatching { dismissFocusRequester.requestFocus() }
+            kotlinx.coroutines.delay(80)
+            if (dismissFocused) return@LaunchedEffect
+        }
     }
 
     Box(
@@ -109,7 +119,9 @@ fun PersonalizeNudgeDialog(
             )
             Button(
                 onClick = onDismiss,
-                modifier = Modifier.focusRequester(dismissFocusRequester),
+                modifier = Modifier
+                    .focusRequester(dismissFocusRequester)
+                    .onFocusChanged { dismissFocused = it.isFocused },
                 colors = ButtonDefaults.colors(
                     containerColor = NuvioTheme.colors.Secondary,
                     contentColor = NuvioTheme.colors.OnSecondary

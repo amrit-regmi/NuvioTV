@@ -204,6 +204,30 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
         _cacheCleared.value++
     }
 
+    /**
+     * Deletes the CW enrichment snapshots for ALL profiles (the entire cw_enrichment dir).
+     * Used by the one-time launch migration that purges the cross-profile-leak poisoned rows
+     * server-side cleaned, so stale local snapshots don't re-render or re-push them.
+     */
+    suspend fun clearAllProfiles() = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            try {
+                val dir = File(context.filesDir, "cw_enrichment")
+                if (dir.exists()) {
+                    dir.listFiles()?.forEach { it.delete() }
+                }
+                lastNextUpWriteMsByProfile.clear()
+                lastInProgressWriteMsByProfile.clear()
+                lastNextUpHashByProfile.clear()
+                lastInProgressHashByProfile.clear()
+                Log.d(TAG, "Cleared CW enrichment cache for ALL profiles (migration)")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to clear CW enrichment cache for all profiles: ${e.message}")
+            }
+        }
+        _cacheCleared.value++
+    }
+
     private fun atomicWrite(target: File, content: String) {
         val tmp = File(target.parentFile, "${target.name}.tmp")
         tmp.writeText(content)

@@ -91,9 +91,14 @@ class AccountViewModel @Inject constructor(
     // F28: track whether the primary/admin profile is active so device management can be
     // hidden for secondary profiles, mirroring the dashboard "Connected Devices = primary only" rule.
     private fun observeActiveProfile() {
+        // Seed synchronously so a secondary profile NEVER briefly sees the primary-only
+        // Connected Devices section before the flow emits (UiState defaults to true).
+        _uiState.update { it.copy(isPrimaryProfileActive = profileManager.isPrimaryProfileActive) }
         viewModelScope.launch {
-            profileManager.activeProfileId.collect { activeId ->
-                _uiState.update { it.copy(isPrimaryProfileActive = activeId == 1) }
+            profileManager.activeProfileId.collect { _ ->
+                val isPrimary = profileManager.activeProfile?.isPrimary
+                    ?: profileManager.isPrimaryProfileActive
+                _uiState.update { it.copy(isPrimaryProfileActive = isPrimary) }
             }
         }
     }

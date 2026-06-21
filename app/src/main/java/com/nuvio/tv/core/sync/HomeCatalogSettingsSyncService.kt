@@ -209,6 +209,46 @@ class HomeCatalogSettingsSyncService @Inject constructor(
         }
     }
 
+    /**
+     * Writes the unified home [rowOrder] (settings_json.rowOrder) for the active profile back to
+     * the SAME shared Supabase row the home renders from. This is the single source of truth for
+     * per-profile catalog enable/disable + order: the reorder UI mutates the saved rowOrder and
+     * pushes it here so the home reflects the change immediately and the change persists.
+     *
+     * The push uses `p_profile_id = activeProfileId` and `p_platform = home_catalog_shared`, the
+     * exact keys [pullRowOrderFromRemote] reads with — preventing the stale-read platform-mismatch
+     * that previously caused toggles not to persist. Other settings keys in the blob are preserved.
+     */
+    suspend fun pushRowOrderToRemote(rowOrder: List<HomeRowOrderEntry>): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            try {
+                val profileId = profileManager.activeProfileId.value
+                val cleaned = rowOrder.filter { it.id.isNotBlank() && it.kind.isNotBlank() }
+                val rowOrderJson = json.encodeToJsonElement(
+                    kotlinx.serialization.builtins.ListSerializer(HomeRowOrderEntry.serializer()),
+                    cleaned
+                )
+                val existing = fetchRemoteBlob(profileId, HOME_CATALOG_SHARED_SYNC_PLATFORM)?.settingsJson
+                val merged = buildJsonObject {
+                    existing?.forEach { (key, value) -> put(key, value) }
+                    put("rowOrder", rowOrderJson)
+                }
+                val params = buildJsonObject {
+                    put("p_profile_id", profileId)
+                    put("p_settings_json", merged)
+                    put("p_platform", HOME_CATALOG_SHARED_SYNC_PLATFORM)
+                }
+                withJwtRefreshRetry {
+                    postgrest.rpc("sync_push_home_catalog_settings", params)
+                }
+                Log.d(TAG, "Push rowOrder success profile=$profileId entries=${cleaned.size}")
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Log.e(TAG, "Push rowOrder failed", e)
+                Result.failure(e)
+            }
+        }
+
     private suspend fun loadLocalPayload(): SyncHomeCatalogPayload {
         val addons = addonRepository.getInstalledAddons().first().enabledAddons()
         val collections = collectionsDataStore.getCurrentCollections()

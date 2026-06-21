@@ -585,6 +585,13 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Re-pulls the unified saved rowOrder (the single source of truth for per-profile catalog
+     * enable/disable + order) so changes made in the reorder UI reflect on the home immediately
+     * when the user returns. Safe to call on resume — it's a single lightweight RPC.
+     */
+    fun refreshSavedRowOrder() = loadSavedRowOrder()
+
     private fun loadHomeCatalogOrderPreference() = loadHomeCatalogOrderPreferencePipeline()
 
     private fun loadFollowAddonsOrder() = loadFollowAddonsOrderPipeline()

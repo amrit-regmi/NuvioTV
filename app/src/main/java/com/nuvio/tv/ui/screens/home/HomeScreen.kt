@@ -117,6 +117,13 @@ fun HomeScreen(
         viewModel.notifyLocaleChanged()
     }
 
+    // Re-pull the unified saved rowOrder when the home becomes visible again, so changes made in
+    // the Catalog Order (reorder/enable-disable) screen reflect immediately on return.
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        viewModel.refreshSavedRowOrder()
+        onPauseOrDispose { }
+    }
+
     val movieWatchedStatus = uiState.movieWatchedStatus
     // Use a stable lambda whose identity NEVER changes. The lambda captures
     // movieWatchedStatus via rememberUpdatedState so it always reads the latest

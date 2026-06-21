@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.addon
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.sync.HomeCatalogSettingsSyncService
+import com.nuvio.tv.core.sync.HomeRowOrderEntry
 import com.nuvio.tv.core.sync.homeCatalogKey
 import com.nuvio.tv.core.sync.homeLegacyDisabledCatalogKey
 import com.nuvio.tv.data.local.CollectionsDataStore
@@ -35,8 +36,32 @@ class CatalogOrderViewModel @Inject constructor(
     val uiState: StateFlow<CatalogOrderUiState> = _uiState.asStateFlow()
     private var disabledKeysCache: Set<String> = emptySet()
 
+    /**
+     * Unified saved home row order pulled from Supabase (settings_json.rowOrder) — the SAME
+     * single source of truth the home screen renders from. When present, this UI both reflects
+     * its enabled/order AND writes changes back to it, so a toggle/reorder here matches the home
+     * exactly and persists. Null = no saved config (fall back to local items model).
+     */
+    @Volatile
+    private var savedRowOrder: List<HomeRowOrderEntry>? = null
+    /** Refresh trigger so the catalog flow re-emits after rowOrder is (re)loaded. */
+    private val rowOrderRefresh = MutableStateFlow(0)
+    /** Snapshot of installed addons for resolving rowOrder entries -> item keys when pushing. */
+    @Volatile
+    private var addonsSnapshot: List<Addon> = emptyList()
+
     init {
+        loadSavedRowOrder()
         observeCatalogs()
+    }
+
+    private fun loadSavedRowOrder() {
+        viewModelScope.launch {
+            savedRowOrder = runCatching { homeCatalogSettingsSyncService.pullRowOrderFromRemote() }
+                .getOrNull()
+                ?.takeIf { it.isNotEmpty() }
+            rowOrderRefresh.update { it + 1 }
+        }
     }
 
     fun moveUp(key: String) {
@@ -65,10 +90,28 @@ class CatalogOrderViewModel @Inject constructor(
         val updatedDisabled = disabledKeysCache.toMutableSet().apply {
             if (disableKey in this) remove(disableKey) else add(disableKey)
         }
+        // Optimistically reflect the toggle in the unified rowOrder so the push below carries the
+        // new enabled state (the combine flow updates _uiState.items asynchronously).
+        val nowDisabled = disableKey in updatedDisabled
+        val optimisticItems = _uiState.value.items.map { item ->
+            if (item.disableKey == disableKey) item.copy(isDisabled = nowDisabled) else item
+        }
         viewModelScope.launch {
             layoutPreferenceDataStore.setDisabledHomeCatalogKeys(updatedDisabled.toList())
+            // Push BOTH models: the legacy items blob (triggerPush) and the unified rowOrder the
+            // home actually renders from, so the change is reflected and persists.
             homeCatalogSettingsSyncService.triggerPush()
+            pushRowOrderFor(optimisticItems)
         }
+    }
+
+    /** Builds + pushes the unified rowOrder for [items], updating the in-memory snapshot too. */
+    private suspend fun pushRowOrderFor(items: List<CatalogOrderItem>) {
+        if (items.isEmpty()) return
+        val rowOrder = buildRowOrderForPush(items)
+        if (rowOrder.isEmpty()) return
+        savedRowOrder = rowOrder
+        homeCatalogSettingsSyncService.pushRowOrderToRemote(rowOrder)
     }
 
     private fun moveCatalog(key: String, direction: Int) {
@@ -83,11 +126,19 @@ class CatalogOrderViewModel @Inject constructor(
             val item = removeAt(currentIndex)
             add(newIndex, item)
         }
+        val reorderedItems = reorderItemsByKeys(reordered)
 
         viewModelScope.launch {
             layoutPreferenceDataStore.setHomeCatalogOrderKeys(reordered)
             homeCatalogSettingsSyncService.triggerPush()
+            pushRowOrderFor(reorderedItems)
         }
+    }
+
+    /** Reorders the current UI items to match [orderedKeys] (for optimistic rowOrder push). */
+    private fun reorderItemsByKeys(orderedKeys: List<String>): List<CatalogOrderItem> {
+        val byKey = _uiState.value.items.associateBy { it.key }
+        return orderedKeys.mapNotNull { byKey[it] }
     }
 
     /**
@@ -150,10 +201,12 @@ class CatalogOrderViewModel @Inject constructor(
             }
             add(insertAt, key)
         }
+        val reorderedItems = reorderItemsByKeys(reordered)
 
         viewModelScope.launch {
             layoutPreferenceDataStore.setHomeCatalogOrderKeys(reordered)
             homeCatalogSettingsSyncService.triggerPush()
+            pushRowOrderFor(reorderedItems)
         }
     }
 
@@ -166,7 +219,8 @@ class CatalogOrderViewModel @Inject constructor(
                 layoutPreferenceDataStore.disabledHomeCatalogKeys,
                 layoutPreferenceDataStore.customCatalogTitles,
                 layoutPreferenceDataStore.followAddonsOrder,
-                layoutPreferenceDataStore.recoRowDescriptors
+                layoutPreferenceDataStore.recoRowDescriptors,
+                rowOrderRefresh
             ) { values ->
                 @Suppress("UNCHECKED_CAST")
                 val addons = values[0] as List<Addon>
@@ -182,11 +236,31 @@ class CatalogOrderViewModel @Inject constructor(
                 @Suppress("UNCHECKED_CAST")
                 val recoDescriptors = values[6] as List<RecoRowDescriptor>
 
+                val enabledAddons = addons.enabledAddons()
+                addonsSnapshot = enabledAddons
+
+                // Single source of truth: when a saved rowOrder exists (written by the
+                // dashboard / this UI), derive enabled + order from it so this screen and the
+                // home render identically. Reco/collection entries that aren't represented in
+                // rowOrder fall back to the local items model.
+                val rowOrder = savedRowOrder
+                val (effectiveOrderKeys, effectiveDisabledKeys) = if (!rowOrder.isNullOrEmpty()) {
+                    projectRowOrderToLocalKeys(
+                        addons = enabledAddons,
+                        recoDescriptors = recoDescriptors,
+                        rowOrder = rowOrder,
+                        fallbackOrderKeys = savedOrderKeys,
+                        fallbackDisabledKeys = disabledKeys
+                    )
+                } else {
+                    savedOrderKeys to disabledKeys
+                }
+
                 val items = buildOrderedCatalogItems(
-                    addons = addons.enabledAddons(),
+                    addons = enabledAddons,
                     collections = collections,
-                    savedOrderKeys = savedOrderKeys,
-                    disabledKeys = disabledKeys,
+                    savedOrderKeys = effectiveOrderKeys,
+                    disabledKeys = effectiveDisabledKeys,
                     customTitles = customTitles,
                     followAddonsOrder = followAddons,
                     recoDescriptors = recoDescriptors
@@ -203,6 +277,125 @@ class CatalogOrderViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Projects the unified [rowOrder] (dashboard / home model: {id, kind, type, enabled}) onto
+     * the reorder UI's local key space ({addonId}_{type}_{catalogId} for catalogs, reco_engine_*
+     * for reco). Returns (orderKeys, disabledKeys) so the UI mirrors the home exactly.
+     *
+     * Builtin/addon entries resolve by matching catalogId(entry.id)+type against installed addon
+     * catalogs (same logic the home uses). Reco entries resolve via the recoRowDescriptor keys.
+     * Keys not present in rowOrder keep their fallback (local) order/enabled so nothing vanishes.
+     */
+    private fun projectRowOrderToLocalKeys(
+        addons: List<Addon>,
+        recoDescriptors: List<RecoRowDescriptor>,
+        rowOrder: List<HomeRowOrderEntry>,
+        fallbackOrderKeys: List<String>,
+        fallbackDisabledKeys: Set<String>
+    ): Pair<List<String>, Set<String>> {
+        val orderKeys = mutableListOf<String>()
+        val disabledKeys = fallbackDisabledKeys.toMutableSet()
+        val seen = mutableSetOf<String>()
+        val recoKeySet = recoDescriptors.map { it.key }.toSet()
+
+        fun emit(key: String, enabled: Boolean) {
+            if (seen.add(key)) orderKeys.add(key)
+            if (enabled) disabledKeys.remove(key) else disabledKeys.add(key)
+        }
+
+        rowOrder.forEach { entry ->
+            rowEntryToLocalKeys(addons, recoKeySet, entry).forEach { key ->
+                emit(key, entry.enabled)
+            }
+        }
+
+        // Append any local keys not represented in rowOrder (e.g. collections, newly installed
+        // addon catalogs) in their existing fallback order so they still surface.
+        fallbackOrderKeys.forEach { key ->
+            if (seen.add(key)) orderKeys.add(key)
+        }
+        return orderKeys to disabledKeys
+    }
+
+    /** Resolves a single rowOrder entry to the local catalog/reco key(s) it represents. */
+    private fun rowEntryToLocalKeys(
+        addons: List<Addon>,
+        recoKeySet: Set<String>,
+        entry: HomeRowOrderEntry
+    ): List<String> {
+        val types = when (entry.type.trim().lowercase()) {
+            "movie", "movies" -> listOf("movie")
+            "series", "tv", "show", "shows" -> listOf("series")
+            "both", "", "all" -> listOf("movie", "series")
+            else -> listOf(entry.type.trim().lowercase())
+        }
+        return when (entry.kind.trim().lowercase()) {
+            "reco" -> types.mapNotNull { t ->
+                val rawType = if (t == "series") "series" else "movie"
+                recoKeySet.firstOrNull {
+                    it.startsWith("reco_engine_${rawType}_${entry.id}")
+                }
+            }
+            "builtin", "addon" -> types.mapNotNull { t ->
+                addons.firstNotNullOfOrNull { addon ->
+                    addon.catalogs.firstOrNull { it.id == entry.id && it.apiType == t }
+                        ?.let { homeCatalogKey(addon.id, t, it.id) }
+                }
+            }
+            else -> emptyList()
+        }
+    }
+
+    /**
+     * Rebuilds a unified rowOrder from the current ordered item list so a toggle/reorder in this
+     * UI writes back to the SAME source the home reads. Existing rowOrder entries are transformed
+     * (re-sequenced + enabled updated) preserving their id/kind/type; any catalog item not yet in
+     * rowOrder is appended as a new entry so nothing is lost.
+     */
+    private fun buildRowOrderForPush(orderedItems: List<CatalogOrderItem>): List<HomeRowOrderEntry> {
+        val addons = addonsSnapshot
+        val backendHost = com.nuvio.tv.core.reco.RecoBackend.host
+        val result = mutableListOf<HomeRowOrderEntry>()
+        orderedItems.forEach { item ->
+            val key = item.key
+            val enabled = !item.isDisabled
+            when {
+                key.startsWith("reco_engine_") -> {
+                    // key form: reco_engine_{rawType}_{reason_type}_{index}
+                    val rest = key.removePrefix("reco_engine_")
+                    val rawType = if (rest.startsWith("series_")) "series" else "movie"
+                    val id = rest.removePrefix("${rawType}_").substringBeforeLast("_")
+                    if (id.isNotBlank()) {
+                        result.add(HomeRowOrderEntry(id = id, kind = "reco", type = rawType, enabled = enabled))
+                    }
+                }
+                key.startsWith("collection_") -> {
+                    // Collections are not part of the dashboard rowOrder model; skip.
+                }
+                else -> {
+                    // catalog key: {addonId}_{type}_{catalogId}
+                    val addon = addons.firstOrNull { key.startsWith("${it.id}_") }
+                    val catalog = addon?.let { a ->
+                        val remainder = key.removePrefix("${a.id}_")
+                        a.catalogs.firstOrNull { remainder == "${it.apiType}_${it.id}" }
+                    }
+                    if (addon != null && catalog != null) {
+                        val isBuiltin = addon.baseUrl.contains(backendHost, ignoreCase = true)
+                        result.add(
+                            HomeRowOrderEntry(
+                                id = catalog.id,
+                                kind = if (isBuiltin) "builtin" else "addon",
+                                type = catalog.apiType,
+                                enabled = enabled
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        return result
     }
 
     private fun buildOrderedCatalogItems(

@@ -60,7 +60,9 @@ data class AccountUiState(
     val connectedDevicesAvailable: Boolean = true,
     // F28: device management is primary/admin profile only — mirrors the dashboard rule
     // (Connected Devices = primary/admin only). True only when active profile is primary (id == 1).
-    val isPrimaryProfileActive: Boolean = true,
+    // Default false (fail-safe: hide for secondary) — observeActiveProfile() seeds the real value
+    // synchronously in init, so the primary profile shows it without a flash.
+    val isPrimaryProfileActive: Boolean = false,
     // Dashboard ("Manage / Super Admin") deep-link state shown as a QR on the TV.
     val manageDashboardUrl: String? = null,
     val manageDashboardQrBitmap: Bitmap? = null

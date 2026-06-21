@@ -28,6 +28,8 @@ import javax.inject.Singleton
 private const val TAG = "StartupSyncService"
 private const val FORCE_RESYNC_MIN_INTERVAL_MS = 30_000L
 private const val FULL_STARTUP_PULL_TTL_MS = 6 * 60 * 60 * 1000L
+/** Bump to force a one-time CW local-snapshot purge on next launch of a build. */
+private const val CW_CACHE_PURGE_MIGRATION_VERSION = 1
 
 @Singleton
 class StartupSyncService @Inject constructor(
@@ -317,6 +319,19 @@ class StartupSyncService @Inject constructor(
         profileId: Int,
         includeProfileSettings: Boolean
     ) {
+        // One-time migration: purge stale local continue-watching enrichment snapshots that may
+        // still hold cross-profile-leak poisoned rows (backend was already cleaned server-side).
+        // Runs BEFORE any pull/push below so we never re-upload stale local rows over the cleaned
+        // backend, then the delta sync below re-pulls fresh CW data.
+        if (startupSyncPreferences.shouldRunCwCachePurge(CW_CACHE_PURGE_MIGRATION_VERSION)) {
+            runCatching { cwEnrichmentCache.clearAllProfiles() }
+                .onSuccess {
+                    startupSyncPreferences.markCwCachePurgeApplied(CW_CACHE_PURGE_MIGRATION_VERSION)
+                    Log.i(TAG, "CW cache purge migration v$CW_CACHE_PURGE_MIGRATION_VERSION applied")
+                }
+                .onFailure { Log.e(TAG, "CW cache purge migration failed; will retry next launch", it) }
+        }
+
         profileSyncService.pullFromRemote().getOrElse { throw it }
         Log.d(TAG, "Pulled profiles from remote")
 
