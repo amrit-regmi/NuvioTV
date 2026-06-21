@@ -37,16 +37,12 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import com.nuvio.tv.core.network.IPv4FirstDns
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.core.reco.RecoBackend
 import java.io.File
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Named
 import javax.inject.Singleton
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 private object TraktHttpTrace {
     private val requestCounter = AtomicLong(0L)
@@ -104,29 +100,34 @@ object NetworkModule {
         // and to avoid any eager-init surprises; resolved on the first reco-host request.
         serverHealthNotifier: dagger.Lazy<com.nuvio.tv.core.network.ServerHealthNotifier>,
     ): OkHttpClient {
-        val trustAllManager = object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-        }
-        val sslContext = SSLContext.getInstance("TLS").apply {
-            init(null, arrayOf<TrustManager>(trustAllManager), SecureRandom())
-        }
+        // SECURITY (#15): No trust-all X509TrustManager / custom sslSocketFactory /
+        // permissive hostnameVerifier here. The upstream trust-all (commit 000b4d68,
+        // "Allow for addons with selfsigned ssl - fixes #1157") disabled ALL TLS cert
+        // validation on this SHARED client — the same client that carries the user's
+        // Supabase bearer token to our backend (RecoBackend.host) — making the token
+        // stealable via MITM. Our backend (hamrocinema.regmig.com, Caddy/Let's Encrypt)
+        // and all third-party hosts (TMDB/Trakt/etc.) present valid CA-signed certs, so
+        // the default system-CA validation works. Player/stream clients keep their own
+        // self-signed handling (PlayerPlaybackNetworking, PlayerMediaSourceFactory).
         return OkHttpClient.Builder()
             .dns(IPv4FirstDns())
-            .sslSocketFactory(sslContext.socketFactory, trustAllManager)
-            .hostnameVerifier { _, _ -> true }
             .cache(Cache(File(context.cacheDir, "http_cache"), 50L * 1024 * 1024)) // 50 MB disk cache
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
-                val request = chain.request().newBuilder()
+                val original = chain.request()
+                val builder = original.newBuilder()
                     .header("User-Agent", "Nuvio/$version")
                     .header("Accept-Language", buildAcceptLanguageHeader())
-                    .header("X-Profile-Id", ProfileManager.currentProfileId.toString())
-                    .build()
-                chain.proceed(request)
+                // SECURITY (FIX 2): scope X-Profile-Id to OUR backend only. Sending it to
+                // every host (TMDB/Trakt/skip-intro/ARM/MDBList/etc.) leaks a stable
+                // profile id usable for cross-service correlation. Mirror RecoAuthInterceptor's
+                // host scoping.
+                if (original.url.host.equals(RecoBackend.host, ignoreCase = true)) {
+                    builder.header("X-Profile-Id", ProfileManager.currentProfileId.toString())
+                }
+                chain.proceed(builder.build())
             }
             // F32 (api_bridge.md): attach the Nuvio/Supabase bearer token to every
             // reco-backend (RecoBackend.host) request so private-mode metadata/data
