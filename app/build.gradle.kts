@@ -108,7 +108,9 @@ android {
         buildConfigField("String", "TRAILER_API_URL", "\"${localProperties.getProperty("TRAILER_API_URL", "")}\"")
         buildConfigField("String", "IMDB_RATINGS_API_BASE_URL", "\"${localProperties.getProperty("IMDB_RATINGS_API_BASE_URL", "")}\"")
         buildConfigField("String", "IMDB_TAPFRAME_API_BASE_URL", "\"${localProperties.getProperty("IMDB_TAPFRAME_API_BASE_URL", "")}\"")
-        buildConfigField("String", "TMDB_API_KEY", "\"${localProperties.getProperty("TMDB_API_KEY", "")}\"")
+        // TMDB_API_KEY intentionally baked EMPTY: our /tmdb proxy is DB-served and ignores
+        // api_key (auth is the user Bearer). No real key in the APK — rotatable server-side.
+        buildConfigField("String", "TMDB_API_KEY", "\"\"")
         buildConfigField("String", "TV_LOGIN_WEB_BASE_URL", "\"${localProperties.getProperty("TV_LOGIN_WEB_BASE_URL", "https://app.nuvio.tv/tv-login")}\"")
         buildConfigField("boolean", "DOVI_NATIVE_ENABLED", enableDoviNative.toString())
         buildConfigField("boolean", "DOVI_EXTRACTOR_HOOK_READY", doviExtractorHookReady.toString())
@@ -130,7 +132,8 @@ android {
         buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", "")}\"")
         buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
         buildConfigField("String", "CATALOG_ADDON_BASE_URL", "\"${localProperties.getProperty("CATALOG_ADDON_BASE_URL", "")}\"")
-        buildConfigField("String", "CATALOG_SECRET", "\"${localProperties.getProperty("CATALOG_SECRET", "")}\"")
+        // CATALOG_SECRET removed (F72): catalog-addon authenticates via the Supabase user
+        // Bearer (see NetworkModule). No code usages; not baked into the APK.
         buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
 
         // In-app updater (GitHub Releases)
@@ -204,7 +207,7 @@ android {
             buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${devProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", ""))}\"")
             buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${devProperties.getProperty("PREMIUMIZE_CLIENT_ID", localProperties.getProperty("PREMIUMIZE_CLIENT_ID", ""))}\"")
             buildConfigField("String", "CATALOG_ADDON_BASE_URL", "\"${devProperties.getProperty("CATALOG_ADDON_BASE_URL", localProperties.getProperty("CATALOG_ADDON_BASE_URL", ""))}\"")
-            buildConfigField("String", "CATALOG_SECRET", "\"${devProperties.getProperty("CATALOG_SECRET", localProperties.getProperty("CATALOG_SECRET", ""))}\"")
+            // CATALOG_SECRET removed (F72): catalog-addon uses Supabase user Bearer. Not baked.
             // F32: switch to hamrocinema.regmig.com at deploy — this is the SINGLE source of
             // truth for the reco/taste-engine host. All app code derives from BuildConfig.RECO_API_BASE_URL
             // (directly, or via com.nuvio.tv.core.reco.RecoBackend for host/catalog-addon matching).
