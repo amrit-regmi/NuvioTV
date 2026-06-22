@@ -59,10 +59,21 @@ class TorboxDirectDebridResolver @Inject constructor(
         return sharedTorboxKeyService.getKey()
     }
 
+    /**
+     * Resolves a Torbox stream to a fresh playable CDN link.
+     *
+     * @param forceFresh when true, the stored [StreamClientResolve.torrentId] is treated as
+     *  untrusted and IGNORED — resolution always goes through createTorrent(infoHash) to obtain
+     *  a CURRENT torrent_id. Use this on the stale-recovery path: the hash is the stable
+     *  identifier, but the torrent_id is ephemeral and may have been PRUNED from the account
+     *  (checkcached still returns the hash globally, but the old torrent_id is gone). Reusing a
+     *  pruned torrent_id returns Stale forever; re-creating from the hash gets a live one.
+     */
     suspend fun resolve(
         stream: Stream,
         season: Int?,
-        episode: Int?
+        episode: Int?,
+        forceFresh: Boolean = false
     ): DirectDebridResolveResult {
         if (isRateLimited()) return DirectDebridResolveResult.RateLimited
         val resolve = stream.clientResolve ?: return DirectDebridResolveResult.Error
@@ -70,34 +81,36 @@ class TorboxDirectDebridResolver @Inject constructor(
         val authorization = "Bearer $apiKey"
 
         return try {
-            // Fast path: if torrentId is already known, skip createTorrent entirely
-            val knownTorrentId = resolve.torrentId
+            // Fast path: if torrentId is already known, skip createTorrent entirely.
+            // On forceFresh (stale recovery) the stored torrentId is untrusted (may be pruned),
+            // so we ignore it and always create-from-hash to obtain a current torrent_id.
+            val knownTorrentId = if (forceFresh) {
+                if (resolve.torrentId != null) {
+                    Log.d(TAG, "forceFresh: ignoring stored torrentId=${resolve.torrentId} (may be pruned), creating from hash")
+                }
+                null
+            } else {
+                resolve.torrentId
+            }
 
             val torrentId: Int
             if (knownTorrentId != null) {
                 torrentId = knownTorrentId
                 Log.d(TAG, "Using pre-known torrentId=$torrentId, skipping createTorrent")
             } else {
-                // Slow path: create/find torrent by magnet URI
-                val magnet = resolve.magnetUri?.takeIf { it.isNotBlank() }
-                    ?: buildMagnetUri(resolve)
-                    ?: return DirectDebridResolveResult.Stale
-                Log.d(TAG, "resolve: createTorrent hash=${resolve.infoHash?.take(12)}...")
-                val createStartMs = System.currentTimeMillis()
-                val create = api.createTorrent(
-                    authorization = authorization,
-                    magnet = magnet.toTextPart(),
-                    addOnlyIfCached = "true".toTextPart(),
-                    allowZip = "false".toTextPart()
-                )
-                Log.d(TAG, "resolve: createTorrent done in ${System.currentTimeMillis() - createStartMs}ms code=${create.code()}")
-                torrentId = create.extractTorrentId() ?: return create.toFailureForCreate()
+                // Slow path: create/find torrent by magnet URI (stable identity = infoHash)
+                when (val created = createTorrentFromHash(resolve, authorization)) {
+                    is CreateTorrentResult.Created -> torrentId = created.torrentId
+                    is CreateTorrentResult.Failed -> return created.result
+                }
             }
 
             // Fast path: if fileIdx is known, try requestdl directly without getTorrent.
             // If it fails (stale fileIdx from when stream was tier-0), fall through to slow path.
+            // Skipped on forceFresh — we already have a fresh torrent_id, so go through getTorrent
+            // to (re)select the correct file id for the fresh torrent.
             val knownFileIdx = resolve.fileIdx
-            if (knownTorrentId != null && knownFileIdx != null) {
+            if (!forceFresh && knownTorrentId != null && knownFileIdx != null) {
                 Log.d(TAG, "Using pre-known fileIdx=$knownFileIdx, skipping getTorrent")
                 val link = api.requestDownloadLink(
                     authorization = authorization,
@@ -122,6 +135,71 @@ class TorboxDirectDebridResolver @Inject constructor(
                 Log.d(TAG, "Fast path requestdl failed (${link.code()}), falling back to getTorrent")
             }
 
+            // Run the getTorrent → selectFile → requestdl tail against the current torrent_id.
+            val tail = resolveTail(resolve, apiKey, authorization, torrentId, season, episode)
+            // If the torrent_id we used was the STORED one (not forceFresh) and it turns out to be
+            // dead (pruned), the tail returns Stale — recover by re-creating from the hash ONCE
+            // and retrying the tail against the live torrent_id, instead of surfacing Stale.
+            if (tail is DirectDebridResolveResult.Stale && knownTorrentId != null) {
+                Log.d(TAG, "tail Stale on stored torrentId=$torrentId — re-creating from hash")
+                when (val fresh = createTorrentFromHash(resolve, authorization)) {
+                    is CreateTorrentResult.Created ->
+                        if (fresh.torrentId != torrentId) {
+                            resolveTail(resolve, apiKey, authorization, fresh.torrentId, season, episode)
+                        } else {
+                            tail
+                        }
+                    is CreateTorrentResult.Failed -> fresh.result
+                }
+            } else {
+                tail
+            }
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            Log.w(TAG, "resolve: failed with ${error::class.simpleName}: ${error.message}")
+            DirectDebridResolveResult.Error
+        }
+    }
+
+    /**
+     * Creates (or finds) a torrent on the account from the stream's stable identity (infoHash /
+     * magnet) and returns a CURRENT, account-live torrent_id — or a [CreateTorrentResult.Failed]
+     * carrying the mapped result (NotCached / RateLimited / Error / Stale).
+     */
+    private suspend fun createTorrentFromHash(
+        resolve: StreamClientResolve,
+        authorization: String
+    ): CreateTorrentResult {
+        val magnet = resolve.magnetUri?.takeIf { it.isNotBlank() }
+            ?: buildMagnetUri(resolve)
+            ?: return CreateTorrentResult.Failed(DirectDebridResolveResult.Stale)
+        Log.d(TAG, "resolve: createTorrent hash=${resolve.infoHash?.take(12)}...")
+        val createStartMs = System.currentTimeMillis()
+        val create = api.createTorrent(
+            authorization = authorization,
+            magnet = magnet.toTextPart(),
+            addOnlyIfCached = "true".toTextPart(),
+            allowZip = "false".toTextPart()
+        )
+        Log.d(TAG, "resolve: createTorrent done in ${System.currentTimeMillis() - createStartMs}ms code=${create.code()}")
+        val torrentId = create.extractTorrentId()
+            ?: return CreateTorrentResult.Failed(create.toFailureForCreate())
+        return CreateTorrentResult.Created(torrentId)
+    }
+
+    /**
+     * Given a live torrent_id, fetches the torrent, selects the right file, and requests a fresh
+     * download link. Returns Stale when the torrent_id is dead/unindexed or no file matches.
+     */
+    private suspend fun resolveTail(
+        resolve: StreamClientResolve,
+        apiKey: String,
+        authorization: String,
+        torrentId: Int,
+        season: Int?,
+        episode: Int?
+    ): DirectDebridResolveResult {
+        return try {
             Log.d(TAG, "resolve: getTorrent id=$torrentId")
             val getTorrentStartMs = System.currentTimeMillis()
             val torrent = api.getTorrent(
@@ -210,6 +288,11 @@ class TorboxDirectDebridResolver @Inject constructor(
 
     private fun String.toTextPart(): RequestBody {
         return toRequestBody("text/plain".toMediaType())
+    }
+
+    private sealed interface CreateTorrentResult {
+        data class Created(val torrentId: Int) : CreateTorrentResult
+        data class Failed(val result: DirectDebridResolveResult) : CreateTorrentResult
     }
 }
 

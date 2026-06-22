@@ -42,28 +42,38 @@ class DirectDebridResolver @Inject constructor(
         stream: Stream,
         season: Int?,
         episode: Int?,
-        skipPlayableCheck: Boolean = false
+        skipPlayableCheck: Boolean = false,
+        forceFresh: Boolean = false
     ): DirectDebridResolveResult {
         if (!skipPlayableCheck && !shouldResolveToPlayableStream(stream)) {
             return DirectDebridResolveResult.Stale
         }
+        // forceFresh (stale recovery): never serve a previously-cached result — the prior link/
+        // torrent_id is exactly what went Stale. Resolve from scratch (create-from-hash) and
+        // refresh the cache with the new result.
         val cacheKey = stream.directDebridResolveCacheKey(season, episode)
         if (cacheKey == null) {
-            return resolveUncached(stream, season, episode)
+            return resolveUncached(stream, season, episode, forceFresh)
         }
-        getCachedResult(cacheKey)?.let {
-            return it
+        if (forceFresh) {
+            mutex.withLock { resolvedCache.remove(cacheKey) }
+        } else {
+            getCachedResult(cacheKey)?.let {
+                return it
+            }
         }
 
         var ownsResolve = false
         val newResolve = scope.async(start = CoroutineStart.LAZY) {
-            resolveUncached(stream, season, episode)
+            resolveUncached(stream, season, episode, forceFresh)
         }
         val activeResolve = mutex.withLock {
             getCachedResultLocked(cacheKey)?.let { cached ->
                 return@withLock null to cached
             }
-            val existing = inFlightResolves[cacheKey]
+            // forceFresh must not piggyback on a possibly non-fresh in-flight resolve — it
+            // always owns a brand-new create-from-hash resolve.
+            val existing = if (forceFresh) null else inFlightResolves[cacheKey]
             if (existing != null) {
                 existing to null
             } else {
@@ -172,13 +182,14 @@ class DirectDebridResolver @Inject constructor(
     private suspend fun resolveUncached(
         stream: Stream,
         season: Int?,
-        episode: Int?
+        episode: Int?,
+        forceFresh: Boolean = false
     ): DirectDebridResolveResult {
         if (stream.needsLocalDebridResolve()) {
-            return resolveLocalTorrentStream(stream, season, episode)
+            return resolveLocalTorrentStream(stream, season, episode, forceFresh)
         }
         return when (DebridProviders.byId(stream.clientResolve?.service)?.id) {
-            DebridProviders.TORBOX_ID -> torboxResolver.resolve(stream, season, episode)
+            DebridProviders.TORBOX_ID -> torboxResolver.resolve(stream, season, episode, forceFresh)
             DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(stream, season, episode)
             DebridProviders.REAL_DEBRID_ID -> realDebridResolver.resolve(stream, season, episode)
             else -> DirectDebridResolveResult.Error
@@ -233,7 +244,8 @@ class DirectDebridResolver @Inject constructor(
     private suspend fun resolveLocalTorrentStream(
         stream: Stream,
         season: Int?,
-        episode: Int?
+        episode: Int?,
+        forceFresh: Boolean = false
     ): DirectDebridResolveResult {
         val settings = dataStore.settings.first()
         val account = localTorrentResolveCredential(settings) ?: return DirectDebridResolveResult.MissingApiKey
@@ -278,7 +290,7 @@ class DirectDebridResolver @Inject constructor(
         )
 
         return when (account.provider.id) {
-            DebridProviders.TORBOX_ID -> torboxResolver.resolve(resolveStream, season, episode)
+            DebridProviders.TORBOX_ID -> torboxResolver.resolve(resolveStream, season, episode, forceFresh)
             DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(resolveStream, season, episode)
             else -> DirectDebridResolveResult.Error
         }

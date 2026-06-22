@@ -1150,6 +1150,86 @@ class StreamScreenViewModel @Inject constructor(
      * @param skipQueueCheck When true, skips the re-queue path for non-cached debrid streams.
      *   Use this when calling from the download progress dialog retry loop to avoid re-queuing.
      */
+    /**
+     * Builds a playable [StreamPlaybackInfo] from a successful debrid resolve, clears the
+     * resolving overlay, cancels the streams load, and persists the resolved link for "reuse last
+     * link". Shared by the first-resolve success path and the stale-recovery / failover paths.
+     */
+    private suspend fun buildResolvedPlaybackInfo(
+        stream: Stream,
+        result: DirectDebridResolveResult.Success,
+        basePlaybackInfo: StreamPlaybackInfo?
+    ): StreamPlaybackInfo {
+        if (!_uiState.value.isDirectAutoPlayFlow) {
+            updateUiStateIfChanged {
+                it.copy(showDirectAutoPlayOverlay = false, directAutoPlayMessage = null)
+            }
+        } else {
+            updateUiStateIfChanged { it.copy(directAutoPlayMessage = null) }
+        }
+        cancelStreamsLoad()
+        val base = basePlaybackInfo ?: getStreamForPlayback(stream)
+        val resolved = base.copy(
+            url = result.url,
+            isExternal = false,
+            isTorrent = false,
+            infoHash = null,
+            headers = null,
+            filename = result.filename ?: base.filename,
+            videoSize = result.videoSize ?: base.videoSize
+        )
+        if (!result.url.isNullOrBlank()) {
+            pendingCacheSaveJob = viewModelScope.launch {
+                streamLinkCacheDataStore.save(
+                    contentKey = streamCacheKey,
+                    url = result.url,
+                    streamName = resolved.streamName,
+                    headers = null,
+                    filename = resolved.filename,
+                    videoHash = resolved.videoHash,
+                    videoSize = resolved.videoSize,
+                    bingeGroup = resolved.bingeGroup,
+                    contentLanguage = contentLanguage,
+                    year = year
+                )
+            }
+        }
+        return resolved
+    }
+
+    /**
+     * Stale-recovery / auto-failover: walk the remaining 🟢 Cached streams (excluding [failed])
+     * and try to resolve each FROM ITS HASH (forceFresh). Returns the first one that yields a
+     * playable link, or null when every candidate also fails. Keeps the resolving overlay up the
+     * whole time so the user never sees a flash — they shouldn't have to manually pick the next
+     * cached source when the selected one's torrent_id was pruned.
+     */
+    private suspend fun failoverToNextCachedStream(
+        failed: Stream,
+        basePlaybackInfo: StreamPlaybackInfo?
+    ): StreamPlaybackInfo? {
+        val failedKey = failed.stableKey()
+        val candidates = _uiState.value.allStreams
+            .filter { it.isDirectDebrid() && it.stableKey() != failedKey }
+        if (candidates.isEmpty()) {
+            Log.d(TAG, "failoverToNextCachedStream: no other cached streams to try")
+            return null
+        }
+        Log.d(TAG, "failoverToNextCachedStream: trying ${candidates.size} other cached stream(s)")
+        for (candidate in candidates) {
+            val res = directDebridResolver.resolve(
+                candidate, season, episode, forceFresh = true
+            )
+            if (res is DirectDebridResolveResult.Success) {
+                Log.d(TAG, "failoverToNextCachedStream: succeeded on ${candidate.name}")
+                return buildResolvedPlaybackInfo(candidate, res, basePlaybackInfo = null)
+            }
+            Log.d(TAG, "failoverToNextCachedStream: ${candidate.name} -> ${res::class.simpleName}")
+        }
+        Log.d(TAG, "failoverToNextCachedStream: all candidates failed")
+        return null
+    }
+
     suspend fun resolveStreamForPlayback(stream: Stream, skipQueueCheck: Boolean = false): StreamPlaybackInfo? {
         // Check if stream is already the active download and is now ready
         val currentDownload = debridDownloadManager.activeDownload.value
@@ -1216,47 +1296,7 @@ class StreamScreenViewModel @Inject constructor(
 
         return when (result) {
             is DirectDebridResolveResult.Success -> {
-                if (!_uiState.value.isDirectAutoPlayFlow) {
-                    updateUiStateIfChanged {
-                        it.copy(
-                            showDirectAutoPlayOverlay = false,
-                            directAutoPlayMessage = null
-                        )
-                    }
-                } else {
-                    updateUiStateIfChanged {
-                        it.copy(directAutoPlayMessage = null)
-                    }
-                }
-                cancelStreamsLoad()
-                val base = basePlaybackInfo ?: getStreamForPlayback(stream)
-                val resolved = base.copy(
-                    url = result.url,
-                    isExternal = false,
-                    isTorrent = false,
-                    infoHash = null,
-                    headers = null,
-                    filename = result.filename ?: base.filename,
-                    videoSize = result.videoSize ?: base.videoSize
-                )
-                // Save resolved URL to cache for reuse last link
-                if (!result.url.isNullOrBlank()) {
-                    pendingCacheSaveJob = viewModelScope.launch {
-                        streamLinkCacheDataStore.save(
-                            contentKey = streamCacheKey,
-                            url = result.url,
-                            streamName = resolved.streamName,
-                            headers = null,
-                            filename = resolved.filename,
-                            videoHash = resolved.videoHash,
-                            videoSize = resolved.videoSize,
-                            bingeGroup = resolved.bingeGroup,
-                            contentLanguage = contentLanguage,
-                            year = year
-                        )
-                    }
-                }
-                resolved
+                buildResolvedPlaybackInfo(stream, result, basePlaybackInfo)
             }
             DirectDebridResolveResult.MissingApiKey -> {
                 showDirectDebridPlaybackError(context.getString(R.string.debrid_missing_api_key), refreshStreams = false)
@@ -1293,52 +1333,33 @@ class StreamScreenViewModel @Inject constructor(
                 // Never refresh streams on Stale — loadStreams() reorders the list, which
                 // is jarring. Badges update in-place via streamBadgePresentationJob.
                 if (!skipQueueCheck) {
-                    // A Stale here usually means the previously-served debrid cached_url expired
-                    // (TorBox cached links have a ~2h TTL). The resolver re-derives the link from
-                    // scratch, so try ONE silent re-resolve before flashing any error — only
-                    // surface the message if the link genuinely can't be re-resolved.
-                    Log.d(TAG, "resolveStreamForPlayback: Stale — attempting silent re-resolve")
+                    // A Stale here means the served link is dead. Two causes:
+                    //  1. The debrid cached_url expired (TorBox links have a ~2h TTL), OR
+                    //  2. our account's torrent_id for this hash was PRUNED — the hash is still
+                    //     cached globally (checkcached returns it) but the stored/served
+                    //     torrent_id is gone, so reusing it (or the dead cached_url) always
+                    //     returns Stale.
+                    // Recovery: re-resolve FROM THE HASH (forceFresh) — createTorrent(infoHash)
+                    // to get a CURRENT torrent_id, then a fresh CDN link. Don't reuse the stale
+                    // torrent_id / cached_url. forceFresh also bypasses the resolve cache.
+                    Log.d(TAG, "resolveStreamForPlayback: Stale — re-resolving from hash (forceFresh)")
                     delay(1_200L)
-                    val retry = directDebridResolver.resolve(stream, season, episode, skipPlayableCheck = skipQueueCheck)
+                    val retry = directDebridResolver.resolve(
+                        stream, season, episode,
+                        skipPlayableCheck = skipQueueCheck,
+                        forceFresh = true
+                    )
                     if (retry is DirectDebridResolveResult.Success) {
-                        Log.d(TAG, "resolveStreamForPlayback: silent re-resolve succeeded")
-                        if (!_uiState.value.isDirectAutoPlayFlow) {
-                            updateUiStateIfChanged {
-                                it.copy(showDirectAutoPlayOverlay = false, directAutoPlayMessage = null)
-                            }
-                        } else {
-                            updateUiStateIfChanged { it.copy(directAutoPlayMessage = null) }
-                        }
-                        cancelStreamsLoad()
-                        val base = basePlaybackInfo ?: getStreamForPlayback(stream)
-                        val resolved = base.copy(
-                            url = retry.url,
-                            isExternal = false,
-                            isTorrent = false,
-                            infoHash = null,
-                            headers = null,
-                            filename = retry.filename ?: base.filename,
-                            videoSize = retry.videoSize ?: base.videoSize
-                        )
-                        if (!retry.url.isNullOrBlank()) {
-                            pendingCacheSaveJob = viewModelScope.launch {
-                                streamLinkCacheDataStore.save(
-                                    contentKey = streamCacheKey,
-                                    url = retry.url,
-                                    streamName = resolved.streamName,
-                                    headers = null,
-                                    filename = resolved.filename,
-                                    videoHash = resolved.videoHash,
-                                    videoSize = resolved.videoSize,
-                                    bingeGroup = resolved.bingeGroup,
-                                    contentLanguage = contentLanguage,
-                                    year = year
-                                )
-                            }
-                        }
-                        return resolved
+                        Log.d(TAG, "resolveStreamForPlayback: re-resolve from hash succeeded")
+                        return buildResolvedPlaybackInfo(stream, retry, basePlaybackInfo)
                     }
-                    Log.d(TAG, "resolveStreamForPlayback: silent re-resolve failed result=${retry::class.simpleName}")
+                    Log.d(TAG, "resolveStreamForPlayback: re-resolve from hash failed result=${retry::class.simpleName}")
+                    // Auto-failover: the selected stream's hash genuinely can't produce a link
+                    // (or isn't cached anymore). Quietly move to the next available 🟢 Cached
+                    // stream instead of surfacing an error — overlay stays up during failover.
+                    val failover = failoverToNextCachedStream(stream, basePlaybackInfo)
+                    if (failover != null) return failover
+                    // Only now, after EVERY candidate failed, surface the error.
                     showDirectDebridPlaybackError(context.getString(R.string.debrid_stale_stream), refreshStreams = false)
                 }
                 null
