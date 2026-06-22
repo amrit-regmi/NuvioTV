@@ -8,7 +8,11 @@ import retrofit2.http.Path
 
 interface ParentalGuideApi {
 
-    @GET("titles/{imdbId}/parentsGuide")
+    // Routed through OUR backend proxy (catalog-addon host) to avoid hitting
+    // api.imdbapi.dev directly (which would leak the user's IP + what they view).
+    // The shared OkHttpClient carries RecoAuthInterceptor, so the user Bearer is
+    // auto-attached for /catalog-addon/* requests. Upstream shape is returned verbatim.
+    @GET("parental-guide/{imdbId}.json")
     suspend fun getParentsGuide(
         @Path("imdbId") imdbId: String
     ): Response<ImdbApiParentsGuideResponse>

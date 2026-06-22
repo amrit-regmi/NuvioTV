@@ -284,12 +284,24 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("parentalGuide")
-    fun provideParentalGuideRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
-        Retrofit.Builder()
-            .baseUrl("https://api.imdbapi.dev/")
+    fun provideParentalGuideRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit {
+        // Parental Guide now routes through OUR backend proxy on the catalog-addon host
+        // (`/catalog-addon/parental-guide/{imdb_id}.json`) instead of api.imdbapi.dev
+        // directly — closes the direct leak of the user's IP + what they view. The shared
+        // okHttpClient carries RecoAuthInterceptor, which auto-attaches the user Bearer for
+        // catalog-addon (reco-host) requests. Same base URL the catalog-addon retrofit uses.
+        val rawBaseUrl = BuildConfig.CATALOG_ADDON_BASE_URL.trim()
+        val baseUrl = if (rawBaseUrl.isNotBlank()) {
+            if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
+        } else {
+            "http://localhost/"
+        }
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
+    }
 
     @Provides
     @Singleton
