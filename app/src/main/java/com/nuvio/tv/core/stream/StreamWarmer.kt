@@ -47,9 +47,12 @@ private const val CACHE_TTL_MS = 15 * 60 * 1000L
 private const val RESOLVED_URL_TTL_MS = 60 * 60 * 1000L
 private const val RESOLVED_URL_RESUME_INVALIDATE_MS = 90 * 60 * 1000L
 private const val PROBE_TIMEOUT_MS = 2_000L
-// Background warms probe fewer streams to limit CDN burst on startup.
-// User-initiated stream loading still uses the full streamMaxResults setting.
-private const val BACKGROUND_PROBE_COUNT = 3
+// Background warms probe/resolve only the TOP source to limit CDN burst on startup
+// and — critically — to cap TorBox torrent creation at ONE per title open (was 3,
+// which bloated the shared account to 3,600+ torrents → rate-limit cooldown).
+// User-initiated stream loading still uses the full streamMaxResults setting; the
+// actual playable-link resolve happens on play for the SELECTED source.
+private const val BACKGROUND_PROBE_COUNT = 1
 // Stub/error videos served by Comet and similar proxies for uncached content are tiny (< 1 MB).
 // Real video files are always larger. Any Content-Range total below this threshold is a stub.
 private const val MIN_REAL_VIDEO_BYTES = 1L * 1024 * 1024
@@ -205,9 +208,9 @@ class StreamWarmer @Inject constructor(
                     // with the reordered list + detectedFps once it completes.
                     playerPreWarmer.update(type, videoId, streams, null)
 
-                    // Warm subtitles for top 3 streams — user may pick stream 2 or 3.
-                    // SubtitleWarmer deduplicates by filename+videoSize so redundant calls are free.
-                    streams.take(3).forEach { s ->
+                    // Warm subtitles for the top stream only — consistent with probing/resolving
+                    // only the top-1 source. SubtitleWarmer deduplicates by filename+videoSize.
+                    streams.take(1).forEach { s ->
                         subtitleWarmer.warm(
                             type = type,
                             videoId = videoId,
@@ -355,9 +358,9 @@ class StreamWarmer @Inject constructor(
             // FPS detection runs concurrently and will update the session once ready.
             playerPreWarmer.update(type, videoId, reordered, null, isProbed = true, detectedMimeType = detectedMimeType)
 
-            // If the list reordered, warm subtitles for the new top 3 — cache deduplicates.
+            // If the list reordered, warm subtitles for the new top stream — cache deduplicates.
             if (firstValidIndex > 0) {
-                reordered.take(3).forEach { s ->
+                reordered.take(1).forEach { s ->
                     subtitleWarmer.warm(type, videoId, s.behaviorHints?.filename, s.behaviorHints?.videoSize)
                 }
             }
