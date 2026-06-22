@@ -1718,7 +1718,14 @@ private fun PlayerControlsOverlay(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val hasEpisodeContext = uiState.currentSeason != null && uiState.currentEpisode != null
-                    val hasSubtitleControl = uiState.subtitleTracks.isNotEmpty() || uiState.addonSubtitles.isNotEmpty()
+                    // Always offer the subtitle picker for real video playback: even when no
+                    // built-in text tracks or pre-fetched addon subs are present yet, opening the
+                    // overlay triggers an on-demand addon fetch (e.g. OpenSubtitles, Fast-Startup
+                    // mode). Without this, streams with no embedded subs never surfaced the button.
+                    val hasSubtitleControl = uiState.subtitleTracks.isNotEmpty() ||
+                        uiState.addonSubtitles.isNotEmpty() ||
+                        uiState.isLoadingAddonSubtitles ||
+                        uiState.canFetchAddonSubtitles
                     val hasAudioControl = uiState.audioTracks.isNotEmpty()
                     val showNextEpisodeButton = uiState.nextEpisode?.hasAired == true &&
                         (uiState.postPlayMode as? PostPlayMode.AutoPlay)?.let {

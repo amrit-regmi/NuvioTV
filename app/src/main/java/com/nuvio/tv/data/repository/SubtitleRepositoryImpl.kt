@@ -43,48 +43,58 @@ class SubtitleRepositoryImpl @Inject constructor(
         filename: String?,
         onProgress: ((completed: Int, total: Int, addonName: String?) -> Unit)?
     ): List<Subtitle> = withContext(Dispatchers.IO) {
-        if (filename != null) {
-            subtitleWarmer.awaitWarm(filename, videoSize)?.let { cached ->
+        // The warmer pre-fetches ONLY the first subtitle addon (which, in private mode, is the
+        // built-in catalog-addon prepended to the list). Treat its result as a contribution from
+        // that one addon — NOT a complete answer — so we still query the profile's other subtitle
+        // addons (e.g. OpenSubtitles) and merge. Previously a non-empty warm hit short-circuited
+        // the whole fetch, so only built-in subtitles ever appeared.
+        val warmSubtitles: List<Subtitle> = if (filename != null) {
+            subtitleWarmer.awaitWarm(filename, videoSize)?.also { cached ->
                 Log.d(TAG, "Subtitle warm hit: ${cached.size} subs for filename=$filename")
-                if (cached.isNotEmpty()) return@withContext cached
-                // Empty warm result means warmer's addon found nothing; fall through to full fetch.
-            }
+            }.orEmpty()
+        } else {
+            emptyList()
         }
+        // displayNames already covered by the warm result — skip re-fetching those addons.
+        val warmedAddonNames = warmSubtitles.mapNotNull { it.addonName }.toSet()
 
         val requestType = canonicalSubtitleType(type)
         val startedAtMs = System.currentTimeMillis()
         Log.d(TAG, "Fetching subtitles for type=$requestType, id=$id, videoId=$videoId")
-        
+
         // Get installed addons
         val addons = try {
             addonRepository.getInstalledAddons().first().enabledAddons()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get installed addons", e)
-            return@withContext emptyList()
+            return@withContext warmSubtitles
         }
 
-     
-        
+
+
         // Filter addons that support subtitles resource
         val subtitleAddons = addons.filter { addon ->
             addon.resources.any { resource ->
                 isSubtitleResource(resource.name) && supportsType(resource, requestType, id)
             }
         }
-        
+
         Log.d(TAG, "Found ${subtitleAddons.size} subtitle addons: ${subtitleAddons.map { it.name }}")
 
-        if (subtitleAddons.isEmpty()) {
-            return@withContext emptyList()
+        // Only fetch addons not already covered by the warm result.
+        val addonsToFetch = subtitleAddons.filter { it.displayName !in warmedAddonNames }
+
+        if (addonsToFetch.isEmpty()) {
+            return@withContext warmSubtitles
         }
 
-        val total = subtitleAddons.size
+        val total = addonsToFetch.size
         val completedCount = AtomicInteger(0)
         onProgress?.invoke(0, total, null)
 
         // Fetch subtitles from all addons in parallel
-        val result = coroutineScope {
-            subtitleAddons.map { addon ->
+        val fetched = coroutineScope {
+            addonsToFetch.map { addon ->
                 async {
                     val addonStartMs = System.currentTimeMillis()
                     val subtitles = withTimeoutOrNull(PER_ADDON_TIMEOUT_MS) {
@@ -107,9 +117,11 @@ class SubtitleRepositoryImpl @Inject constructor(
                 }
             }.awaitAll().flatten()
         }
+        // Merge warm (built-in) + freshly fetched (other addons), de-duplicating by id+url.
+        val result = (warmSubtitles + fetched).distinctBy { "${it.id}|${it.url}" }
         Log.d(
             TAG,
-            "Subtitle fetch completed total=${result.size} fromAddons=${subtitleAddons.size} in ${System.currentTimeMillis() - startedAtMs}ms"
+            "Subtitle fetch completed total=${result.size} (warm=${warmSubtitles.size} fetched=${fetched.size}) fromAddons=${addonsToFetch.size} in ${System.currentTimeMillis() - startedAtMs}ms"
         )
         result
     }

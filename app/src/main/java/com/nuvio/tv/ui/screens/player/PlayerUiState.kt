@@ -105,6 +105,9 @@ data class PlayerUiState(
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
     // Addon subtitles
     val addonSubtitles: List<Subtitle> = emptyList(),
+    // True once the player knows the content id/type, so an on-demand addon subtitle fetch is
+    // possible even before any subs have been fetched (drives showing the subtitle picker button).
+    val canFetchAddonSubtitles: Boolean = false,
     val isLoadingAddonSubtitles: Boolean = false,
     val selectedAddonSubtitle: Subtitle? = null,
     val addonSubtitlesError: String? = null,

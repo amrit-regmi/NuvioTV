@@ -1293,6 +1293,52 @@ class StreamScreenViewModel @Inject constructor(
                 // Never refresh streams on Stale — loadStreams() reorders the list, which
                 // is jarring. Badges update in-place via streamBadgePresentationJob.
                 if (!skipQueueCheck) {
+                    // A Stale here usually means the previously-served debrid cached_url expired
+                    // (TorBox cached links have a ~2h TTL). The resolver re-derives the link from
+                    // scratch, so try ONE silent re-resolve before flashing any error — only
+                    // surface the message if the link genuinely can't be re-resolved.
+                    Log.d(TAG, "resolveStreamForPlayback: Stale — attempting silent re-resolve")
+                    delay(1_200L)
+                    val retry = directDebridResolver.resolve(stream, season, episode, skipPlayableCheck = skipQueueCheck)
+                    if (retry is DirectDebridResolveResult.Success) {
+                        Log.d(TAG, "resolveStreamForPlayback: silent re-resolve succeeded")
+                        if (!_uiState.value.isDirectAutoPlayFlow) {
+                            updateUiStateIfChanged {
+                                it.copy(showDirectAutoPlayOverlay = false, directAutoPlayMessage = null)
+                            }
+                        } else {
+                            updateUiStateIfChanged { it.copy(directAutoPlayMessage = null) }
+                        }
+                        cancelStreamsLoad()
+                        val base = basePlaybackInfo ?: getStreamForPlayback(stream)
+                        val resolved = base.copy(
+                            url = retry.url,
+                            isExternal = false,
+                            isTorrent = false,
+                            infoHash = null,
+                            headers = null,
+                            filename = retry.filename ?: base.filename,
+                            videoSize = retry.videoSize ?: base.videoSize
+                        )
+                        if (!retry.url.isNullOrBlank()) {
+                            pendingCacheSaveJob = viewModelScope.launch {
+                                streamLinkCacheDataStore.save(
+                                    contentKey = streamCacheKey,
+                                    url = retry.url,
+                                    streamName = resolved.streamName,
+                                    headers = null,
+                                    filename = resolved.filename,
+                                    videoHash = resolved.videoHash,
+                                    videoSize = resolved.videoSize,
+                                    bingeGroup = resolved.bingeGroup,
+                                    contentLanguage = contentLanguage,
+                                    year = year
+                                )
+                            }
+                        }
+                        return resolved
+                    }
+                    Log.d(TAG, "resolveStreamForPlayback: silent re-resolve failed result=${retry::class.simpleName}")
                     showDirectDebridPlaybackError(context.getString(R.string.debrid_stale_stream), refreshStreams = false)
                 }
                 null

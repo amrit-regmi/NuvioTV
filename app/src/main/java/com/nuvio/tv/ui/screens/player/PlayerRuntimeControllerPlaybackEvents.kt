@@ -808,6 +808,14 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     showControls = true
                 )
             }
+            // On-demand addon subtitle fetch when the picker is opened and nothing was
+            // pre-fetched (Fast-Startup mode, or a prior fetch returned nothing). Without this the
+            // user could open the picker and only ever see built-in tracks. fetchAddonSubtitles()
+            // is a no-op when content id/type is unknown and self-guards the loading flag.
+            val st = _uiState.value
+            if (!st.isLoadingAddonSubtitles && st.addonSubtitles.isEmpty() && buildSubtitleFetchRequest() != null) {
+                fetchAddonSubtitles()
+            }
         }
         PlayerEvent.OnOpenSubtitleStylePanel -> {
             _uiState.update {

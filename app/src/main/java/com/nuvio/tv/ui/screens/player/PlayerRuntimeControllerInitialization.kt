@@ -1530,13 +1530,15 @@ internal fun PlayerRuntimeController.resetAddonSubtitleStateForNewStream() {
     explicitSubtitleSelectionForEngineSwitch = null
     effectiveSubtitleSelectionForEngineSwitch = null
     attachedAddonSubtitleKeys = emptySet()
+    val canFetch = buildSubtitleFetchRequest() != null
     _uiState.update {
         it.copy(
             addonSubtitles = emptyList(),
             selectedAddonSubtitle = null,
             selectedSubtitleTrackIndex = -1,
             isLoadingAddonSubtitles = false,
-            addonSubtitlesError = null
+            addonSubtitlesError = null,
+            canFetchAddonSubtitles = canFetch
         )
     }
 }
