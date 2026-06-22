@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.sync.HomeCatalogSettingsSyncService
 import com.nuvio.tv.core.sync.HomeRowOrderEntry
+import com.nuvio.tv.core.sync.canonicalAddonUrl
 import com.nuvio.tv.core.sync.homeCatalogKey
 import com.nuvio.tv.core.sync.homeLegacyDisabledCatalogKey
 import com.nuvio.tv.data.local.CollectionsDataStore
@@ -339,7 +340,29 @@ class CatalogOrderViewModel @Inject constructor(
                     it.startsWith("reco_engine_${rawType}_${entry.id}")
                 }
             }
-            "builtin", "addon" -> types.mapNotNull { t ->
+            "addon" -> {
+                // Dashboard addon entries are keyed by addon URL (resolved from the
+                // nuvio_addons UUID at pull time) — match the addon by canonical baseUrl
+                // and project ALL its home catalogs of the requested type(s). Fall back to
+                // the legacy per-catalog interpretation when no addon URL matches.
+                val matchedAddon = addons.firstOrNull { addon ->
+                    canonicalAddonUrl(addon.baseUrl) == canonicalAddonUrl(entry.id) ||
+                        addon.id == entry.id
+                }
+                if (matchedAddon != null) {
+                    matchedAddon.catalogs
+                        .filter { it.apiType in types }
+                        .map { homeCatalogKey(matchedAddon.id, it.apiType, it.id) }
+                } else {
+                    types.mapNotNull { t ->
+                        addons.firstNotNullOfOrNull { addon ->
+                            addon.catalogs.firstOrNull { it.id == entry.id && it.apiType == t }
+                                ?.let { homeCatalogKey(addon.id, t, it.id) }
+                        }
+                    }
+                }
+            }
+            "builtin" -> types.mapNotNull { t ->
                 addons.firstNotNullOfOrNull { addon ->
                     addon.catalogs.firstOrNull { it.id == entry.id && it.apiType == t }
                         ?.let { homeCatalogKey(addon.id, t, it.id) }

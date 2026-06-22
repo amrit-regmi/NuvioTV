@@ -27,6 +27,25 @@ internal fun homeCatalogKey(addonId: String, type: String, catalogId: String): S
     return "${addonId}_${type}_${catalogId}"
 }
 
+/**
+ * Canonicalizes an addon URL for matching a dashboard addon-row id (resolved to the
+ * nuvio_addons URL at pull time) against an installed addon's `baseUrl`. Mirrors
+ * AddonSyncService.canonicalizeUrl: trims, drops a trailing `/manifest.json`, strips a
+ * trailing slash, and keeps the query string (Comet/Torrentio configs live in the path/query).
+ */
+internal fun canonicalAddonUrl(url: String): String {
+    val trimmed = url.trim().trimEnd('/')
+    val queryStart = trimmed.indexOf('?')
+    val path = if (queryStart >= 0) trimmed.substring(0, queryStart) else trimmed
+    val query = if (queryStart >= 0) trimmed.substring(queryStart) else ""
+    val cleanPath = if (path.endsWith("/manifest.json", ignoreCase = true)) {
+        path.dropLast("/manifest.json".length).trimEnd('/')
+    } else {
+        path.trimEnd('/')
+    }
+    return cleanPath + query
+}
+
 internal fun homeCollectionKey(collectionId: String): String {
     return "collection_${collectionId}"
 }

@@ -233,6 +233,7 @@ class HomeCatalogSettingsSyncService @Inject constructor(
             val cleaned = parsed
                 ?.filter { it.id.isNotBlank() && it.kind.isNotBlank() }
                 .orEmpty()
+                .let { resolveAddonEntryIds(it, profileId) }
             // Retired `rowOrderByType` (F54) is intentionally ignored — use rowOrder only.
             val useBuiltin = (settings["useBuiltinCatalog"] as? JsonPrimitive)?.booleanOrNull ?: true
             val useReco = (settings["useRecommendations"] as? JsonPrimitive)?.booleanOrNull ?: true
@@ -251,6 +252,63 @@ class HomeCatalogSettingsSyncService @Inject constructor(
             Log.e(TAG, "Failed to pull rowOrder", e)
             null
         }
+    }
+
+    /**
+     * The dashboard writes addon-kind rowOrder entries keyed by the `nuvio_addons` row UUID
+     * (e.g. "56acd3a6-…"), which the TV app — keyed by manifest id / URL — cannot match. Here
+     * we resolve those UUIDs to the addon's canonical URL (from the same `addons` view the app
+     * already syncs) so [HomeViewModel.resolveSavedRowOrderKeys] can match the entry against an
+     * installed addon by baseUrl and emit ALL its home catalogs. Entries that aren't UUIDs (or
+     * don't resolve) are passed through unchanged. Non-addon entries are untouched.
+     */
+    private suspend fun resolveAddonEntryIds(
+        entries: List<HomeRowOrderEntry>,
+        profileId: Int,
+    ): List<HomeRowOrderEntry> {
+        val needsResolution = entries.any {
+            it.kind.trim().equals("addon", ignoreCase = true) && looksLikeUuid(it.id)
+        }
+        if (!needsResolution) return entries
+        val uuidToUrl = runCatching { fetchAddonUuidToUrlMap(profileId) }.getOrElse {
+            Log.w(TAG, "resolveAddonEntryIds: failed to fetch addon UUID→URL map", it)
+            emptyMap()
+        }
+        if (uuidToUrl.isEmpty()) return entries
+        return entries.map { entry ->
+            if (entry.kind.trim().equals("addon", ignoreCase = true)) {
+                val url = uuidToUrl[entry.id.lowercase()]
+                if (url != null) entry.copy(id = url) else entry
+            } else {
+                entry
+            }
+        }
+    }
+
+    private fun looksLikeUuid(value: String): Boolean =
+        Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+            .matches(value.trim())
+
+    /** UUID(lowercased) → addon URL for the addons effective for [profileId]. */
+    private suspend fun fetchAddonUuidToUrlMap(profileId: Int): Map<String, String> {
+        val effectiveUserId = authManager.getEffectiveUserId(fallbackToOwnIdOnFailure = true)
+            ?: return emptyMap()
+        // A non-primary profile that inherits the primary's addons stores them under profile 1.
+        val activeProfile = profileManager.activeProfile
+        val effectiveProfileId =
+            if (activeProfile != null && !activeProfile.isPrimary && activeProfile.usesPrimaryAddons) 1
+            else profileId
+        val remoteAddons = withJwtRefreshRetry {
+            postgrest.from("addons")
+                .select { filter {
+                    eq("user_id", effectiveUserId)
+                    eq("profile_id", effectiveProfileId)
+                } }
+                .decodeList<com.nuvio.tv.data.remote.supabase.SupabaseAddon>()
+        }
+        return remoteAddons
+            .mapNotNull { addon -> addon.id?.lowercase()?.let { it to addon.url } }
+            .toMap()
     }
 
     fun triggerPush() {

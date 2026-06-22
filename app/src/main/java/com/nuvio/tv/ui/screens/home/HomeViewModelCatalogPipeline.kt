@@ -628,20 +628,27 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         val fallbackHeroItemsFromSelectedCatalogs = slotShuffled(
             selectedHeroRows, { true }, currentHeroOrder
         )
-        // When orderedRows is empty (all catalogs disabled), include any
-        // hero-only loaded catalogs as fallback hero sources.
-        val allHeroFallbackRows = if (orderedRows.isNotEmpty()) {
-            orderedRows
-        } else {
-            val nonOrderedRows = catalogSnapshot.keys
-                .filter { it !in orderedKeySet }
-                .mapNotNull { catalogSnapshot[it] }
-            if (hideUnreleased) {
-                val today = LocalDate.now()
-                nonOrderedRows.map { it.filterReleasedItems(today) }
-            } else {
-                nonOrderedRows
+        // Hero fallback must draw ONLY from content the profile actually shows. For a
+        // built-in-off profile (reco-only "Kids", addon-only "Backup") orderedRows can be
+        // empty because its visible rows are reco rows (kept in _recoRows, keyed
+        // "reco_engine_…") or addon rows that haven't loaded yet. We must NEVER fall back to
+        // catalogs that were merely *loaded* but aren't part of this profile's rowOrder —
+        // that leaked unrelated / non-kid-safe titles (e.g. "Attack on Titan") into the hero.
+        // Use the profile's enabled reco rows (in saved rowOrder) as the kid-safe hero source.
+        val recoFallbackRows = _recoRows.value
+            .filter { "reco_engine_${it.rawType}_${it.catalogId}" in orderedKeySet }
+            .let { rows ->
+                if (hideUnreleased) {
+                    val today = LocalDate.now()
+                    rows.map { it.filterReleasedItems(today) }
+                } else rows
             }
+        val allHeroFallbackRows = if (orderedRows.isNotEmpty()) {
+            orderedRows + recoFallbackRows
+        } else {
+            // No ordered addon/builtin rows: hero comes strictly from the profile's reco rows.
+            // If there are none either, the hero stays empty (no unrelated/unsafe fallback).
+            recoFallbackRows
         }
         val fallbackHeroItemsWithArtwork = slotShuffled(
             allHeroFallbackRows, { it.hasHeroArtwork() }, currentHeroOrder

@@ -211,6 +211,7 @@ fun HomeScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         val hasAnyContent = uiState.catalogRows.isNotEmpty() ||
+            uiState.homeRows.isNotEmpty() ||
             uiState.continueWatchingItems.isNotEmpty() ||
             uiState.heroItems.isNotEmpty() ||
             hasCollectionContent

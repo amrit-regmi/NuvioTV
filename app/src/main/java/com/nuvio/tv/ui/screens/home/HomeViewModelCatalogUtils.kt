@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.home
 
+import com.nuvio.tv.core.sync.canonicalAddonUrl
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
@@ -371,11 +372,32 @@ internal fun HomeViewModel.resolveSavedRowOrderKeys(
                 }
             }
             "addon" -> {
-                types.forEach { t ->
-                    addons.firstNotNullOfOrNull { addon ->
-                        addon.catalogs.firstOrNull { it.id == entry.id && it.apiType == t }
-                            ?.let { catalogKey(addon.id, t, it.id) }
-                    }?.let { addKey(it) }
+                // The dashboard writes an ADDON-level entry: `id` is the nuvio_addons
+                // row UUID (resolved to a canonical addon URL at pull time), NOT a catalog
+                // id. Resolve it to the installed addon (by canonical baseUrl, falling back
+                // to the manifest id for older blobs) and emit ALL of that addon's home
+                // catalogs for the requested type(s), in manifest order. Only when no addon
+                // matches do we fall back to the legacy per-catalog interpretation.
+                val matchedAddon = addons.firstOrNull { addon ->
+                    canonicalAddonUrl(addon.baseUrl) == canonicalAddonUrl(entry.id) ||
+                        addon.id == entry.id
+                }
+                if (matchedAddon != null) {
+                    matchedAddon.catalogs
+                        .filter { it.shouldShowOnHome() }
+                        .forEach { catalog ->
+                            if (catalog.apiType in types) {
+                                addKey(catalogKey(matchedAddon.id, catalog.apiType, catalog.id))
+                            }
+                        }
+                } else {
+                    // Legacy fallback: entry.id was a catalog id, not an addon id/url.
+                    types.forEach { t ->
+                        addons.firstNotNullOfOrNull { addon ->
+                            addon.catalogs.firstOrNull { it.id == entry.id && it.apiType == t }
+                                ?.let { catalogKey(addon.id, t, it.id) }
+                        }?.let { addKey(it) }
+                    }
                 }
             }
         }
