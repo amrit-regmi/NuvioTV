@@ -21,6 +21,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
@@ -49,6 +51,29 @@ data class HomeRowOrderEntry(
     val kind: String = "",
     val type: String = "",
     val enabled: Boolean = true,
+)
+
+/**
+ * The authoritative per-profile home-catalog intent pulled from the dashboard blob
+ * (`nuvio_home_catalog_settings.settings_json`). [configPresent] is true when a saved
+ * blob exists at all — even when it contains an empty / all-disabled [rowOrder]. An
+ * empty-but-present config is a VALID explicit state ("show nothing"); the app must NOT
+ * fall back to a default full home when [configPresent] is true. Only a profile with NO
+ * saved blob gets the app's default ordering.
+ *
+ * [useBuiltinCatalog] / [useRecommendations] are the dashboard master toggles. When false,
+ * the app suppresses ALL built-in / recommendation rows wholesale (belt-and-suspenders with
+ * the per-row `enabled` flag, which the dashboard also writes false). Absent → default true.
+ */
+data class HomeRowOrderConfig(
+    val configPresent: Boolean,
+    /** True when the blob explicitly carried a `rowOrder` key (even an empty array). When false
+     *  the blob only carried master flags, so the app keeps its DEFAULT ordering and merely
+     *  applies the flags — it does NOT blank the home. */
+    val hasRowOrderKey: Boolean,
+    val rowOrder: List<HomeRowOrderEntry>,
+    val useBuiltinCatalog: Boolean,
+    val useRecommendations: Boolean,
 )
 
 @Serializable
@@ -178,21 +203,50 @@ class HomeCatalogSettingsSyncService @Inject constructor(
      * platform). The dashboard writes this key; the app reads it to render home rows in the
      * exact saved order. Returns null when no saved rowOrder exists (new user → app default).
      */
-    suspend fun pullRowOrderFromRemote(): List<HomeRowOrderEntry>? = withContext(Dispatchers.IO) {
+    suspend fun pullRowOrderFromRemote(): HomeRowOrderConfig? = withContext(Dispatchers.IO) {
         try {
             val profileId = profileManager.activeProfileId.value
             val blob = fetchRemoteBlob(profileId, HOME_CATALOG_SHARED_SYNC_PLATFORM)
                 ?: HOME_CATALOG_LEGACY_SYNC_PLATFORMS.firstNotNullOfOrNull { fetchRemoteBlob(profileId, it) }
-            val rowOrderJson = blob?.settingsJson?.get("rowOrder") ?: return@withContext null
-            val parsed = runCatching {
-                json.decodeFromJsonElement(
-                    kotlinx.serialization.builtins.ListSerializer(HomeRowOrderEntry.serializer()),
-                    rowOrderJson
-                )
-            }.getOrNull()
-            val cleaned = parsed?.filter { it.id.isNotBlank() && it.kind.isNotBlank() }
-            Log.d(TAG, "Pull rowOrder profile=$profileId entries=${cleaned?.size ?: -1}")
-            cleaned?.takeIf { it.isNotEmpty() }
+            val settings = blob?.settingsJson ?: return@withContext null
+
+            // A saved blob that carries ANY of the dashboard catalog keys is an explicit
+            // config: obey it exactly (including empty / all-disabled). A blob that has NONE
+            // of these keys (e.g. only app-owned `items`) is NOT a catalog config → null so
+            // the app keeps its default ordering.
+            val rowOrderJson = settings["rowOrder"]
+            val hasUseBuiltin = settings.containsKey("useBuiltinCatalog")
+            val hasUseReco = settings.containsKey("useRecommendations")
+            if (rowOrderJson == null && !hasUseBuiltin && !hasUseReco) {
+                Log.d(TAG, "Pull rowOrder profile=$profileId: no catalog config keys present → app default")
+                return@withContext null
+            }
+
+            val parsed = rowOrderJson?.let {
+                runCatching {
+                    json.decodeFromJsonElement(
+                        kotlinx.serialization.builtins.ListSerializer(HomeRowOrderEntry.serializer()),
+                        it
+                    )
+                }.getOrNull()
+            }
+            val cleaned = parsed
+                ?.filter { it.id.isNotBlank() && it.kind.isNotBlank() }
+                .orEmpty()
+            // Retired `rowOrderByType` (F54) is intentionally ignored — use rowOrder only.
+            val useBuiltin = (settings["useBuiltinCatalog"] as? JsonPrimitive)?.booleanOrNull ?: true
+            val useReco = (settings["useRecommendations"] as? JsonPrimitive)?.booleanOrNull ?: true
+            Log.d(
+                TAG,
+                "Pull rowOrder profile=$profileId entries=${cleaned.size} useBuiltin=$useBuiltin useReco=$useReco (configPresent)"
+            )
+            HomeRowOrderConfig(
+                configPresent = true,
+                hasRowOrderKey = rowOrderJson != null,
+                rowOrder = cleaned,
+                useBuiltinCatalog = useBuiltin,
+                useRecommendations = useReco,
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull rowOrder", e)
             null
@@ -248,6 +302,53 @@ class HomeCatalogSettingsSyncService @Inject constructor(
                 Result.failure(e)
             }
         }
+
+    /**
+     * Reads the per-profile "use recommendation provider" master flag
+     * (`settings_json.useRecommendations`) from the same shared blob the home renders from.
+     * Absent → true (recommendations on by default), mirroring the web dashboard.
+     */
+    suspend fun pullUseRecommendations(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val profileId = profileManager.activeProfileId.value
+            val blob = fetchRemoteBlob(profileId, HOME_CATALOG_SHARED_SYNC_PLATFORM)
+                ?: HOME_CATALOG_LEGACY_SYNC_PLATFORMS.firstNotNullOfOrNull { fetchRemoteBlob(profileId, it) }
+            (blob?.settingsJson?.get("useRecommendations") as? JsonPrimitive)?.booleanOrNull ?: true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to pull useRecommendations", e)
+            true
+        }
+    }
+
+    /**
+     * Writes the per-profile "use recommendation provider" master flag into the shared blob,
+     * mirroring the web dashboard. When [enabled] is false the home suppresses ALL reco rows
+     * (honoured in HomeViewModel.rebuildCatalogOrder). Every other blob key (rowOrder,
+     * useBuiltinCatalog, items, …) is preserved by the merge.
+     */
+    suspend fun pushUseRecommendations(enabled: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val profileId = profileManager.activeProfileId.value
+            val existing = fetchRemoteBlob(profileId, HOME_CATALOG_SHARED_SYNC_PLATFORM)?.settingsJson
+            val merged = buildJsonObject {
+                existing?.forEach { (key, value) -> put(key, value) }
+                put("useRecommendations", JsonPrimitive(enabled))
+            }
+            val params = buildJsonObject {
+                put("p_profile_id", profileId)
+                put("p_settings_json", merged)
+                put("p_platform", HOME_CATALOG_SHARED_SYNC_PLATFORM)
+            }
+            withJwtRefreshRetry {
+                postgrest.rpc("sync_push_home_catalog_settings", params)
+            }
+            Log.d(TAG, "Push useRecommendations=$enabled success profile=$profileId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Push useRecommendations failed", e)
+            Result.failure(e)
+        }
+    }
 
     private suspend fun loadLocalPayload(): SyncHomeCatalogPayload {
         val addons = addonRepository.getInstalledAddons().first().enabledAddons()

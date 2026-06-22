@@ -170,20 +170,30 @@ internal fun HomeViewModel.removeTruncatedRowCacheEntry(key: String) {
 }
 
 internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
-    // Unified saved order from the management dashboard (Supabase rowOrder) takes
-    // precedence over the app's own ordering when present. New users (no saved
-    // config) fall through to the default behavior below.
-    val saved = savedRowOrder
-    if (!saved.isNullOrEmpty()) {
-        // The dashboard-saved rowOrder is the AUTHORITATIVE per-profile intent: the home
-        // shows EXACTLY the rows enabled there and nothing else. We must NOT fall through to
-        // the default "render every installed addon catalog" path when [resolved] is empty —
-        // doing so leaks the general/addon catalog into profiles that disabled everything
-        // (e.g. the Kids profile, whose only enabled row is a reco row that may resolve empty
-        // until the reco pipeline has populated recoKeyByReasonAndType, or is gated off).
-        // When a saved config exists, an empty resolution means "show only collections",
-        // never "show all catalogs".
-        val resolved = resolveSavedRowOrderKeys(addons, saved)
+    // Unified saved config from the management dashboard (Supabase settings_json) takes
+    // precedence over the app's own ordering when present. New users (no saved blob at all)
+    // fall through to the default behavior below.
+    val config = savedRowOrderConfig
+    if (config != null && config.hasRowOrderKey) {
+        // The dashboard-saved rowOrder is the AUTHORITATIVE per-profile intent: the home shows
+        // EXACTLY the rows enabled there and nothing else. We must NOT fall through to the
+        // default "render every installed addon catalog" path — even when [resolved] is empty
+        // (all rows disabled, or an empty rowOrder). An empty/all-disabled config is a VALID
+        // explicit "show nothing" state; falling through would leak the general/addon catalog
+        // into profiles that disabled everything (e.g. a Kids profile whose only enabled row is
+        // a reco row not yet populated, or a profile that turned the whole home off).
+        //
+        // Master flags are belt-and-suspenders with per-row `enabled` (the dashboard also
+        // writes those rows disabled): suppress ALL built-in rows when useBuiltinCatalog=false
+        // and ALL reco rows when useRecommendations=false, even rows added after the toggle.
+        val effectiveRows = config.rowOrder.filter { entry ->
+            when (entry.kind.trim().lowercase()) {
+                "builtin" -> config.useBuiltinCatalog
+                "reco" -> config.useRecommendations
+                else -> true
+            }
+        }
+        val resolved = resolveSavedRowOrderKeys(addons, effectiveRows)
         // Collections aren't part of the dashboard rowOrder; append pinned/remaining
         // collections so they still surface (in their saved-or-default relative spot).
         val collectionKeys = collectionsCache.map { "collection_${it.id}" }
@@ -196,8 +206,16 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
         return
     }
 
+    // No explicit rowOrder → app default ordering. When the blob carried ONLY master flags
+    // (e.g. the app's "Use recommendation provider" toggle wrote useRecommendations without a
+    // rowOrder), honour useRecommendations against the default order rather than blanking the
+    // home. (useBuiltinCatalog without a rowOrder is not produced by the app toggle and the
+    // default order can't cleanly separate provided-vs-addon rows, so it's only enforced on the
+    // authoritative rowOrder path above, where the dashboard always writes a rowOrder alongside.)
+    val suppressReco = config?.let { !it.useRecommendations } ?: false
+
     val defaultOrder = buildDefaultCatalogOrder(addons)
-    val recoKeys = recoRowKeys
+    val recoKeys = if (suppressReco) emptyList() else recoRowKeys
     val collectionKeys = collectionsCache.map { "collection_${it.id}" }
     val allAvailable = (defaultOrder + recoKeys + collectionKeys).toSet()
 

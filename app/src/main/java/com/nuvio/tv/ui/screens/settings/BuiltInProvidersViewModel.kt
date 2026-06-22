@@ -27,6 +27,12 @@ import javax.inject.Inject
 
 data class BuiltInProvidersUiState(
     val isCatalogEnabled: Boolean = true,
+    val useRecommendations: Boolean = true,
+    val personalizationAvailable: Boolean = true,
+    // Device-profile (hardware capability) management is per-DEVICE config, not per-profile —
+    // restricted to the primary/admin profile (F28). Seeded with the REAL current value so a
+    // secondary profile never momentarily sees the device-profile section.
+    val isPrimaryProfileActive: Boolean = false,
     val streamEngineEnabled: Boolean = false,
     val useAutoDetectedProfile: Boolean = true,
     val deviceProfile: DeviceProfileDto? = null,
@@ -43,6 +49,9 @@ class BuiltInProvidersViewModel @Inject constructor(
     private val deviceProfileDataStore: DeviceProfileDataStore,
     private val catalogAddonApi: CatalogAddonApi,
     private val deviceCapabilityDetector: DeviceCapabilityDetector,
+    private val homeCatalogSettingsSyncService: com.nuvio.tv.core.sync.HomeCatalogSettingsSyncService,
+    private val featureAvailabilityManager: com.nuvio.tv.core.feature.FeatureAvailabilityManager,
+    private val profileManager: com.nuvio.tv.core.profile.ProfileManager,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -51,10 +60,19 @@ class BuiltInProvidersViewModel @Inject constructor(
         private val CATALOG_HOST = RecoBackend.host
     }
 
-    private val _uiState = MutableStateFlow(BuiltInProvidersUiState())
+    private val _uiState = MutableStateFlow(
+        BuiltInProvidersUiState(isPrimaryProfileActive = profileManager.isPrimaryProfileActive)
+    )
     val uiState: StateFlow<BuiltInProvidersUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            // Keep the device-profile gate in lockstep with the active profile so a profile
+            // switch immediately hides/shows the primary-only device-profile section.
+            profileManager.activeProfileId.collectLatest { id ->
+                _uiState.update { it.copy(isPrimaryProfileActive = id == 1) }
+            }
+        }
         viewModelScope.launch {
             combine(
                 addonRepository.getInstalledAddons(),
@@ -80,6 +98,28 @@ class BuiltInProvidersViewModel @Inject constructor(
         }
         viewModelScope.launch {
             loadDeviceProfile()
+        }
+        viewModelScope.launch {
+            // Per-profile "use recommendation provider" master flag, mirrored from/to the same
+            // Supabase home-catalog blob the web dashboard writes (settings_json.useRecommendations).
+            val useReco = homeCatalogSettingsSyncService.pullUseRecommendations()
+            _uiState.update { it.copy(useRecommendations = useReco) }
+        }
+        viewModelScope.launch {
+            // Hide/lock the toggle when the super admin has made personalization unavailable.
+            featureAvailabilityManager.features.collectLatest { features ->
+                val available = features[com.nuvio.tv.core.feature.FeatureKeys.PERSONALIZATION] ?: true
+                _uiState.update { it.copy(personalizationAvailable = available) }
+            }
+        }
+    }
+
+    fun toggleRecommendations(enabled: Boolean) {
+        // Optimistic UI; persist to the shared blob so the home suppresses/restores reco rows
+        // and the web dashboard reflects the same useRecommendations value.
+        _uiState.update { it.copy(useRecommendations = enabled) }
+        viewModelScope.launch {
+            homeCatalogSettingsSyncService.pushUseRecommendations(enabled)
         }
     }
 

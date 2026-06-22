@@ -129,6 +129,22 @@ internal fun BuiltInProvidersSettingsContent(
                         )
                     }
 
+                    if (uiState.personalizationAvailable) {
+                        item(key = "builtin_recommendations_section") {
+                            BuiltInSectionLabel(text = "Recommendations")
+                        }
+
+                        item(key = "builtin_recommendations_toggle") {
+                            SettingsToggleRow(
+                                title = "Use recommendation provider",
+                                subtitle = "Show personalized recommendation rows on your home screen",
+                                checked = uiState.useRecommendations,
+                                enabled = true,
+                                onToggle = { viewModel.toggleRecommendations(!uiState.useRecommendations) }
+                            )
+                        }
+                    }
+
                     item(key = "builtin_stream_engine_section") {
                         BuiltInSectionLabel(text = "Stream Engine")
                     }
@@ -143,7 +159,11 @@ internal fun BuiltInProvidersSettingsContent(
                         )
                     }
 
-                    if (uiState.streamEngineEnabled) {
+                    // Device Profile = per-DEVICE hardware capabilities (resolution/HDR/codecs/
+                    // audio). This is device management, restricted to the primary/admin profile
+                    // (F28). Secondary profiles never see or edit the device profile, even though
+                    // they may still toggle their own catalog / reco / stream-engine usage above.
+                    if (uiState.streamEngineEnabled && uiState.isPrimaryProfileActive) {
                         item(key = "builtin_device_profile_section") {
                             BuiltInSectionLabel(text = "Device Profile")
                         }

@@ -142,7 +142,12 @@ fun LoadingOverlay(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (showLogo) {
-                        val isLogoFillActive = progress != null
+                        // The logo doubles as a fill-style progress bar once REAL buffering
+                        // progress arrives. While resolving/scraping (no progress yet, or a
+                        // still-zero progress — e.g. the built-in stream provider's prepare
+                        // phase) keep the pulsing-logo animation so the screen never sits as a
+                        // static/plain logo with text. The fill only takes over at progress > 0.
+                        val isLogoFillActive = (progress ?: 0f) > 0f
                         val targetFill = (progress ?: 0f).coerceIn(0f, 1f)
                         val animatedFill by animateFloatAsState(
                             targetValue = targetFill,

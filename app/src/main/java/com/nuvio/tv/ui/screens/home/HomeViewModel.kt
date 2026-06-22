@@ -205,11 +205,13 @@ class HomeViewModel @Inject constructor(
      */
     internal var recoKeyByReasonAndType: Map<String, List<String>> = emptyMap()
     /**
-     * Unified saved home row order pulled from Supabase nuvio_home_catalog_settings
-     * (settings_json.rowOrder = [{id, kind, type, enabled}]). Null = no saved config
-     * (new user) → fall back to the app's default ordering. Empty list is treated as null.
+     * Unified saved home-catalog config pulled from Supabase nuvio_home_catalog_settings
+     * (settings_json.rowOrder + useBuiltinCatalog + useRecommendations). Null = NO saved
+     * config (new user) → fall back to the app's default ordering. A non-null value with an
+     * empty rowOrder is a VALID explicit state ("show nothing") — render an empty home, never
+     * the default. The master flags suppress all built-in / reco rows wholesale when false.
      */
-    internal var savedRowOrder: List<com.nuvio.tv.core.sync.HomeRowOrderEntry>? = null
+    internal var savedRowOrderConfig: com.nuvio.tv.core.sync.HomeRowOrderConfig? = null
     internal var followAddonsOrderEnabled: Boolean = false
     internal var customCatalogTitles: Map<String, String> = emptyMap()
     internal var currentHeroCatalogKeys: List<String> = emptyList()
@@ -578,8 +580,8 @@ class HomeViewModel @Inject constructor(
      */
     internal fun loadSavedRowOrder() {
         viewModelScope.launch {
-            val rowOrder = runCatching { homeCatalogSettingsSyncService.pullRowOrderFromRemote() }.getOrNull()
-            savedRowOrder = rowOrder?.takeIf { it.isNotEmpty() }
+            val config = runCatching { homeCatalogSettingsSyncService.pullRowOrderFromRemote() }.getOrNull()
+            savedRowOrderConfig = config
             rebuildCatalogOrder(addonsCache)
             scheduleUpdateCatalogRows()
         }

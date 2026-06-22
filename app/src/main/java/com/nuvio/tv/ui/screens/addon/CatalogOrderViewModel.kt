@@ -59,6 +59,7 @@ class CatalogOrderViewModel @Inject constructor(
         viewModelScope.launch {
             savedRowOrder = runCatching { homeCatalogSettingsSyncService.pullRowOrderFromRemote() }
                 .getOrNull()
+                ?.rowOrder
                 ?.takeIf { it.isNotEmpty() }
             rowOrderRefresh.update { it + 1 }
         }
