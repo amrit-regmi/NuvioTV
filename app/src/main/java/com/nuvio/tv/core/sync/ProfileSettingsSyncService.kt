@@ -282,10 +282,27 @@ class ProfileSettingsSyncService @Inject constructor(
             }
         }
 
+        // The push RPC REPLACES settings_json wholesale. The web dashboard writes top-level
+        // keys into this same blob (e.g. streamProvider / streamOwnTorboxKey — the Stream
+        // Providers selection it reads back) that the app does NOT own. Preserve every existing
+        // top-level key except the two we own ("version"/"features") so an app-side settings
+        // push never clobbers the web-set stream-provider choice (Bug #2 round-trip).
+        val existing = runCatching { fetchRemoteSettingsBlob(profileId) }.getOrNull()
         return buildJsonObject {
+            existing?.forEach { (key, value) ->
+                if (key != "version" && key != "features") put(key, value)
+            }
             put("version", 1)
             put("features", features)
         }
+    }
+
+    private suspend fun fetchRemoteSettingsBlob(profileId: Int): JsonObject? {
+        val params = buildJsonObject { put("p_profile_id", profileId) }
+        val response = withJwtRefreshRetry {
+            postgrest.rpc("sync_pull_profile_settings_blob", params)
+        }
+        return response.decodeList<SupabaseProfileSettingsBlob>().firstOrNull()?.settingsJson
     }
 
     private suspend fun importSettingsBlob(profileId: Int, featuresJson: JsonObject) {

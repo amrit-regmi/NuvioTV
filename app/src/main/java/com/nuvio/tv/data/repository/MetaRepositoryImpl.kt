@@ -12,6 +12,8 @@ import com.nuvio.tv.domain.model.AddonResource
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.MetaRepository
+import com.nuvio.tv.core.reco.RecoBackend
+import com.nuvio.tv.data.local.DeviceProfileDataStore
 import com.nuvio.tv.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -31,11 +33,41 @@ import javax.inject.Singleton
 class MetaRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val api: AddonApi,
-    private val addonRepository: AddonRepository
+    private val addonRepository: AddonRepository,
+    private val deviceProfileDataStore: DeviceProfileDataStore
 ) : MetaRepository {
     companion object {
         private const val TAG = "MetaRepository"
+        // F32: built-in catalog-addon host derives from RECO_API_BASE_URL via RecoBackend.
+        private val CATALOG_HOST = RecoBackend.host
     }
+
+    /**
+     * Bug #1 — when the active profile has "use built-in catalog provider" OFF, the built-in
+     * catalog-addon must NOT serve meta/catalog/search. We drop it from the meta candidate
+     * list here so detail pages use only the profile's ADDON meta providers (e.g. Cinemeta).
+     * If the profile has no addon meta provider, the candidate list becomes empty and the meta
+     * lookup fails with a clear "no metadata provider" error instead of silently falling back
+     * to the built-in. When the flag is ON the list is returned unchanged.
+     */
+    private suspend fun gateBuiltinMeta(addons: List<Addon>): List<Addon> {
+        val builtinEnabled = runCatching { deviceProfileDataStore.getBuiltinCatalogEnabled() }
+            .getOrDefault(true)
+        if (builtinEnabled) return addons
+        val filtered = addons.filterNot { it.isBuiltinCatalogAddon() }
+        if (filtered.size != addons.size) {
+            Log.d(TAG, "useBuiltinCatalog=OFF → excluded built-in catalog-addon from meta candidates")
+        }
+        return filtered
+    }
+
+    /** Identifies the backend's built-in catalog-addon by its host (matches BuiltInProvidersViewModel). */
+    private fun Addon.isBuiltinCatalogAddon(): Boolean = isBuiltinCatalogBaseUrl(baseUrl)
+
+    private fun isBuiltinCatalogBaseUrl(url: String): Boolean =
+        url.contains(CATALOG_HOST, ignoreCase = true) ||
+            (com.nuvio.tv.BuildConfig.CATALOG_ADDON_BASE_URL.isNotBlank() &&
+                url.contains(com.nuvio.tv.BuildConfig.CATALOG_ADDON_BASE_URL.trim(), ignoreCase = true))
 
     private enum class MetaFailureKind {
         MISSING,
@@ -67,6 +99,15 @@ class MetaRepositoryImpl @Inject constructor(
         type: String,
         id: String
     ): Flow<NetworkResult<Meta>> = flow {
+        // Bug #1 — never resolve meta from the built-in catalog-addon URL when the active
+        // profile has the built-in catalog OFF, even via this direct-by-URL fallback path.
+        val builtinEnabled = runCatching { deviceProfileDataStore.getBuiltinCatalogEnabled() }
+            .getOrDefault(true)
+        if (!builtinEnabled && isBuiltinCatalogBaseUrl(addonBaseUrl)) {
+            emit(NetworkResult.Error(context.getString(R.string.error_meta_no_supported_addon, type.trim())))
+            return@flow
+        }
+
         val cacheKey = addonMetaCacheKey(addonBaseUrl, type, id)
         metaCache[cacheKey]?.let { cached ->
             emit(NetworkResult.Success(cached))
@@ -114,7 +155,12 @@ class MetaRepositoryImpl @Inject constructor(
 
         emit(NetworkResult.Loading)
 
-        val addons = addonRepository.getInstalledAddons().first().enabledAddons()
+        val addons = gateBuiltinMeta(addonRepository.getInstalledAddons().first().enabledAddons())
+        if (addons.isEmpty()) {
+            // Bug #1 — built-in catalog OFF and no addon meta provider → fail clearly.
+            emit(NetworkResult.Error(context.getString(R.string.error_meta_no_supported_addon, type.trim())))
+            return@flow
+        }
 
         val requestedType = type.trim()
         val inferredType = inferCanonicalType(requestedType, id)
@@ -288,7 +334,7 @@ class MetaRepositoryImpl @Inject constructor(
 
         emit(NetworkResult.Loading)
 
-        val addons = addonRepository.getInstalledAddons().first().enabledAddons()
+        val addons = gateBuiltinMeta(addonRepository.getInstalledAddons().first().enabledAddons())
         val requestedType = type.trim()
         val inferredType = inferCanonicalType(requestedType, id)
         val candidate = selectPrimaryMetaCandidate(

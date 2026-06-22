@@ -116,6 +116,18 @@ class BuiltInProvidersViewModel @Inject constructor(
             // even when the built-in catalog addon isn't installed/matched locally yet.
             val useBuiltin = homeCatalogSettingsSyncService.pullUseBuiltinCatalog()
             _uiState.update { it.copy(isCatalogEnabled = useBuiltin) }
+            // Bug #1 — mirror locally so MetaRepository can gate built-in meta synchronously.
+            deviceProfileDataStore.setBuiltinCatalogEnabled(useBuiltin)
+        }
+        viewModelScope.launch {
+            // Bug #2 — pull the web-set stream-provider selection (nuvio_profile_settings
+            // .streamProvider) and reconcile the app-local stream-engine flag so values set on
+            // /configure reach the app. Null = pull failed → keep the local value untouched.
+            val webStream = homeCatalogSettingsSyncService.pullStreamProviderEnabled()
+            if (webStream != null) {
+                deviceProfileDataStore.setStreamEngineEnabled(webStream)
+                _uiState.update { it.copy(streamEngineEnabled = webStream) }
+            }
         }
         viewModelScope.launch {
             // Hide/lock the toggle when the super admin has made personalization unavailable.
@@ -140,6 +152,8 @@ class BuiltInProvidersViewModel @Inject constructor(
         // when no local catalog addon matched the reco host and the launch returned early).
         _uiState.update { it.copy(isCatalogEnabled = enabled) }
         viewModelScope.launch {
+            // Bug #1 — mirror locally first so the meta gate flips immediately for this profile.
+            deviceProfileDataStore.setBuiltinCatalogEnabled(enabled)
             // Persist to the shared blob (settings_json.useBuiltinCatalog) so the home suppresses/
             // restores built-in rows AND the web /configure reflects the same value.
             homeCatalogSettingsSyncService.pushUseBuiltinCatalog(enabled)
@@ -158,8 +172,13 @@ class BuiltInProvidersViewModel @Inject constructor(
     }
 
     fun toggleStreamEngine(enabled: Boolean) {
+        // Optimistic UI so the switch responds immediately.
+        _uiState.update { it.copy(streamEngineEnabled = enabled) }
         viewModelScope.launch {
             deviceProfileDataStore.setStreamEngineEnabled(enabled)
+            // Bug #2 — also mirror to the shared per-profile store the web /configure Stream
+            // Providers section reads (nuvio_profile_settings.streamProvider), so app↔web agree.
+            homeCatalogSettingsSyncService.pushStreamProviderEnabled(enabled)
         }
     }
 

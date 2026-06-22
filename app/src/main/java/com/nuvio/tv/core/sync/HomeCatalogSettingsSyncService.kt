@@ -23,6 +23,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
@@ -107,7 +108,8 @@ class HomeCatalogSettingsSyncService @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val profileManager: ProfileManager,
     private val addonRepository: AddonRepository,
-    private val collectionsDataStore: CollectionsDataStore
+    private val collectionsDataStore: CollectionsDataStore,
+    private val deviceProfileDataStore: com.nuvio.tv.data.local.DeviceProfileDataStore
 ) {
     private val postgrest
         get() = supabaseProvider.postgrest
@@ -237,6 +239,9 @@ class HomeCatalogSettingsSyncService @Inject constructor(
             // Retired `rowOrderByType` (F54) is intentionally ignored — use rowOrder only.
             val useBuiltin = (settings["useBuiltinCatalog"] as? JsonPrimitive)?.booleanOrNull ?: true
             val useReco = (settings["useRecommendations"] as? JsonPrimitive)?.booleanOrNull ?: true
+            // Bug #1 — keep the local mirror fresh on every home load so MetaRepository's
+            // built-in meta gate is correct even when the user never opens the settings screen.
+            runCatching { deviceProfileDataStore.setBuiltinCatalogEnabled(useBuiltin) }
             Log.d(
                 TAG,
                 "Pull rowOrder profile=$profileId entries=${cleaned.size} useBuiltin=$useBuiltin useReco=$useReco (configPresent)"
@@ -371,7 +376,10 @@ class HomeCatalogSettingsSyncService @Inject constructor(
             val profileId = profileManager.activeProfileId.value
             val blob = fetchRemoteBlob(profileId, HOME_CATALOG_SHARED_SYNC_PLATFORM)
                 ?: HOME_CATALOG_LEGACY_SYNC_PLATFORMS.firstNotNullOfOrNull { fetchRemoteBlob(profileId, it) }
-            (blob?.settingsJson?.get("useBuiltinCatalog") as? JsonPrimitive)?.booleanOrNull ?: true
+            val useBuiltin = (blob?.settingsJson?.get("useBuiltinCatalog") as? JsonPrimitive)?.booleanOrNull ?: true
+            // Bug #1 — keep the local mirror in sync for the MetaRepository gate.
+            runCatching { deviceProfileDataStore.setBuiltinCatalogEnabled(useBuiltin) }
+            useBuiltin
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull useBuiltinCatalog", e)
             true
@@ -401,6 +409,8 @@ class HomeCatalogSettingsSyncService @Inject constructor(
             withJwtRefreshRetry {
                 postgrest.rpc("sync_push_home_catalog_settings", params)
             }
+            // Bug #1 — keep the local mirror in sync for the MetaRepository gate.
+            runCatching { deviceProfileDataStore.setBuiltinCatalogEnabled(enabled) }
             Log.d(TAG, "Push useBuiltinCatalog=$enabled success profile=$profileId")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -454,6 +464,86 @@ class HomeCatalogSettingsSyncService @Inject constructor(
             Log.e(TAG, "Push useRecommendations failed", e)
             Result.failure(e)
         }
+    }
+
+    // ── Bug #2 — Stream-provider toggle ↔ web /configure ──────────────────────────────
+    // The web dashboard's Stream Providers section reads the per-profile source selector
+    // from nuvio_profile_settings.settings_json.streamProvider ("builtin" | "own" | "addons"),
+    // NOT the app-local DeviceProfileDataStore stream-engine flag. We bridge the app's
+    // boolean "use stream provider" toggle to/from that same field so the two agree:
+    //   toggle ON  → streamProvider "builtin" (use built-in TorBox) — preserves "own" if set.
+    //   toggle OFF → streamProvider "addons"  (use installed addons instead of built-in).
+    // Reads map "addons" → false, "builtin"/"own" → true. All other settings keys
+    // (features blob, debrid/theme settings, the own-TorBox key) are preserved by the merge.
+
+    /**
+     * Reads the active profile's stream-provider selection from nuvio_profile_settings and maps
+     * it to the app's boolean "use stream provider" toggle. Absent → true (built-in on by
+     * default, matching the app + web defaults). Returns null on error so callers keep the
+     * current local value rather than flipping it.
+     */
+    suspend fun pullStreamProviderEnabled(): Boolean? = withContext(Dispatchers.IO) {
+        try {
+            val profileId = profileManager.activeProfileId.value
+            val blob = fetchProfileSettingsBlob(profileId) ?: return@withContext true
+            val source = (blob["streamProvider"] as? JsonPrimitive)?.contentOrNull?.lowercase()
+            when (source) {
+                "addons" -> false
+                "builtin", "own" -> true
+                else -> true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to pull streamProvider", e)
+            null
+        }
+    }
+
+    /**
+     * Writes the app's "use stream provider" toggle into nuvio_profile_settings.streamProvider so
+     * the web /configure Stream Providers section reflects it. Preserves an existing "own"
+     * selection when [enabled] (don't downgrade own→builtin) and preserves every other settings
+     * key via merge.
+     */
+    suspend fun pushStreamProviderEnabled(enabled: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val profileId = profileManager.activeProfileId.value
+            val existing = fetchProfileSettingsBlob(profileId)
+            val currentSource =
+                (existing?.get("streamProvider") as? JsonPrimitive)?.contentOrNull?.lowercase()
+            val newSource = if (enabled) {
+                if (currentSource == "own") "own" else "builtin"
+            } else {
+                "addons"
+            }
+            val merged = buildJsonObject {
+                existing?.forEach { (key, value) -> put(key, value) }
+                put("streamProvider", JsonPrimitive(newSource))
+            }
+            val params = buildJsonObject {
+                put("p_profile_id", profileId)
+                put("p_settings_json", merged)
+            }
+            withJwtRefreshRetry {
+                postgrest.rpc("sync_push_profile_settings_blob", params)
+            }
+            Log.d(TAG, "Push streamProvider=$newSource (enabled=$enabled) success profile=$profileId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Push streamProvider failed", e)
+            Result.failure(e)
+        }
+    }
+
+    /** Reads the raw nuvio_profile_settings settings_json blob for [profileId] (or null). */
+    private suspend fun fetchProfileSettingsBlob(profileId: Int): JsonObject? {
+        val params = buildJsonObject { put("p_profile_id", profileId) }
+        val response = withJwtRefreshRetry {
+            postgrest.rpc("sync_pull_profile_settings_blob", params)
+        }
+        return response
+            .decodeList<com.nuvio.tv.data.remote.supabase.SupabaseProfileSettingsBlob>()
+            .firstOrNull()
+            ?.settingsJson
     }
 
     private suspend fun loadLocalPayload(): SyncHomeCatalogPayload {

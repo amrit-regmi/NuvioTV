@@ -35,6 +35,12 @@ class DeviceProfileDataStore @Inject constructor(
     private val profileIdKey = stringPreferencesKey("device_profile_id")
     private val userOverriddenKey = booleanPreferencesKey("device_profile_user_overridden")
     private val streamEngineEnabledKey = booleanPreferencesKey("stream_engine_enabled")
+    // Bug #1 — fast, per-profile LOCAL mirror of the dashboard `useBuiltinCatalog`
+    // master flag (authoritative copy lives in the Supabase home-catalog blob). The
+    // meta repository reads this synchronously to gate the built-in catalog-addon out
+    // of meta/catalog/search when the active profile has the built-in catalog OFF, so
+    // detail pages don't silently fall back to built-in meta. Default true.
+    private val useBuiltinCatalogKey = booleanPreferencesKey("use_builtin_catalog")
     private val capabilitiesHashKey = stringPreferencesKey("device_capabilities_hash")
     private val downloadSpeedMbpsKey = floatPreferencesKey("download_speed_mbps")
     private val downloadSpeedMeasuredAtKey = longPreferencesKey("download_speed_measured_at")
@@ -58,6 +64,26 @@ class DeviceProfileDataStore @Inject constructor(
 
     val isStreamEngineEnabled: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs -> prefs[streamEngineEnabledKey] ?: true }
+    }
+
+    /** Per-profile mirror of the dashboard `useBuiltinCatalog` master flag. Default true. */
+    val isBuiltinCatalogEnabled: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
+        factory.get(pid, FEATURE).data.map { prefs -> prefs[useBuiltinCatalogKey] ?: true }
+    }
+
+    /**
+     * Synchronous-friendly read of the active profile's `useBuiltinCatalog` mirror for the
+     * meta repository's gate. Suspends only to read the current DataStore snapshot. Default
+     * true (built-in catalog on) so a fresh profile / un-synced state never blanks meta.
+     */
+    suspend fun getBuiltinCatalogEnabled(): Boolean =
+        factory.get(profileManager.activeProfileId.value, FEATURE).data.first()[useBuiltinCatalogKey] ?: true
+
+    /** Writes the local `useBuiltinCatalog` mirror after a pull/push so the meta gate is fast. */
+    suspend fun setBuiltinCatalogEnabled(enabled: Boolean) {
+        factory.get(profileManager.activeProfileId.value, FEATURE).edit { prefs ->
+            prefs[useBuiltinCatalogKey] = enabled
+        }
     }
 
     suspend fun setProfileId(profileId: String, userOverride: Boolean = true) {
