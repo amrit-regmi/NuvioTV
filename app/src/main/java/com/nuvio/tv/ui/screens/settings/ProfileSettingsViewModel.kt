@@ -8,11 +8,8 @@ import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.domain.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -38,9 +35,9 @@ class ProfileSettingsViewModel @Inject constructor(
     // persistently) exposes the device/profile management UI under a secondary profile. Mirrors
     // AccountViewModel.observeActiveProfile, which deliberately seeds from the real value so a
     // secondary profile NEVER sees the primary-only sections. (FIX: device UI primary-only.)
-    val isPrimaryProfileActive: StateFlow<Boolean> = profileManager.activeProfileId
-        .map { it == 1 }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, profileManager.isPrimaryProfileActive)
+    // Authoritative REAL-identity primary check (active profile's own isPrimary), seeded false
+    // (fail-safe). A secondary profile — even one using primary addons — never reads as primary.
+    val isPrimaryProfileActive: StateFlow<Boolean> = profileManager.isPrimaryProfileActiveFlow
 
     val canAddProfile: Boolean
         get() = profileManager.canCreateProfile

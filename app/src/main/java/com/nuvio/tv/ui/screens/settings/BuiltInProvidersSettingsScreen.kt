@@ -129,7 +129,12 @@ internal fun BuiltInProvidersSettingsContent(
                         )
                     }
 
-                    if (uiState.personalizationAvailable) {
+                    // Show the recommendations toggle when personalization is available. The
+                    // primary/owner profile ALWAYS sees its own toggle: per-user/system
+                    // personalization availability is a restriction meant for sub-profiles, not the
+                    // account owner, so an empty/stale feature map (fail-open) or a sub-user lock
+                    // must never hide the owner's own master switch.
+                    if (uiState.personalizationAvailable || uiState.isPrimaryProfileActive) {
                         item(key = "builtin_recommendations_section") {
                             BuiltInSectionLabel(text = "Recommendations")
                         }

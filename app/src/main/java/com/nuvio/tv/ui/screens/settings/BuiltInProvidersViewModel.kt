@@ -60,17 +60,25 @@ class BuiltInProvidersViewModel @Inject constructor(
         private val CATALOG_HOST = RecoBackend.host
     }
 
-    private val _uiState = MutableStateFlow(
-        BuiltInProvidersUiState(isPrimaryProfileActive = profileManager.isPrimaryProfileActive)
-    )
+    // Fail-safe seed (false): never momentarily expose the primary-only Device Profile section to a
+    // secondary profile before the real identity resolves. (Previously seeded from
+    // profileManager.isPrimaryProfileActive, whose backing StateFlow seeds 1 → a secondary profile
+    // could read as primary until the datastore delivered the real active id.)
+    private val _uiState = MutableStateFlow(BuiltInProvidersUiState(isPrimaryProfileActive = false))
     val uiState: StateFlow<BuiltInProvidersUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
-            // Keep the device-profile gate in lockstep with the active profile so a profile
-            // switch immediately hides/shows the primary-only device-profile section.
-            profileManager.activeProfileId.collectLatest { id ->
-                _uiState.update { it.copy(isPrimaryProfileActive = id == 1) }
+            // Gate on the REAL profile identity (active profile's own isPrimary), NOT an
+            // addon-effective id: a secondary profile that uses primary addons is remapped to id 1
+            // for addon storage only and must still hide the per-DEVICE Device Profile section.
+            profileManager.isPrimaryProfileActiveFlow.collectLatest { isPrimary ->
+                android.util.Log.d(
+                    "BuiltInProvidersVM",
+                    "device-profile gate: activeId=${profileManager.activeProfileId.value} " +
+                        "activeProfile.isPrimary=${profileManager.activeProfile?.isPrimary} resolved=$isPrimary"
+                )
+                _uiState.update { it.copy(isPrimaryProfileActive = isPrimary) }
             }
         }
         viewModelScope.launch {

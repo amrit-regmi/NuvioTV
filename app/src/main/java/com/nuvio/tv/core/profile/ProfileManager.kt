@@ -12,6 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.io.File
@@ -56,6 +57,26 @@ class ProfileManager @Inject constructor(
 
     val isPrimaryProfileActive: Boolean
         get() = activeProfileId.value == 1
+
+    /**
+     * Authoritative per-profile "is the active profile the primary/owner?" flow, resolved from the
+     * REAL profile identity (the active profile's own [UserProfile.isPrimary], i.e. real id == 1),
+     * NOT any addon-effective id (a secondary profile that `usesPrimaryAddons` is remapped to id 1
+     * for addon storage only — it must still read as a SECONDARY profile here).
+     *
+     * Seeds `false` (fail-safe): until the datastore delivers the real active id + profile list, a
+     * secondary profile must NOT momentarily look primary and expose primary-only device/account UI.
+     * Every primary-only gate (Device Profile, Account device management, Profiles management)
+     * should observe THIS flow so the definition stays consistent across screens.
+     */
+    val isPrimaryProfileActiveFlow: StateFlow<Boolean> = combine(
+        activeProfileId,
+        profiles
+    ) { activeId, list ->
+        // Real identity: the active profile's own isPrimary. Fall back to id==1 only if the active
+        // profile isn't in the list yet (transient), still using the REAL active id (never effective).
+        (list.firstOrNull { it.id == activeId }?.isPrimary) ?: (activeId == 1)
+    }.stateIn(scope, SharingStarted.Eagerly, false)
 
     val canCreateProfile: Boolean
         get() = profiles.value.size < MAX_PROFILES
