@@ -304,6 +304,54 @@ class HomeCatalogSettingsSyncService @Inject constructor(
         }
 
     /**
+     * Reads the per-profile "use built-in catalog" master flag
+     * (`settings_json.useBuiltinCatalog`) from the same shared blob the home + web dashboard
+     * (`/configure`) render from. Absent → true (built-in catalog on by default).
+     */
+    suspend fun pullUseBuiltinCatalog(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val profileId = profileManager.activeProfileId.value
+            val blob = fetchRemoteBlob(profileId, HOME_CATALOG_SHARED_SYNC_PLATFORM)
+                ?: HOME_CATALOG_LEGACY_SYNC_PLATFORMS.firstNotNullOfOrNull { fetchRemoteBlob(profileId, it) }
+            (blob?.settingsJson?.get("useBuiltinCatalog") as? JsonPrimitive)?.booleanOrNull ?: true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to pull useBuiltinCatalog", e)
+            true
+        }
+    }
+
+    /**
+     * Writes the per-profile "use built-in catalog" master flag into the shared blob, mirroring
+     * the web dashboard (`/configure`). When [enabled] is false the home suppresses ALL built-in
+     * catalog rows wholesale (honoured in HomeViewModel.rebuildCatalogOrder via
+     * HomeRowOrderConfig.useBuiltinCatalog). Every other blob key (rowOrder, useRecommendations,
+     * items, …) is preserved by the merge.
+     */
+    suspend fun pushUseBuiltinCatalog(enabled: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val profileId = profileManager.activeProfileId.value
+            val existing = fetchRemoteBlob(profileId, HOME_CATALOG_SHARED_SYNC_PLATFORM)?.settingsJson
+            val merged = buildJsonObject {
+                existing?.forEach { (key, value) -> put(key, value) }
+                put("useBuiltinCatalog", JsonPrimitive(enabled))
+            }
+            val params = buildJsonObject {
+                put("p_profile_id", profileId)
+                put("p_settings_json", merged)
+                put("p_platform", HOME_CATALOG_SHARED_SYNC_PLATFORM)
+            }
+            withJwtRefreshRetry {
+                postgrest.rpc("sync_push_home_catalog_settings", params)
+            }
+            Log.d(TAG, "Push useBuiltinCatalog=$enabled success profile=$profileId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Push useBuiltinCatalog failed", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Reads the per-profile "use recommendation provider" master flag
      * (`settings_json.useRecommendations`) from the same shared blob the home renders from.
      * Absent → true (recommendations on by default), mirroring the web dashboard.

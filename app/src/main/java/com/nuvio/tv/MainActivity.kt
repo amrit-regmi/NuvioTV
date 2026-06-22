@@ -249,6 +249,11 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var appOnboardingDataStore: AppOnboardingDataStore
 
+    // Used to mint a per-profile web configure link for the personalization nudge QR so it opens
+    // the ACTIVE profile's settings, not the account's main profile (F: QR target profile).
+    @Inject
+    lateinit var recommendationRepository: com.nuvio.tv.core.reco.RecommendationRepository
+
     @Inject
     lateinit var avatarRepository: AvatarRepository
 
@@ -860,12 +865,35 @@ class MainActivity : ComponentActivity() {
                         !hasSeenPersonalizeNudge &&
                         autoNextOverlay == null
                     if (showPersonalizeNudge) {
+                        // Persist the per-profile "shown" flag as soon as the nudge is DISPLAYED,
+                        // not only on the dismiss button. Previously the flag was written only when
+                        // the user pressed "Maybe later"; closing the app or navigating into content
+                        // left it unset, so the nudge re-appeared on every clean start. Writing on
+                        // first display guarantees it auto-shows only once per profile.
+                        LaunchedEffect(activeProfileId) {
+                            appOnboardingDataStore.setHasSeenPersonalizeNudge(true)
+                        }
+                        // QR must target the ACTIVE profile's web configure page (per-profile token),
+                        // not the account's main profile. Mint a short-lived profile-token URL; fall
+                        // back to the generic settings deep link if minting fails.
+                        var personalizeUrl by remember(activeProfileId) {
+                            mutableStateOf(PERSONALIZE_WEB_URL)
+                        }
+                        LaunchedEffect(activeProfileId) {
+                            val token = authManager.currentAccessToken()
+                            if (token != null) {
+                                val url = recommendationRepository.issueProfileToken(token, activeProfileId)
+                                if (!url.isNullOrBlank()) personalizeUrl = url
+                            }
+                        }
                         BackHandler(enabled = true) {
                             lifecycleScope.launch { appOnboardingDataStore.setHasSeenPersonalizeNudge(true) }
                         }
                         PersonalizeNudgeDialog(
-                            personalizeUrl = PERSONALIZE_WEB_URL,
-                            onDismiss = {
+                            personalizeUrl = personalizeUrl,
+                            onDismiss = { _ ->
+                                // Flag is already persisted on display; this is idempotent and also
+                                // covers the explicit "Do not show this again" checkbox.
                                 lifecycleScope.launch { appOnboardingDataStore.setHasSeenPersonalizeNudge(true) }
                             }
                         )

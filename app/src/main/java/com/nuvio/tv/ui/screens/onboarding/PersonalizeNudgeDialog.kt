@@ -47,13 +47,17 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 @Composable
 fun PersonalizeNudgeDialog(
     personalizeUrl: String,
-    onDismiss: () -> Unit
+    onDismiss: (dontShowAgain: Boolean) -> Unit
 ) {
     val qrBitmap = remember(personalizeUrl) {
         runCatching { QrCodeGenerator.generate(personalizeUrl, 360) }.getOrNull()
     }
+    // "Do not show this again" — when checked, the caller persists the per-profile
+    // don't-show flag so the nudge never auto-shows for this profile again.
+    var dontShowAgain by remember { mutableStateOf(false) }
     val dismissFocusRequester = remember { FocusRequester() }
     var dismissFocused by remember { mutableStateOf(false) }
+    var dontShowFocused by remember { mutableStateOf(false) }
     // Retry focus until the "Maybe later" button actually gains focus: a single requestFocus()
     // can race the dialog's layout/attach, leaving the remote unable to interact (the reported
     // "couldn't click Maybe later" bug).
@@ -117,8 +121,45 @@ fun PersonalizeNudgeDialog(
                 color = NuvioTheme.colors.TextTertiary,
                 textAlign = TextAlign.Center
             )
+
+            // "Do not show this again" — a focusable checkbox row. Toggling it flips the local
+            // state; the persisted flag is written on dismissal (so either button path honours it).
             Button(
-                onClick = onDismiss,
+                onClick = { dontShowAgain = !dontShowAgain },
+                modifier = Modifier
+                    .onFocusChanged { dontShowFocused = it.isFocused },
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                ),
+                border = ButtonDefaults.border(
+                    border = Border(
+                        border = BorderStroke(
+                            NuvioTheme.spacing.xxs,
+                            NuvioTheme.colors.FocusRing.copy(alpha = if (dontShowFocused) 1f else 0.3f)
+                        ),
+                        shape = RoundedCornerShape(NuvioTheme.radii.sm)
+                    ),
+                    focusedBorder = Border(
+                        border = BorderStroke(NuvioTheme.spacing.xxs, NuvioTheme.colors.FocusRing),
+                        shape = RoundedCornerShape(NuvioTheme.radii.sm)
+                    )
+                )
+            ) {
+                Text(
+                    text = (if (dontShowAgain) "☑  " else "☐  ") +
+                        stringResource(R.string.personalize_nudge_dont_show)
+                )
+            }
+            Text(
+                text = stringResource(R.string.personalize_nudge_dont_show_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = NuvioTheme.colors.TextTertiary,
+                textAlign = TextAlign.Center
+            )
+
+            Button(
+                onClick = { onDismiss(dontShowAgain) },
                 modifier = Modifier
                     .focusRequester(dismissFocusRequester)
                     .onFocusChanged { dismissFocused = it.isFocused },

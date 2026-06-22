@@ -512,6 +512,8 @@
     <string name="personalize_nudge_body">Scan the code with your phone to set up personalized recommendations on the web, or do it later anytime from your account settings.</string>
     <string name="personalize_nudge_url_hint">hamrocinema.regmig.com</string>
     <string name="personalize_nudge_dismiss">Maybe later</string>
+    <string name="personalize_nudge_dont_show">Do not show this again</string>
+    <string name="personalize_nudge_dont_show_hint">You can always do this from the Profile Screen → Personalize.</string>
 
     <string name="supporters_contributors_title">Supporters &amp; Contributors</string>
     <string name="supporters_contributors_subtitle">The people backing HamroCinema and the contributors building it across TV and mobile.</string>

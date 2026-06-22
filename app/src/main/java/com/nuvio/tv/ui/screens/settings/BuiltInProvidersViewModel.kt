@@ -86,18 +86,14 @@ class BuiltInProvidersViewModel @Inject constructor(
                 addonRepository.getInstalledAddons(),
                 deviceProfileDataStore.isStreamEngineEnabled,
                 deviceProfileDataStore.isUserOverridden
-            ) { addons, streamEngineEnabled, isUserOverridden ->
-                val catalogAddon = addons.firstOrNull {
-                    it.baseUrl.contains(CATALOG_HOST, ignoreCase = true) ||
-                    (BuildConfig.CATALOG_ADDON_BASE_URL.isNotBlank() &&
-                     it.baseUrl.contains(BuildConfig.CATALOG_ADDON_BASE_URL.trim(), ignoreCase = true))
-                }
-                val catalogEnabled = catalogAddon?.enabled ?: true
-                Triple(streamEngineEnabled, catalogEnabled, !isUserOverridden)
-            }.collectLatest { (streamEngineEnabled, catalogEnabled, useAutoDetect) ->
+            ) { _, streamEngineEnabled, isUserOverridden ->
+                // isCatalogEnabled is driven by the Supabase blob (useBuiltinCatalog), NOT the
+                // local addon-enabled flag, so the toggle reflects + persists the same value the
+                // web /configure reads. We intentionally do not surface catalogAddon.enabled here.
+                Pair(streamEngineEnabled, !isUserOverridden)
+            }.collectLatest { (streamEngineEnabled, useAutoDetect) ->
                 _uiState.update {
                     it.copy(
-                        isCatalogEnabled = catalogEnabled,
                         streamEngineEnabled = streamEngineEnabled,
                         useAutoDetectedProfile = useAutoDetect
                     )
@@ -112,6 +108,14 @@ class BuiltInProvidersViewModel @Inject constructor(
             // Supabase home-catalog blob the web dashboard writes (settings_json.useRecommendations).
             val useReco = homeCatalogSettingsSyncService.pullUseRecommendations()
             _uiState.update { it.copy(useRecommendations = useReco) }
+        }
+        viewModelScope.launch {
+            // Per-profile "use built-in catalog" master flag, mirrored from/to the same Supabase
+            // home-catalog blob the web /configure reads (settings_json.useBuiltinCatalog). This is
+            // the source of truth for the Catalog provider toggle so it always reflects + persists,
+            // even when the built-in catalog addon isn't installed/matched locally yet.
+            val useBuiltin = homeCatalogSettingsSyncService.pullUseBuiltinCatalog()
+            _uiState.update { it.copy(isCatalogEnabled = useBuiltin) }
         }
         viewModelScope.launch {
             // Hide/lock the toggle when the super admin has made personalization unavailable.
@@ -132,12 +136,24 @@ class BuiltInProvidersViewModel @Inject constructor(
     }
 
     fun toggleCatalog(enabled: Boolean) {
+        // Optimistic UI so the toggle responds immediately (previously it could appear stuck
+        // when no local catalog addon matched the reco host and the launch returned early).
+        _uiState.update { it.copy(isCatalogEnabled = enabled) }
         viewModelScope.launch {
+            // Persist to the shared blob (settings_json.useBuiltinCatalog) so the home suppresses/
+            // restores built-in rows AND the web /configure reflects the same value.
+            homeCatalogSettingsSyncService.pushUseBuiltinCatalog(enabled)
+            // Also mirror onto the local catalog addon's enabled flag when it's installed, so the
+            // catalog repository / addon manager stay consistent with the master switch.
             val addons = addonRepository.getInstalledAddons().first()
             val catalogAddon = addons.firstOrNull {
-                it.baseUrl.contains(CATALOG_HOST, ignoreCase = true)
-            } ?: return@launch
-            addonRepository.setAddonEnabled(catalogAddon.baseUrl, enabled)
+                it.baseUrl.contains(CATALOG_HOST, ignoreCase = true) ||
+                (BuildConfig.CATALOG_ADDON_BASE_URL.isNotBlank() &&
+                 it.baseUrl.contains(BuildConfig.CATALOG_ADDON_BASE_URL.trim(), ignoreCase = true))
+            }
+            if (catalogAddon != null) {
+                addonRepository.setAddonEnabled(catalogAddon.baseUrl, enabled)
+            }
         }
     }
 
