@@ -339,6 +339,17 @@ class StreamRepositoryImpl @Inject constructor(
             return
         }
 
+        // Profile-scoping guard: enabledScrapers reflects ONLY the active profile's plugin set
+        // (PluginDataStore reads are keyed by the active profile's effective profile_id). A profile
+        // with no plugin installed must run ZERO scrapers — skip the entire plugin branch before any
+        // log / extractor preload / live scrape / wait so plugins from another profile never leak in.
+        val activeProfileScrapers = pluginManager.enabledScrapers.first()
+        if (activeProfileScrapers.none { it.supportsType(mediaType) }) {
+            Log.d(TAG, "No enabled scrapers for active profile (type=$mediaType) — skipping plugin branch")
+            onComplete()
+            return
+        }
+
         Log.d(TAG, "Streaming plugins for $pluginSource: $pluginId, type: $mediaType")
 
         try {
