@@ -4,7 +4,6 @@ package com.nuvio.tv.ui.screens.settings
 
 import com.nuvio.tv.ui.theme.NuvioTheme
 
-import androidx.activity.compose.BackHandler
 import androidx.annotation.RawRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -27,7 +26,6 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
@@ -37,7 +35,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -76,20 +73,10 @@ internal enum class SettingsCategory {
     APPEARANCE,
     LAYOUT,
     CONTENT_DISCOVERY,
-    INTEGRATION,
     PLAYBACK,
     ADVANCED,
     ABOUT,
     DEBUG
-}
-
-private enum class IntegrationSettingsSection {
-    Hub,
-    Debrid,
-    Tmdb,
-    MdbList,
-    Reco,
-    BuiltInProviders,
 }
 
 internal enum class SettingsSectionDestination {
@@ -160,13 +147,6 @@ private fun rememberSettingsSectionSpecs() = listOf(
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
-        category = SettingsCategory.INTEGRATION,
-        title = stringResource(R.string.settings_integration),
-        icon = Icons.Default.Link,
-        subtitle = "",
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
         category = SettingsCategory.PLAYBACK,
         title = stringResource(R.string.settings_playback),
         icon = Icons.Rounded.PlayArrow,
@@ -215,7 +195,6 @@ fun SettingsScreen(
     fun isFeatureAvailable(key: String): Boolean = featureAvailability[key] ?: true
     val streamProvidersAvailable = isFeatureAvailable(FeatureKeys.STREAM_PROVIDERS)
     val catalogsAvailable = isFeatureAvailable(FeatureKeys.CATALOGS)
-    val personalizationAvailable = isFeatureAvailable(FeatureKeys.PERSONALIZATION)
     val connectedDevicesAvailable = isFeatureAvailable(FeatureKeys.CONNECTED_DEVICES)
     val experienceModeState by remember(experienceModeViewModel) {
         experienceModeViewModel.mode.map<ExperienceMode?, ExperienceModeLoadState> {
@@ -254,11 +233,6 @@ fun SettingsScreen(
                 // Catalogs (addons + built-in catalog) live here — hide if the super
                 // admin has made catalogs unavailable. Fail-open when available.
                 SettingsCategory.CONTENT_DISCOVERY -> catalogsAvailable
-                // Secondary profiles cannot manage integrations (debrid keys,
-                // addon manager, built-in providers) — primary profile only.
-                // Integrations cover the debrid / stream-provider config, so also hide
-                // when stream providers are made unavailable by the super admin.
-                SettingsCategory.INTEGRATION -> isPrimaryProfileActive && streamProvidersAvailable
                 SettingsCategory.ADVANCED -> true
                 else -> true
             }
@@ -280,21 +254,12 @@ fun SettingsScreen(
             SettingsCategory.EXPERIENCE to FocusRequester(),
             SettingsCategory.LAYOUT to FocusRequester(),
             SettingsCategory.CONTENT_DISCOVERY to FocusRequester(),
-            SettingsCategory.INTEGRATION to FocusRequester(),
             SettingsCategory.PLAYBACK to FocusRequester(),
             SettingsCategory.ADVANCED to FocusRequester(),
             SettingsCategory.ABOUT to FocusRequester()
         )
     }
     val railContainerFocusRequester = remember { FocusRequester() }
-    val integrationHubFocusRequester = remember { FocusRequester() }
-    val integrationDebridFocusRequester = remember { FocusRequester() }
-    val integrationTmdbFocusRequester = remember { FocusRequester() }
-    val integrationMdbListFocusRequester = remember { FocusRequester() }
-    val integrationRecoFocusRequester = remember { FocusRequester() }
-    val integrationBuiltInProvidersFocusRequester = remember { FocusRequester() }
-    var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
-    val integrationSectionHistory = remember { mutableStateListOf<IntegrationSettingsSection>() }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
     var allowDetailAutofocus by remember { mutableStateOf(false) }
@@ -400,10 +365,6 @@ fun SettingsScreen(
                                             else -> Unit
                                         }
                                     } else {
-                                        if (section.category == SettingsCategory.INTEGRATION) {
-                                            integrationSection = IntegrationSettingsSection.Hub
-                                            integrationSectionHistory.clear()
-                                        }
                                         allowDetailAutofocus = true
                                         selectedCategory = section.category
                                         pendingContentFocusCategory = section.category
@@ -509,30 +470,6 @@ fun SettingsScreen(
                                 experienceModeViewModel = experienceModeViewModel
                             )
                         }
-                        SettingsCategory.INTEGRATION -> IntegrationSettingsContent(
-                            selectedSection = integrationSection,
-                            onSelectSection = {
-                                integrationSectionHistory.add(integrationSection)
-                                integrationSection = it
-                            },
-                            onBack = {
-                                integrationSection = integrationSectionHistory.removeLastOrNull()
-                                    ?: IntegrationSettingsSection.Hub
-                            },
-                            initialFocusRequester = if (allowDetailAutofocus) {
-                                contentFocusRequesters[SettingsCategory.INTEGRATION]
-                            } else {
-                                null
-                            },
-                            hubFocusRequester = integrationHubFocusRequester,
-                            debridFocusRequester = integrationDebridFocusRequester,
-                            tmdbFocusRequester = integrationTmdbFocusRequester,
-                            mdbListFocusRequester = integrationMdbListFocusRequester,
-                            recoFocusRequester = integrationRecoFocusRequester,
-                            builtInProvidersFocusRequester = integrationBuiltInProvidersFocusRequester,
-                            autoFocusEnabled = allowDetailAutofocus,
-                            personalizationAvailable = personalizationAvailable
-                        )
                         SettingsCategory.ABOUT -> AboutSettingsContent(
                             onNavigateToSupportersContributors = onNavigateToSupportersContributors,
                             onNavigateToLicensesAttributions = onNavigateToLicensesAttributions,
@@ -550,10 +487,6 @@ fun SettingsScreen(
                             // Built-in providers expose stream-provider + reco config; only
                             // surface when those features are available.
                             streamProvidersAvailable = streamProvidersAvailable,
-                            onConfigureReco = {
-                                selectedCategory = SettingsCategory.INTEGRATION
-                                integrationSection = IntegrationSettingsSection.Reco
-                            },
                             initialFocusRequester = if (allowDetailAutofocus) {
                                 contentFocusRequesters[SettingsCategory.CONTENT_DISCOVERY]
                             } else {
@@ -578,7 +511,6 @@ private fun ContentDiscoverySettingsContent(
     onNavigateToBuiltInProviders: () -> Unit,
     showPlugins: Boolean,
     streamProvidersAvailable: Boolean,
-    onConfigureReco: () -> Unit,
     initialFocusRequester: FocusRequester?
 ) {
     // Built-in providers row only exists in the private build; further gate on
@@ -689,132 +621,6 @@ private fun AccountSettingsInline(
                 uiState = accountUiState,
                 viewModel = accountViewModel,
                 onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
-            )
-        }
-    }
-}
-
-@Composable
-private fun IntegrationSettingsContent(
-    selectedSection: IntegrationSettingsSection,
-    onSelectSection: (IntegrationSettingsSection) -> Unit,
-    onBack: () -> Unit,
-    initialFocusRequester: FocusRequester?,
-    hubFocusRequester: FocusRequester,
-    debridFocusRequester: FocusRequester,
-    tmdbFocusRequester: FocusRequester,
-    mdbListFocusRequester: FocusRequester,
-    recoFocusRequester: FocusRequester,
-    builtInProvidersFocusRequester: FocusRequester,
-    autoFocusEnabled: Boolean,
-    personalizationAvailable: Boolean
-) {
-    BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
-        onBack()
-    }
-    // If personalization is made unavailable by the super admin, bounce out of the Reco
-    // section back to the hub so its UI is never shown.
-    LaunchedEffect(personalizationAvailable, selectedSection) {
-        if (!personalizationAvailable && selectedSection == IntegrationSettingsSection.Reco) {
-            onBack()
-        }
-    }
-    val hubEntryFocusRequester = initialFocusRequester ?: hubFocusRequester
-
-    LaunchedEffect(selectedSection, autoFocusEnabled) {
-        if (!autoFocusEnabled) return@LaunchedEffect
-        val requester = when (selectedSection) {
-            IntegrationSettingsSection.Hub -> hubEntryFocusRequester
-            IntegrationSettingsSection.Debrid -> debridFocusRequester
-            IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
-            IntegrationSettingsSection.MdbList -> mdbListFocusRequester
-            IntegrationSettingsSection.Reco -> recoFocusRequester
-            IntegrationSettingsSection.BuiltInProviders -> builtInProvidersFocusRequester
-        }
-        runCatching { requester.requestFocus() }
-    }
-
-    when (selectedSection) {
-        IntegrationSettingsSection.Hub -> {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                SettingsDetailHeader(
-                    title = stringResource(R.string.settings_integrations_section),
-                    subtitle = stringResource(R.string.settings_integrations_section_subtitle)
-                )
-
-                SettingsGroupCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                ) {
-                    val integrationHubState = rememberLazyListState()
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        LazyColumn(
-                            state = integrationHubState,
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            item(key = "integration_hub_debrid") {
-                                SettingsActionRow(
-                                    title = stringResource(R.string.debrid_title),
-                                    subtitle = stringResource(R.string.settings_debrid_subtitle),
-                                    onClick = { onSelectSection(IntegrationSettingsSection.Debrid) },
-                                    modifier = Modifier.focusRequester(hubEntryFocusRequester)
-                                )
-                            }
-                            item(key = "integration_hub_mdblist") {
-                                SettingsActionRow(
-                                    title = "MDBList",
-                                    subtitle = stringResource(R.string.settings_mdblist_subtitle),
-                                    onClick = { onSelectSection(IntegrationSettingsSection.MdbList) }
-                                )
-                            }
-                        }
-                        SettingsVerticalScrollIndicators(state = integrationHubState)
-                    }
-                }
-            }
-        }
-
-        IntegrationSettingsSection.Debrid -> {
-            DebridSettingsContent(
-                initialFocusRequester = debridFocusRequester
-            )
-        }
-
-        IntegrationSettingsSection.Tmdb -> {
-            TmdbSettingsContent(
-                initialFocusRequester = tmdbFocusRequester
-            )
-        }
-
-        IntegrationSettingsSection.MdbList -> {
-            MDBListSettingsContent(
-                initialFocusRequester = mdbListFocusRequester
-            )
-        }
-
-        IntegrationSettingsSection.Reco -> {
-            // Personalization (reco) gated by super-admin availability. When unavailable the
-            // LaunchedEffect above navigates back; render nothing in the interim.
-            if (personalizationAvailable) {
-                RecoSettingsContent(
-                    initialFocusRequester = recoFocusRequester
-                )
-            }
-        }
-
-        IntegrationSettingsSection.BuiltInProviders -> {
-            BuiltInProvidersSettingsContent(
-                initialFocusRequester = builtInProvidersFocusRequester,
-                // Only allow opening the reco configurator when personalization is available.
-                onConfigureReco = if (personalizationAvailable) {
-                    { onSelectSection(IntegrationSettingsSection.Reco) }
-                } else {
-                    {}
-                }
             )
         }
     }

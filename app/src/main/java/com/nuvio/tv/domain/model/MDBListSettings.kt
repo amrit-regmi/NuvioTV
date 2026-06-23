@@ -1,7 +1,10 @@
 package com.nuvio.tv.domain.model
 
 data class MDBListSettings(
-    val enabled: Boolean = false,
+    // Ratings are backend-enriched by default; the MDBList settings UI was removed, so
+    // this defaults to true (always fetch + show). The `enabled` flag gates the network
+    // fetch in MDBListRepository — keeping it true means ratings simply display.
+    val enabled: Boolean = true,
     val showTrakt: Boolean = true,
     val showImdb: Boolean = true,
     val showTmdb: Boolean = true,
