@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -89,6 +90,10 @@ internal fun BuiltInProvidersSettingsContent(
     var showProfileAudioFormatDialog by remember { mutableStateOf(false) }
     var showProfileAudioChannelsPicker by remember { mutableStateOf(false) }
     var showTorboxKeyDialog by remember { mutableStateOf(false) }
+    var showBackendUrlDialog by remember { mutableStateOf(false) }
+
+    val backendUrlViewModel: BackendUrlViewModel = hiltViewModel()
+    val backendUrlState by backendUrlViewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         runCatching { initialFocusRequester.requestFocus() }
@@ -272,6 +277,32 @@ internal fun BuiltInProvidersSettingsContent(
                             )
                         }
                     }
+
+                    // Advanced — device-wide backend override (migration enabler). Primary/admin
+                    // profile only: it controls the host every backend call resolves to.
+                    if (uiState.isPrimaryProfileActive) {
+                        item(key = "builtin_advanced_section") {
+                            BuiltInSectionLabel(text = "Advanced")
+                        }
+
+                        item(key = "builtin_advanced_backend_url") {
+                            SettingsActionRow(
+                                title = "Backend URL",
+                                subtitle = "Server all data, recommendations, streams and images load from. Change only to migrate to a new backend.",
+                                value = backendUrlState.overrideUrl.ifBlank { backendUrlState.defaultUrl },
+                                onClick = { showBackendUrlDialog = true },
+                                enabled = true
+                            )
+                        }
+
+                        if (backendUrlState.changePendingRelogin) {
+                            item(key = "builtin_advanced_backend_url_pending") {
+                                BuiltInInfoText(
+                                    text = "Backend changed — log out and sign back in to apply the new server."
+                                )
+                            }
+                        }
+                    }
                 }
                 SettingsVerticalScrollIndicators(state = listState)
             }
@@ -368,6 +399,155 @@ internal fun BuiltInProvidersSettingsContent(
             },
             onDismiss = { showTorboxKeyDialog = false }
         )
+    }
+
+    if (showBackendUrlDialog) {
+        BackendUrlDialog(
+            currentValue = backendUrlState.overrideUrl.ifBlank { backendUrlState.defaultUrl },
+            defaultUrl = backendUrlState.defaultUrl,
+            error = backendUrlState.error,
+            onSave = { value -> backendUrlViewModel.save(value) { showBackendUrlDialog = false } },
+            onReset = { backendUrlViewModel.resetToDefault { showBackendUrlDialog = false } },
+            onClearError = { backendUrlViewModel.clearError() },
+            onDismiss = {
+                backendUrlViewModel.clearError()
+                showBackendUrlDialog = false
+            }
+        )
+    }
+
+    // After a backend change is saved, offer to log out so it takes effect on the next session.
+    if (backendUrlState.changePendingRelogin && !showBackendUrlDialog) {
+        BackendChangedLogoutDialog(
+            onLogout = { backendUrlViewModel.signOutToApply() },
+            onDismiss = { /* keep the pending banner; user can log out later */ }
+        )
+    }
+}
+
+@Composable
+private fun BackendUrlDialog(
+    currentValue: String,
+    defaultUrl: String,
+    error: String?,
+    onSave: (String) -> Unit,
+    onReset: () -> Unit,
+    onClearError: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var value by remember(currentValue) { mutableStateOf(currentValue) }
+    var isInputFocused by remember { mutableStateOf(false) }
+    val inputFocusRequester = remember { FocusRequester() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(error) {
+        if (error != null) {
+            android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_LONG).show()
+            onClearError()
+        }
+    }
+
+    com.nuvio.tv.ui.components.NuvioDialog(
+        onDismiss = onDismiss,
+        title = "Backend URL",
+        subtitle = "Default: $defaultUrl. Enter an https:// URL to point the app at a different backend. Log out and back in after changing.",
+        width = 700.dp,
+        suppressFirstKeyUp = false
+    ) {
+        androidx.tv.material3.Card(
+            onClick = { inputFocusRequester.requestFocus() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { isInputFocused = it.isFocused || it.hasFocus },
+            colors = androidx.tv.material3.CardDefaults.colors(
+                containerColor = NuvioTheme.colors.BackgroundElevated,
+                focusedContainerColor = NuvioTheme.colors.BackgroundElevated
+            ),
+            border = androidx.tv.material3.CardDefaults.border(
+                border = androidx.tv.material3.Border(
+                    border = androidx.compose.foundation.BorderStroke(NuvioTheme.spacing.hairline, NuvioTheme.colors.Border),
+                    shape = RoundedCornerShape(10.dp)
+                ),
+                focusedBorder = androidx.tv.material3.Border(
+                    border = androidx.compose.foundation.BorderStroke(NuvioTheme.spacing.xxs, NuvioTheme.colors.FocusRing),
+                    shape = RoundedCornerShape(10.dp)
+                )
+            ),
+            shape = androidx.tv.material3.CardDefaults.shape(RoundedCornerShape(10.dp)),
+            scale = androidx.tv.material3.CardDefaults.scale(focusedScale = 1f)
+        ) {
+            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = NuvioTheme.spacing.md)) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(inputFocusRequester),
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onDone = { onSave(value) }
+                    ),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(
+                        if (isInputFocused) NuvioTheme.colors.Primary else Color.Transparent
+                    ),
+                    decorationBox = { innerTextField ->
+                        if (value.isBlank()) {
+                            Text(
+                                text = defaultUrl,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioTheme.colors.TextTertiary
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
+            }
+        }
+
+        SettingsDialogActionRow {
+            SettingsDialogActionButton(
+                text = "Cancel",
+                onClick = onDismiss
+            )
+            SettingsDialogActionButton(
+                text = "Reset",
+                onClick = onReset
+            )
+            SettingsDialogActionButton(
+                text = "Save",
+                onClick = { onSave(value) },
+                primary = true
+            )
+        }
+    }
+}
+
+@Composable
+private fun BackendChangedLogoutDialog(
+    onLogout: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    com.nuvio.tv.ui.components.NuvioDialog(
+        onDismiss = onDismiss,
+        title = "Backend changed",
+        subtitle = "Log out and sign back in to apply the new backend. Until you do, the app keeps using the previous server.",
+        width = 560.dp
+    ) {
+        SettingsDialogActionRow {
+            SettingsDialogActionButton(
+                text = "Later",
+                onClick = onDismiss
+            )
+            SettingsDialogActionButton(
+                text = "Log out now",
+                onClick = onLogout,
+                primary = true
+            )
+        }
     }
 }
 

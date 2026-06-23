@@ -67,6 +67,10 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        // Apply the user's backend-URL override (if any) BEFORE anything builds a network client
+        // or reads RecoBackend. Synchronous SharedPreferences-mirror read (see BackendBaseUrlDataStore);
+        // takes effect on this launch only — changing it prompts a logout/login rather than hot-swapping.
+        com.nuvio.tv.core.reco.RecoBackend.init(this)
         PluginRuntimeHooks.onApplicationCreate(this)
         androidTvChannelSyncService.start()
         // Load locale synchronously so it's available before Activity.attachBaseContext.

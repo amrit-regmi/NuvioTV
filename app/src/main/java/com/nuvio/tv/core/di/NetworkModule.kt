@@ -217,12 +217,9 @@ object NetworkModule {
         okHttpClient: OkHttpClient,
         moshi: Moshi
     ): Retrofit {
-        val rawBaseUrl = BuildConfig.CATALOG_ADDON_BASE_URL.trim()
-        val baseUrl = if (rawBaseUrl.isNotBlank()) {
-            if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
-        } else {
-            "http://localhost/"
-        }
+        // Effective catalog-addon base derives from RecoBackend (built-in default OR the user's
+        // Advanced "Backend URL" override), so swapping backends re-homes catalog/stream data too.
+        val baseUrl = RecoBackend.catalogAddonBaseUrl
         // F72 (api_bridge.md): do NOT attach `Bearer <CATALOG_SECRET>` here. The shared
         // okHttpClient already carries RecoAuthInterceptor, which attaches the user's
         // Supabase `Authorization: Bearer <access_token>` to catalog-addon (reco-host)
@@ -289,13 +286,9 @@ object NetworkModule {
         // (`/catalog-addon/parental-guide/{imdb_id}.json`) instead of api.imdbapi.dev
         // directly — closes the direct leak of the user's IP + what they view. The shared
         // okHttpClient carries RecoAuthInterceptor, which auto-attaches the user Bearer for
-        // catalog-addon (reco-host) requests. Same base URL the catalog-addon retrofit uses.
-        val rawBaseUrl = BuildConfig.CATALOG_ADDON_BASE_URL.trim()
-        val baseUrl = if (rawBaseUrl.isNotBlank()) {
-            if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
-        } else {
-            "http://localhost/"
-        }
+        // catalog-addon (reco-host) requests. Same base URL the catalog-addon retrofit uses
+        // (RecoBackend-derived, so the user's Advanced backend-URL override applies here too).
+        val baseUrl = RecoBackend.catalogAddonBaseUrl
         return Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(okHttpClient)

@@ -991,7 +991,7 @@ class MainActivity : ComponentActivity() {
             }
             // Always re-register so backend stays current even when URL or
             // build config changes between installs.
-            val hash = "$deviceId|$maxResolution|${hdrTypes.sorted()}|${codecs.sorted()}|${BuildConfig.CATALOG_ADDON_BASE_URL}"
+            val hash = "$deviceId|$maxResolution|${hdrTypes.sorted()}|${codecs.sorted()}|${com.nuvio.tv.core.reco.RecoBackend.catalogAddonBaseUrl}"
             deviceProfileDataStore.updateCapabilitiesHashIfChanged(hash)  // update stored hash but don't gate on it
             val downloadSpeedMbps = deviceProfileDataStore.estimateDownloadSpeedMbps()
             val userId = (authManager.authState.value as? AuthState.FullAccount)?.userId ?: ""
@@ -1012,7 +1012,7 @@ class MainActivity : ComponentActivity() {
             // F72: no CATALOG_SECRET Bearer — the shared httpClient's RecoAuthInterceptor
             // attaches the user's Supabase token to this catalog-addon (reco-host) call.
             val request = Request.Builder()
-                .url("${BuildConfig.CATALOG_ADDON_BASE_URL}device-profile")
+                .url("${com.nuvio.tv.core.reco.RecoBackend.catalogAddonBaseUrl}device-profile")
                 .put(body.toRequestBody("application/json".toMediaType()))
                 .build()
             httpClient.newCall(request).execute().use { response ->
