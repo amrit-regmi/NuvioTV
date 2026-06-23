@@ -794,7 +794,7 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
 ): List<MetaPreview> {
     if (items.isEmpty()) return items
     val mdbSettings = currentMdbListSettings
-    val mdbEnabled = mdbSettings.enabled && mdbSettings.apiKey.isNotBlank()
+    val mdbEnabled = mdbSettings.enabled
 
     return coroutineScope {
         items.map { item ->

@@ -2,7 +2,6 @@ package com.nuvio.tv.domain.model
 
 data class MDBListSettings(
     val enabled: Boolean = false,
-    val apiKey: String = "",
     val showTrakt: Boolean = true,
     val showImdb: Boolean = true,
     val showTmdb: Boolean = true,

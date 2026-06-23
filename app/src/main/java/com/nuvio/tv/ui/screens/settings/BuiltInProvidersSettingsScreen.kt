@@ -39,6 +39,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.core.debrid.DebridProviders
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 
@@ -77,14 +78,17 @@ internal fun BuiltInProvidersSettingsContent(
     initialFocusRequester: FocusRequester,
     onConfigureReco: () -> Unit = {},
     viewModel: BuiltInProvidersViewModel = hiltViewModel(),
+    debridViewModel: DebridSettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val debridUiState by debridViewModel.uiState.collectAsStateWithLifecycle()
 
     var showProfileResolutionPicker by remember { mutableStateOf(false) }
     var showProfileHdrDialog by remember { mutableStateOf(false) }
     var showProfileCodecDialog by remember { mutableStateOf(false) }
     var showProfileAudioFormatDialog by remember { mutableStateOf(false) }
     var showProfileAudioChannelsPicker by remember { mutableStateOf(false) }
+    var showTorboxKeyDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         runCatching { initialFocusRequester.requestFocus() }
@@ -157,10 +161,26 @@ internal fun BuiltInProvidersSettingsContent(
                     item(key = "builtin_stream_engine_toggle") {
                         SettingsToggleRow(
                             title = "Use built-in stream engine",
-                            subtitle = "Provides streams via shared TorBox account based on your device profile",
+                            subtitle = "Provides streams based on your device profile. Uses your personal TorBox key if set, otherwise the shared key.",
                             checked = uiState.streamEngineEnabled,
                             enabled = true,
                             onToggle = { viewModel.toggleStreamEngine(!uiState.streamEngineEnabled) }
+                        )
+                    }
+
+                    item(key = "builtin_stream_engine_torbox_key") {
+                        val torbox = DebridProviders.Torbox
+                        SettingsActionRow(
+                            title = "TorBox key",
+                            subtitle = "Optional. Uses your personal TorBox key if set, otherwise the shared key.",
+                            value = providerCredentialStatus(
+                                provider = torbox,
+                                credential = debridUiState.apiKeyFor(DebridProviders.TORBOX_ID),
+                                notSetLabel = "Using shared key",
+                                connectedLabel = "Connected"
+                            ),
+                            onClick = { showTorboxKeyDialog = true },
+                            enabled = true
                         )
                     }
 
@@ -325,6 +345,28 @@ internal fun BuiltInProvidersSettingsContent(
                 showProfileAudioChannelsPicker = false
             },
             onDismiss = { showProfileAudioChannelsPicker = false }
+        )
+    }
+
+    if (showTorboxKeyDialog) {
+        // Reuses the SAME DebridSettingsDataStore (via DebridSettingsViewModel) that
+        // DirectDebridResolver reads, so the personal-key-wins-else-shared merge is unchanged
+        // and existing keys are preserved. This is the single canonical TorBox key location.
+        DebridApiKeyDialog(
+            title = "TorBox API Key",
+            subtitle = "Enter your personal TorBox API key. Leave blank to use the shared key.",
+            placeholder = "Enter TorBox API key",
+            currentValue = debridUiState.apiKeyFor(DebridProviders.TORBOX_ID),
+            viewModel = debridViewModel,
+            onSave = { value, onSaved ->
+                debridViewModel.validateAndSaveProviderApiKey(DebridProviders.TORBOX_ID, value, onSaved)
+            },
+            onSaved = { showTorboxKeyDialog = false },
+            onClear = {
+                debridViewModel.validateAndSaveProviderApiKey(DebridProviders.TORBOX_ID, "") {}
+                showTorboxKeyDialog = false
+            },
+            onDismiss = { showTorboxKeyDialog = false }
         )
     }
 }

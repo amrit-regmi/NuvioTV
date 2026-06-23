@@ -161,31 +161,6 @@ fun DebridSettingsContent(
                         )
                     }
 
-                    item(key = "debrid_nuvio_torbox_section") {
-                        DebridSectionLabel(text = "Nuvio TorBox")
-                    }
-
-                    item(key = "debrid_${DebridProviders.TORBOX_ID}_api_key") {
-                        val provider = DebridProviders.Torbox
-                        SettingsActionRow(
-                            title = provider.displayName,
-                            subtitle = "Optional override. A shared key is active by default — enter your own to use your personal TorBox account.",
-                            value = providerCredentialStatus(
-                                provider = provider,
-                                credential = uiState.apiKeyFor(provider.id),
-                                notSetLabel = stringResource(R.string.debrid_not_set),
-                                connectedLabel = stringResource(R.string.debrid_connected)
-                            ),
-                            onClick = {
-                                when (provider.authMethod) {
-                                    DebridProviderAuthMethod.DeviceCode -> activeDeviceAuthDialog = provider.id
-                                    DebridProviderAuthMethod.ApiKey -> activeApiKeyDialog = provider.id
-                                }
-                            },
-                            enabled = true
-                        )
-                    }
-
                     item(key = "debrid_external_providers_section") {
                         DebridSectionLabel(text = "External Providers")
                     }
@@ -1589,7 +1564,7 @@ private fun String?.toDeviceAuthStatusMessage(fallback: String): String {
 }
 
 @Composable
-private fun DebridApiKeyDialog(
+internal fun DebridApiKeyDialog(
     title: String,
     subtitle: String,
     placeholder: String,
@@ -1713,13 +1688,13 @@ private fun DebridApiKeyDialog(
     }
 }
 
-private fun maskDebridApiKey(key: String, notSetLabel: String): String {
+internal fun maskDebridApiKey(key: String, notSetLabel: String): String {
     val trimmed = key.trim()
     if (trimmed.isBlank()) return notSetLabel
     return if (trimmed.length <= 4) "****" else "******${trimmed.takeLast(4)}"
 }
 
-private fun providerCredentialStatus(
+internal fun providerCredentialStatus(
     provider: DebridProvider,
     credential: String,
     notSetLabel: String,

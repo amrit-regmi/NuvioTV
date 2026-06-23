@@ -5,11 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.data.local.MDBListSettingsDataStore
 import com.nuvio.tv.domain.model.MDBListSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
@@ -23,12 +20,6 @@ class MDBListSettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(MDBListSettingsUiState())
     val uiState: StateFlow<MDBListSettingsUiState> = _uiState.asStateFlow()
-
-    private val _validating = MutableStateFlow(false)
-    val validating: StateFlow<Boolean> = _validating.asStateFlow()
-
-    private val _validationError = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val validationError: SharedFlow<Unit> = _validationError.asSharedFlow()
 
     init {
         viewModelScope.launch {
@@ -51,22 +42,6 @@ class MDBListSettingsViewModel @Inject constructor(
         }
     }
 
-    fun validateAndSaveApiKey(value: String, onSuccess: () -> Unit) {
-        val trimmed = value.trim()
-        if (trimmed.isBlank()) {
-            viewModelScope.launch { dataStore.setApiKey("") }
-            onSuccess()
-            return
-        }
-        // Ratings now come from OUR backend (no api.mdblist.com validation call). The key is
-        // stored locally for back-compat but is no longer used in the request path — the
-        // backend holds the MDBLIST_API_KEY server-side. Save without a third-party round-trip.
-        viewModelScope.launch {
-            dataStore.setApiKey(trimmed)
-            onSuccess()
-        }
-    }
-
     private fun update(action: suspend () -> Unit) {
         viewModelScope.launch { action() }
     }
@@ -74,7 +49,6 @@ class MDBListSettingsViewModel @Inject constructor(
 
 data class MDBListSettingsUiState(
     val enabled: Boolean = false,
-    val apiKey: String = "",
     val showTrakt: Boolean = true,
     val showImdb: Boolean = true,
     val showTmdb: Boolean = true,
@@ -85,7 +59,6 @@ data class MDBListSettingsUiState(
 ) {
     fun fromSettings(settings: MDBListSettings): MDBListSettingsUiState = copy(
         enabled = settings.enabled,
-        apiKey = settings.apiKey,
         showTrakt = settings.showTrakt,
         showImdb = settings.showImdb,
         showTmdb = settings.showTmdb,

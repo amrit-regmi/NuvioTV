@@ -2,7 +2,6 @@ package com.nuvio.tv.data.local
 
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.domain.model.MDBListSettings
 import kotlinx.coroutines.flow.Flow
@@ -24,7 +23,6 @@ class MDBListSettingsDataStore @Inject constructor(
         factory.get(profileId, FEATURE)
 
     private val enabledKey = booleanPreferencesKey("mdblist_enabled")
-    private val apiKeyKey = stringPreferencesKey("mdblist_api_key")
     private val showTraktKey = booleanPreferencesKey("mdblist_show_trakt")
     private val showImdbKey = booleanPreferencesKey("mdblist_show_imdb")
     private val showTmdbKey = booleanPreferencesKey("mdblist_show_tmdb")
@@ -37,7 +35,6 @@ class MDBListSettingsDataStore @Inject constructor(
         factory.get(pid, FEATURE).data.map { prefs ->
             MDBListSettings(
                 enabled = prefs[enabledKey] ?: false,
-                apiKey = prefs[apiKeyKey] ?: "",
                 showTrakt = prefs[showTraktKey] ?: true,
                 showImdb = prefs[showImdbKey] ?: true,
                 showTmdb = prefs[showTmdbKey] ?: true,
@@ -51,10 +48,6 @@ class MDBListSettingsDataStore @Inject constructor(
 
     suspend fun setEnabled(enabled: Boolean) {
         store().edit { it[enabledKey] = enabled }
-    }
-
-    suspend fun setApiKey(apiKey: String) {
-        store().edit { it[apiKeyKey] = apiKey.trim() }
     }
 
     suspend fun setShowTrakt(enabled: Boolean) {

@@ -88,7 +88,6 @@ private enum class IntegrationSettingsSection {
     Debrid,
     Tmdb,
     MdbList,
-    AnimeSkip,
     Reco,
     BuiltInProviders,
 }
@@ -292,7 +291,6 @@ fun SettingsScreen(
     val integrationDebridFocusRequester = remember { FocusRequester() }
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
-    val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
     val integrationRecoFocusRequester = remember { FocusRequester() }
     val integrationBuiltInProvidersFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
@@ -530,7 +528,6 @@ fun SettingsScreen(
                             debridFocusRequester = integrationDebridFocusRequester,
                             tmdbFocusRequester = integrationTmdbFocusRequester,
                             mdbListFocusRequester = integrationMdbListFocusRequester,
-                            animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                             recoFocusRequester = integrationRecoFocusRequester,
                             builtInProvidersFocusRequester = integrationBuiltInProvidersFocusRequester,
                             autoFocusEnabled = allowDetailAutofocus,
@@ -707,7 +704,6 @@ private fun IntegrationSettingsContent(
     debridFocusRequester: FocusRequester,
     tmdbFocusRequester: FocusRequester,
     mdbListFocusRequester: FocusRequester,
-    animeSkipFocusRequester: FocusRequester,
     recoFocusRequester: FocusRequester,
     builtInProvidersFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean,
@@ -732,7 +728,6 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Debrid -> debridFocusRequester
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
-            IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
             IntegrationSettingsSection.Reco -> recoFocusRequester
             IntegrationSettingsSection.BuiltInProviders -> builtInProvidersFocusRequester
         }
@@ -776,13 +771,6 @@ private fun IntegrationSettingsContent(
                                     onClick = { onSelectSection(IntegrationSettingsSection.MdbList) }
                                 )
                             }
-                            item(key = "integration_hub_animeskip") {
-                                SettingsActionRow(
-                                    title = "Anime-Skip",
-                                    subtitle = stringResource(R.string.settings_animeskip_subtitle),
-                                    onClick = { onSelectSection(IntegrationSettingsSection.AnimeSkip) }
-                                )
-                            }
                         }
                         SettingsVerticalScrollIndicators(state = integrationHubState)
                     }
@@ -805,12 +793,6 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.MdbList -> {
             MDBListSettingsContent(
                 initialFocusRequester = mdbListFocusRequester
-            )
-        }
-
-        IntegrationSettingsSection.AnimeSkip -> {
-            AnimeSkipSettingsContent(
-                initialFocusRequester = animeSkipFocusRequester
             )
         }
 
