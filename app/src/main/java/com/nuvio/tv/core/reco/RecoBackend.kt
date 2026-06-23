@@ -64,4 +64,30 @@ object RecoBackend {
         }
         return "$baseUrl/image$path"
     }
+
+    /**
+     * Re-homes a stored image URL that points at the reco `/image` (or
+     * `/metadata/images`) proxy onto the CURRENT [baseUrl] host.
+     *
+     * Why: library/saved entries persist the poster URL at save time. After the
+     * host cutover (recoengine.regmig.com → hamrocinema.regmig.com, the old host
+     * now 410 Gone) any poster saved against the old host is dead — its host is no
+     * longer [host], so [RecoAuthInterceptor] never attaches the bearer token AND
+     * the old host serves nothing. Freshly-fetched catalog/CW posters are fine
+     * because they always carry the live host; only persisted entries go stale.
+     *
+     * This rewrites ONLY reco image-proxy URLs (any scheme/host ending in the
+     * `/image/...` or `/metadata/images/...` path) to the live [baseUrl], keeping
+     * the path/query intact. Non-proxy absolute URLs (TMDB, third-party addon
+     * images) and blank/null values are returned untouched. Idempotent: a URL
+     * already on the live host is returned unchanged.
+     */
+    fun rehomeImageUrl(url: String?): String? {
+        val raw = url?.trim()?.takeIf { it.isNotBlank() } ?: return url
+        // Only touch our image-proxy URLs; leave TMDB / addon / other images alone.
+        val marker = Regex("/(image|metadata/images)/").find(raw) ?: return raw
+        val proxyPath = raw.substring(marker.range.first) // includes leading "/image/..."
+        val rebuilt = "$baseUrl$proxyPath"
+        return if (rebuilt == raw) raw else rebuilt
+    }
 }

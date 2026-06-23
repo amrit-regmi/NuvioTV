@@ -81,10 +81,14 @@ class LibraryRepositoryImpl @Inject constructor(
                     id = saved.id,
                     type = saved.type,
                     name = saved.name,
-                    poster = saved.poster,
+                    // Re-home any poster/background/logo persisted against an old reco
+                    // host (e.g. pre-cutover recoengine.regmig.com, now 410 Gone) onto the
+                    // live RecoBackend host so the authed Coil loader can fetch it. Stored
+                    // entries go stale on host changes; fresh catalog/CW images don't.
+                    poster = com.nuvio.tv.core.reco.RecoBackend.rehomeImageUrl(saved.poster),
                     posterShape = saved.posterShape,
-                    background = saved.background,
-                    logo = saved.logo,
+                    background = com.nuvio.tv.core.reco.RecoBackend.rehomeImageUrl(saved.background),
+                    logo = com.nuvio.tv.core.reco.RecoBackend.rehomeImageUrl(saved.logo),
                     description = saved.description,
                     releaseInfo = saved.releaseInfo,
                     imdbRating = saved.imdbRating,
