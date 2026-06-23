@@ -866,10 +866,9 @@ class MainActivity : ComponentActivity() {
                         autoNextOverlay == null
                     if (showPersonalizeNudge) {
                         // Persist the per-profile "shown" flag as soon as the nudge is DISPLAYED,
-                        // not only on the dismiss button. Previously the flag was written only when
-                        // the user pressed "Maybe later"; closing the app or navigating into content
-                        // left it unset, so the nudge re-appeared on every clean start. Writing on
-                        // first display guarantees it auto-shows only once per profile.
+                        // not only on the dismiss button. Writing on first display guarantees the
+                        // nudge auto-shows only once per profile even if the user closes the app or
+                        // navigates into content without pressing "Maybe later".
                         LaunchedEffect(activeProfileId) {
                             appOnboardingDataStore.setHasSeenPersonalizeNudge(true)
                         }

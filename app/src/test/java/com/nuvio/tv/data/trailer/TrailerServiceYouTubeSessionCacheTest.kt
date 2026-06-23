@@ -44,7 +44,7 @@ class TrailerServiceYouTubeSessionCacheTest {
         every { tmdbService.apiKey() } returns "tmdb-key"
         val service = TrailerService(trailerApi, tmdbApi, extractor, tmdbSettingsDataStore, tmdbService)
 
-        // FIX 2: backend-first — the backend resolves the trailer, so the direct
+        // Backend-first — the backend resolves the trailer, so the direct
         // in-app YouTube extractor is never called, and the result is session-cached.
         coEvery { trailerApi.getTrailer(any(), any(), any()) } returnsMany listOf(
             Response.success(TrailerResponse(url = "https://cdn.example/video.mp4")),
@@ -73,7 +73,7 @@ class TrailerServiceYouTubeSessionCacheTest {
         every { tmdbService.apiKey() } returns "tmdb-key"
         val service = TrailerService(trailerApi, tmdbApi, extractor, tmdbSettingsDataStore, tmdbService)
 
-        // FIX 2: backend-first, in-app extraction as fallback. Backend returns nothing
+        // Backend-first, in-app extraction as fallback. Backend returns nothing
         // both times, so the extractor fallback runs each call. A failed first attempt
         // must NOT be cached, so the retry can still succeed.
         coEvery { trailerApi.getTrailer(any(), any(), any()) } returns Response.success(TrailerResponse(url = null))

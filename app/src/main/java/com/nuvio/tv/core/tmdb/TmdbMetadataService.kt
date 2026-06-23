@@ -1025,7 +1025,7 @@ class TmdbMetadataService(
 
     private fun buildImageUrl(path: String?, size: String): String? {
         val clean = path?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        // FIX 1: route TMDB images through our /image proxy (private mode) so Coil
+        // Route TMDB images through our /image proxy (private mode) so Coil
         // never hits image.tmdb.org directly.
         return com.nuvio.tv.core.reco.RecoBackend.proxiedTmdbImageUrl(
             "https://image.tmdb.org/t/p/$size$clean"

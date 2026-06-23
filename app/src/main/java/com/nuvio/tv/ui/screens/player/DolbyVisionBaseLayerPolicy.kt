@@ -97,10 +97,9 @@ object DolbyVisionBaseLayerPolicy {
             // General DV-display convert path: any DV-capable display whose device has a
             // Profile-8 decoder (DVHE.ST/STH) and a ready bridge. libdovi rewrites the DV7
             // RPU to DV8.1 (mode 1 / ToMel by default) and the chip decodes 8.1 and emits
-            // DV. This was previously gated to Amazon Fire TV only, on May-2026 data that
-            // showed conversion degraded to HDR10 on Amlogic (Chromecast). Later testing
-            // showed the mode-1 app-level conversion produces real DV on Chromecast, LG
-            // panels, etc., so the manufacturer gate is removed. Devices with a true DV7
+            // DV. This applies to any manufacturer: the mode-1 app-level conversion produces
+            // real DV on Chromecast (Amlogic), LG panels, etc., so there is no manufacturer
+            // gate. Devices with a true DV7
             // decoder (DvheDtb, e.g. Shield) are handled by the NATIVE_DV7 branch above and
             // never reach here; DV displays without a P8 decoder fall through to NATIVE_DV7
             // below.

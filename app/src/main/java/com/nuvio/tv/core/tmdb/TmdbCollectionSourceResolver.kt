@@ -506,7 +506,7 @@ class TmdbCollectionSourceResolver @Inject constructor(
 
     private fun imageUrl(path: String?, size: String): String? {
         val clean = path?.takeIf { it.isNotBlank() } ?: return null
-        // FIX 1: route TMDB collection images through our /image proxy (private mode).
+        // Route TMDB collection images through our /image proxy (private mode).
         return com.nuvio.tv.core.reco.RecoBackend.proxiedTmdbImageUrl(
             "https://image.tmdb.org/t/p/$size$clean"
         )

@@ -333,8 +333,8 @@ class HomeCatalogSettingsSyncService @Inject constructor(
      * pushes it here so the home reflects the change immediately and the change persists.
      *
      * The push uses `p_profile_id = activeProfileId` and `p_platform = home_catalog_shared`, the
-     * exact keys [pullRowOrderFromRemote] reads with — preventing the stale-read platform-mismatch
-     * that previously caused toggles not to persist. Other settings keys in the blob are preserved.
+     * exact keys [pullRowOrderFromRemote] reads with, so the read and write agree and toggles
+     * persist. Other settings keys in the blob are preserved.
      */
     suspend fun pushRowOrderToRemote(rowOrder: List<HomeRowOrderEntry>): Result<Unit> =
         withContext(Dispatchers.IO) {

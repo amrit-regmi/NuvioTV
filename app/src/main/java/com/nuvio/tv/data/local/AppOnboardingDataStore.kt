@@ -27,8 +27,8 @@ class AppOnboardingDataStore @Inject constructor(
     private val hasSeenAuthQrOnFirstLaunchKey = booleanPreferencesKey("has_seen_auth_qr_on_first_launch")
 
     // One-time "Personalize your recommendations" nudge shown after each profile's FIRST login.
-    // Keyed PER PROFILE: previously a single account-global key meant the first profile to see the
-    // nudge suppressed it for every other profile (e.g. Amrit's showing hid it from Nirupa).
+    // Keyed PER PROFILE so each profile sees it independently; an account-global key would let the
+    // first profile to see the nudge suppress it for every other profile.
     private fun hasSeenPersonalizeNudgeKey(profileId: Int) =
         booleanPreferencesKey("has_seen_personalize_nudge_p$profileId")
 

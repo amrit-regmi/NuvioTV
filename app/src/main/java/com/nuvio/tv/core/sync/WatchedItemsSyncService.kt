@@ -82,7 +82,7 @@ class WatchedItemsSyncService @Inject constructor(
     }
 
     private suspend fun shouldUseSupabaseWatchProgressSync(): Boolean {
-        // Trakt integration removed; Nuvio Sync (Supabase) is always the source.
+        // Nuvio Sync (Supabase) is always the source.
         return true
     }
 

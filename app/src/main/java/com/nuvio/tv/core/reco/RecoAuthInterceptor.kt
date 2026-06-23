@@ -13,7 +13,7 @@ import java.io.IOException
  * host matches the reco backend ([RecoBackend.host]).
  *
  * Why a host-scoped interceptor: the shared [okhttp3.OkHttpClient] is used by many
- * APIs (TMDB, Trakt, GitHub, …). After the F32 cutover the reco backend requires the
+ * APIs (TMDB, Trakt, GitHub, …). The reco backend requires the
  * Nuvio bearer token in private mode on ALL metadata/data endpoints (`/reco/...`,
  * `/people/...`, `/titles/...`, `/companies/...`, `/metadata/...`, `/resolve/...`,
  * `/api/unique-contributions`, `/api/onboarding/candidates`, …). Doing this once here
@@ -31,11 +31,10 @@ import java.io.IOException
  *   here — they are an image proxy that the Coil loader authenticates separately;
  *   attaching the token when present is harmless for them.
  * - F72 (api_bridge.md): catalog-addon DATA routes (`/catalog-addon/catalog`, `/meta`,
- *   `/stream`, `/subtitles`, `/device-profile`, `/torbox-key`, …) now REQUIRE the user
- *   token in private mode — the app must NO LONGER send `Bearer <CATALOG_SECRET>`. So
- *   these paths are no longer treated as public here; the user token is attached just
- *   like any other reco-host data call. Only `/catalog-addon/.../manifest.json` stays
- *   public.
+ *   `/stream`, `/subtitles`, `/device-profile`, `/torbox-key`, …) REQUIRE the user
+ *   token in private mode and are NOT treated as public here — the user token is
+ *   attached just like any other reco-host data call (never `Bearer <CATALOG_SECRET>`).
+ *   Only `/catalog-addon/.../manifest.json` stays public.
  * - Skips when there is no token (signed out): the request goes out unauthenticated.
  */
 class RecoAuthInterceptor(

@@ -35,9 +35,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Lightweight result shape retained after the Trakt integration was removed.
- * Trakt public-list search/import no longer fetches from the network; these
- * lists stay empty, but the type is kept so existing UI/state compiles.
+ * Lightweight result shape for Trakt public lists. Trakt public-list search/import
+ * does not fetch from the network; these lists stay empty, but the type exists so
+ * the UI/state that references it compiles.
  */
 data class TraktPublicListSearchResult(
     val traktListId: Long,
@@ -559,7 +559,7 @@ class CollectionEditorViewModel @Inject constructor(
     }
 
     private fun loadTraktFeaturedLists() {
-        // No-op: Trakt featured lists are no longer fetched.
+        // No-op: Trakt featured lists are not fetched.
     }
 
     fun editTmdbSource(index: Int) {

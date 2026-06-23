@@ -61,9 +61,9 @@ class BuiltInProvidersViewModel @Inject constructor(
     }
 
     // Fail-safe seed (false): never momentarily expose the primary-only Device Profile section to a
-    // secondary profile before the real identity resolves. (Previously seeded from
-    // profileManager.isPrimaryProfileActive, whose backing StateFlow seeds 1 → a secondary profile
-    // could read as primary until the datastore delivered the real active id.)
+    // secondary profile before the real identity resolves. Seeding false (rather than from
+    // profileManager.isPrimaryProfileActive, whose backing StateFlow seeds 1) ensures a secondary
+    // profile is never read as primary before the datastore delivers the real active id.
     private val _uiState = MutableStateFlow(BuiltInProvidersUiState(isPrimaryProfileActive = false))
     val uiState: StateFlow<BuiltInProvidersUiState> = _uiState.asStateFlow()
 
@@ -148,8 +148,8 @@ class BuiltInProvidersViewModel @Inject constructor(
     }
 
     fun toggleCatalog(enabled: Boolean) {
-        // Optimistic UI so the toggle responds immediately (previously it could appear stuck
-        // when no local catalog addon matched the reco host and the launch returned early).
+        // Optimistic UI so the toggle responds immediately even when no local catalog addon
+        // matches the reco host and the launch returns early.
         _uiState.update { it.copy(isCatalogEnabled = enabled) }
         viewModelScope.launch {
             // Bug #1 — mirror locally first so the meta gate flips immediately for this profile.

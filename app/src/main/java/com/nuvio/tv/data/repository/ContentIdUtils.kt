@@ -3,9 +3,7 @@ package com.nuvio.tv.data.repository
 /**
  * Generic content-id parsing helpers shared across the app.
  *
- * Previously these lived alongside Trakt-specific helpers in TraktIdUtils.kt.
- * The Trakt integration has been removed; only the source-agnostic parsing
- * utilities (IMDB / TMDB / numeric extraction) are retained here.
+ * These are source-agnostic parsing utilities (IMDB / TMDB / numeric extraction).
  */
 internal data class ParsedContentIds(
     val trakt: Int? = null,

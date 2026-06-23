@@ -230,7 +230,7 @@ class TrailerService(
                 }
             }
 
-            // FIX 2: backend-FIRST. Try our backend trailer resolver before any direct
+            // Backend-FIRST. Try our backend trailer resolver before any direct
             // YouTube extraction so we don't leak the user's IP/requests to Google. The
             // direct in-app YouTube extractor is now the FALLBACK (only if backend fails
             // or returns nothing).

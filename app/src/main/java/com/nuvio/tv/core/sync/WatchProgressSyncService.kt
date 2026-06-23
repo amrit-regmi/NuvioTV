@@ -86,7 +86,7 @@ class WatchProgressSyncService @Inject constructor(
     }
 
     suspend fun shouldUseSupabaseWatchProgressSync(): Boolean {
-        // Trakt integration removed; Nuvio Sync (Supabase) is always the source.
+        // Nuvio Sync (Supabase) is always the source.
         return true
     }
 

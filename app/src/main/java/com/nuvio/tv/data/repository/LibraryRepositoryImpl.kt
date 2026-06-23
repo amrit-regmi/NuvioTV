@@ -68,7 +68,7 @@ class LibraryRepositoryImpl @Inject constructor(
         }
     }
 
-    // Trakt integration removed; library source is always local (Nuvio sync).
+    // Library source is always local (Nuvio sync).
     override val sourceMode: Flow<LibrarySourceMode> = flowOf(LibrarySourceMode.LOCAL)
         .distinctUntilChanged()
 
@@ -81,10 +81,9 @@ class LibraryRepositoryImpl @Inject constructor(
                     id = saved.id,
                     type = saved.type,
                     name = saved.name,
-                    // Re-home any poster/background/logo persisted against an old reco
-                    // host (e.g. pre-cutover recoengine.regmig.com, now 410 Gone) onto the
-                    // live RecoBackend host so the authed Coil loader can fetch it. Stored
-                    // entries go stale on host changes; fresh catalog/CW images don't.
+                    // Re-home any poster/background/logo persisted against a non-current reco
+                    // host onto the live RecoBackend host so the authed Coil loader can fetch
+                    // it. Stored entries can go stale on host changes; fresh catalog/CW images don't.
                     poster = com.nuvio.tv.core.reco.RecoBackend.rehomeImageUrl(saved.poster),
                     posterShape = saved.posterShape,
                     background = com.nuvio.tv.core.reco.RecoBackend.rehomeImageUrl(saved.background),
@@ -145,7 +144,7 @@ class LibraryRepositoryImpl @Inject constructor(
         }
     }
 
-    // Personal-list management was Trakt-only and has been removed; these are no-ops.
+    // Personal-list management is unavailable; these are no-ops.
     override suspend fun createPersonalList(name: String, description: String?, privacy: TraktListPrivacy) {}
 
     override suspend fun updatePersonalList(

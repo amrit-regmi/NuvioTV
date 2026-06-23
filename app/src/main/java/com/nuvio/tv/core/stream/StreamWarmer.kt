@@ -48,8 +48,8 @@ private const val RESOLVED_URL_TTL_MS = 60 * 60 * 1000L
 private const val RESOLVED_URL_RESUME_INVALIDATE_MS = 90 * 60 * 1000L
 private const val PROBE_TIMEOUT_MS = 2_000L
 // Background warms probe/resolve only the TOP source to limit CDN burst on startup
-// and — critically — to cap TorBox torrent creation at ONE per title open (was 3,
-// which bloated the shared account to 3,600+ torrents → rate-limit cooldown).
+// and — critically — to cap TorBox torrent creation at ONE per title open. Creating
+// more per open bloats the shared account with torrents and triggers rate-limit cooldown.
 // User-initiated stream loading still uses the full streamMaxResults setting; the
 // actual playable-link resolve happens on play for the SELECTED source.
 private const val BACKGROUND_PROBE_COUNT = 1
@@ -518,7 +518,7 @@ class StreamWarmer @Inject constructor(
     // F72 (api_bridge.md): never send `Bearer <CATALOG_SECRET>` to the catalog-addon.
     // Returning null leaves the Authorization header unset so the shared okHttpClient's
     // RecoAuthInterceptor can attach the user's Supabase `Bearer <access_token>` instead
-    // (the baked secret as Bearer is no longer accepted in private mode).
+    // (the baked secret as Bearer is not accepted in private mode).
     private fun catalogAuth(baseUrl: String): String? = null
 
     private fun buildStreamUrl(baseUrl: String, type: String, videoId: String): String {

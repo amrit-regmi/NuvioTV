@@ -135,7 +135,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private var isPlayButtonFocused = false
     private var hideUnreleasedContent = false
-    // Trakt account integration removed: comments and account auth are never available.
+    // No Trakt account integration: comments and account auth are never available.
     private val traktCommentsEnabled = false
     private val traktAuthenticated = false
     private var moreLikeThisSourcePreference = com.nuvio.tv.data.local.MoreLikeThisSourcePreference.TMDB
@@ -398,7 +398,7 @@ class MetaDetailsViewModel @Inject constructor(
                     }
                 )
             } else {
-                // Rating submission previously targeted Trakt, which has been removed.
+                // Rating submission has no available target.
                 _uiState.update { it.copy(isRatingPending = false, showRatingPicker = false) }
                 showMessage("Rating not available", isError = true)
             }

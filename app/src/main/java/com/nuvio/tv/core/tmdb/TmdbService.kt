@@ -283,7 +283,7 @@ class TmdbService @Inject constructor(
                     tmdbApi.getTvDetails(tmdbId, TMDB_API_KEY)
                 val body = response.body() ?: return@runCatching null
                 TmdbImages(
-                    // FIX 1: route enrichment images through our /image proxy so Coil never
+                    // Route enrichment images through our /image proxy so Coil never
                     // hits image.tmdb.org directly (private mode); open mode keeps direct URL.
                     backdropUrl = com.nuvio.tv.core.reco.RecoBackend.proxiedTmdbImageUrl(
                         body.backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" }

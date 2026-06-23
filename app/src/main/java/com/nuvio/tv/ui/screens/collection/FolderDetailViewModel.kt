@@ -828,8 +828,8 @@ class FolderDetailViewModel @Inject constructor(
         }
     }
 
-    // Trakt public-list collection sources are no longer resolved (integration removed).
-    // Existing Trakt sources render as an empty, non-loading tab.
+    // Trakt public-list collection sources are not resolved; such sources render as an
+    // empty, non-loading tab.
     private fun loadTraktSourceForTab(tabIndex: Int, source: TraktCollectionSource, page: Int, append: Boolean) {
         _uiState.update { s ->
             val tabs = s.tabs.toMutableList()

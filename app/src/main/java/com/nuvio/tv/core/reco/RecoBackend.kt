@@ -5,26 +5,22 @@ import com.nuvio.tv.BuildConfig
 /**
  * Single source of truth for the reco / taste-engine backend host.
  *
- * The platform is consolidating onto `hamrocinema.regmig.com` (dropping
- * `recoengine.regmig.com`). The actual cutover happens at deploy time.
+ * The host is defined by `RECO_API_BASE_URL` (debug + release) in
+ * `app/build.gradle.kts`. Everything below derives from it, so that ONE value
+ * sets the host everywhere in the app: all reco API calls (on
+ * [BuildConfig.RECO_API_BASE_URL]), the built-in catalog-addon URL, and every
+ * host-matching check.
  *
- * F32: switch to hamrocinema.regmig.com at deploy — change `RECO_API_BASE_URL`
- * (debug + release) in `app/build.gradle.kts`. Everything below derives from it,
- * so flipping that ONE value flips the host everywhere in the app: all reco API
- * calls (already on [BuildConfig.RECO_API_BASE_URL]), the built-in catalog-addon
- * URL, and every host-matching check.
- *
- * Do NOT hardcode `recoengine.regmig.com` (or any reco host) anywhere else —
- * reference these members instead.
+ * Do NOT hardcode any reco host anywhere else — reference these members instead.
  */
 object RecoBackend {
 
-    /** Full base URL, e.g. `https://recoengine.regmig.com`. The single switchable value. */
+    /** Full base URL of the reco backend. The single switchable value. */
     val baseUrl: String = BuildConfig.RECO_API_BASE_URL
 
     /**
-     * Bare host of [baseUrl], e.g. `recoengine.regmig.com`. Used for host-matching
-     * the built-in catalog-addon and ordering it first.
+     * Bare host of [baseUrl]. Used for host-matching the built-in catalog-addon
+     * and ordering it first.
      */
     val host: String = baseUrl
         .substringAfter("://")
@@ -38,7 +34,7 @@ object RecoBackend {
      * Drop-in replacement base for `https://api.themoviedb.org/3/`. The backend TMDB
      * proxy is local-first + Tor-on-miss + cached, injects the server-side api_key, and
      * requires the user Bearer token (attached by RecoAuthInterceptor since same host).
-     * FIX 1: TmdbService/TmdbApi go through this instead of TMDB directly.
+     * TmdbService/TmdbApi go through this rather than TMDB directly.
      */
     val tmdbProxyBaseUrl: String = "$baseUrl/tmdb/3/"
 
@@ -69,12 +65,11 @@ object RecoBackend {
      * Re-homes a stored image URL that points at the reco `/image` (or
      * `/metadata/images`) proxy onto the CURRENT [baseUrl] host.
      *
-     * Why: library/saved entries persist the poster URL at save time. After the
-     * host cutover (recoengine.regmig.com → hamrocinema.regmig.com, the old host
-     * now 410 Gone) any poster saved against the old host is dead — its host is no
-     * longer [host], so [RecoAuthInterceptor] never attaches the bearer token AND
-     * the old host serves nothing. Freshly-fetched catalog/CW posters are fine
-     * because they always carry the live host; only persisted entries go stale.
+     * Why: library/saved entries persist the poster URL at save time. A poster
+     * persisted against a host other than the current [host] is dead — its host is
+     * not [host], so [RecoAuthInterceptor] never attaches the bearer token AND that
+     * host serves nothing. Freshly-fetched catalog/CW posters are fine because they
+     * always carry the live host; only persisted entries can go stale.
      *
      * This rewrites ONLY reco image-proxy URLs (any scheme/host ending in the
      * `/image/...` or `/metadata/images/...` path) to the live [baseUrl], keeping

@@ -91,7 +91,7 @@ class CatalogRepositoryImpl @Inject constructor(
     // F72 (api_bridge.md): never send `Bearer <CATALOG_SECRET>` to the catalog-addon.
     // Returning null leaves the Authorization header unset so the shared okHttpClient's
     // RecoAuthInterceptor can attach the user's Supabase `Bearer <access_token>` instead
-    // (the baked secret as Bearer is no longer accepted in private mode).
+    // (the baked secret as Bearer is not accepted in private mode).
     private fun catalogAuth(baseUrl: String): String? = null
 
     private fun buildCatalogUrl(

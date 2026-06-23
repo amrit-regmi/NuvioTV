@@ -81,8 +81,8 @@ fun TrailerPlayer(
     val resolvedPool = trailerPlayerPool ?: LocalTrailerPlayerPool.current
 
     // Use the shared pool instance instead of creating a new ExoPlayer per focus.
-    // The pool keeps one ExoPlayer alive across poster focus changes, eliminating
-    // the expensive create/teardown cycle that was the app-launch bottleneck.
+    // The pool keeps one ExoPlayer alive across poster focus changes, avoiding the
+    // expensive per-focus create/teardown cycle.
     val trailerPlayer = remember(trailerUrl, resolvedPool) {
         if (trailerUrl != null) {
             resolvedPool?.acquire()

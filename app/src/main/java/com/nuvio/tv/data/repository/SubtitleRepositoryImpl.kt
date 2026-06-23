@@ -46,8 +46,8 @@ class SubtitleRepositoryImpl @Inject constructor(
         // The warmer pre-fetches ONLY the first subtitle addon (which, in private mode, is the
         // built-in catalog-addon prepended to the list). Treat its result as a contribution from
         // that one addon — NOT a complete answer — so we still query the profile's other subtitle
-        // addons (e.g. OpenSubtitles) and merge. Previously a non-empty warm hit short-circuited
-        // the whole fetch, so only built-in subtitles ever appeared.
+        // addons (e.g. OpenSubtitles) and merge. A non-empty warm hit must NOT short-circuit
+        // the whole fetch, otherwise only built-in subtitles would appear.
         val warmSubtitles: List<Subtitle> = if (filename != null) {
             subtitleWarmer.awaitWarm(filename, videoSize)?.also { cached ->
                 Log.d(TAG, "Subtitle warm hit: ${cached.size} subs for filename=$filename")

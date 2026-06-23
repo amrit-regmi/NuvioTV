@@ -109,7 +109,7 @@ object NetworkModule {
                 val builder = original.newBuilder()
                     .header("User-Agent", "Nuvio/$version")
                     .header("Accept-Language", buildAcceptLanguageHeader())
-                // SECURITY (FIX 2): scope X-Profile-Id to OUR backend only. Sending it to
+                // SECURITY: scope X-Profile-Id to OUR backend only. Sending it to
                 // every host (TMDB/Trakt/skip-intro/ARM/MDBList/etc.) leaks a stable
                 // profile id usable for cross-service correlation. Mirror RecoAuthInterceptor's
                 // host scoping.
@@ -177,7 +177,7 @@ object NetworkModule {
     @Singleton
     @Named("tmdb")
     fun provideTmdbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
-        // FIX 1: route TMDB through our backend proxy (RecoBackend.tmdbProxyBaseUrl,
+        // Route TMDB through our backend proxy (RecoBackend.tmdbProxyBaseUrl,
         // a drop-in for api.themoviedb.org/3/). Uses the SHARED okHttpClient so
         // RecoAuthInterceptor attaches the user Bearer token (same host = our backend);
         // the proxy 401s without it. The server injects the api_key and strips any we send.
@@ -226,8 +226,8 @@ object NetworkModule {
         // F72 (api_bridge.md): do NOT attach `Bearer <CATALOG_SECRET>` here. The shared
         // okHttpClient already carries RecoAuthInterceptor, which attaches the user's
         // Supabase `Authorization: Bearer <access_token>` to catalog-addon (reco-host)
-        // DATA calls. The baked secret as Bearer is no longer sufficient (it was the hole)
-        // and would block the user token (RecoAuthInterceptor skips already-authed requests).
+        // DATA calls. The baked secret as Bearer is not accepted in private mode, and
+        // setting it here would block the user token (RecoAuthInterceptor skips already-authed requests).
         return Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(okHttpClient)
@@ -309,10 +309,10 @@ object NetworkModule {
         retrofit.create(ParentalGuideApi::class.java)
 
     // --- Skip Intro ---
-    // Skip-intro timestamps now come from OUR backend via CatalogAddonApi
-    // (`/catalog-addon/skip/{type}/{id}.json`). The direct third-party providers
-    // (IntroDb / AniSkip / Anime-Skip / ARM) have been removed — no runtime calls
-    // to api.introdb.app / api.aniskip.com / api.anime-skip.com / arm.haglund.dev.
+    // Skip-intro timestamps come from OUR backend via CatalogAddonApi
+    // (`/catalog-addon/skip/{type}/{id}.json`). There are no direct third-party
+    // provider calls (no requests to api.introdb.app / api.aniskip.com /
+    // api.anime-skip.com / arm.haglund.dev).
 
     // --- GitHub Releases API (in-app updates) ---
 

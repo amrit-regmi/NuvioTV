@@ -391,7 +391,7 @@ internal fun HomeViewModel.resolveSavedRowOrderKeys(
                             }
                         }
                 } else {
-                    // Legacy fallback: entry.id was a catalog id, not an addon id/url.
+                    // Fallback for entries whose id is a catalog id rather than an addon id/url.
                     types.forEach { t ->
                         addons.firstNotNullOfOrNull { addon ->
                             addon.catalogs.firstOrNull { it.id == entry.id && it.apiType == t }
@@ -442,7 +442,7 @@ internal fun HomeViewModel.isCatalogDisabled(
     if (disableCatalogKey(addonBaseUrl, type, catalogId, catalogName) in disabledHomeCatalogKeys) {
         return true
     }
-    // Backward compatibility with previously stored keys.
+    // Also match the addon-id-based key form.
     return catalogKey(addonId, type, catalogId) in disabledHomeCatalogKeys
 }
 

@@ -27,8 +27,8 @@ import javax.inject.Singleton
  * Bearer token. The backend ratings table may be EMPTY (e.g. server-side MDBLIST_API_KEY
  * not yet set) → the app degrades gracefully (no extra ratings, never errors).
  *
- * The per-provider visibility toggles (settings) still apply locally, and TmdbService is
- * still used to resolve a tmdb/meta id to an imdb id (the backend key).
+ * The per-provider visibility toggles (settings) apply locally, and TmdbService
+ * resolves a tmdb/meta id to an imdb id (the backend key).
  */
 @Singleton
 class MDBListRepository @Inject constructor(
