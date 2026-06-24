@@ -184,22 +184,33 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
         // into profiles that disabled everything (e.g. a Kids profile whose only enabled row is
         // a reco row not yet populated, or a profile that turned the whole home off).
         //
+        // Kids profiles must never show the unfiltered builtin catalog (no content-rating filter).
+        // Force useBuiltinCatalog=false for any profile whose name contains "kids".
+        val isKidsProfile = profileManager.activeProfile?.name?.lowercase()?.contains("kids") == true
+        val effectiveUseBuiltinCatalog = if (isKidsProfile) false else config.useBuiltinCatalog
+
+        // Reco rows bypass rowOrder — the backend is the single source of truth for which reco
+        // rows appear (via the per-profile reco config). Never filter reco via local rowOrder.
         // Master flags are belt-and-suspenders with per-row `enabled` (the dashboard also
-        // writes those rows disabled): suppress ALL built-in rows when useBuiltinCatalog=false
+        // writes those rows disabled): suppress ALL built-in rows when effectiveUseBuiltinCatalog=false
         // and ALL reco rows when useRecommendations=false, even rows added after the toggle.
         val effectiveRows = config.rowOrder.filter { entry ->
             when (entry.kind.trim().lowercase()) {
-                "builtin" -> config.useBuiltinCatalog
-                "reco" -> config.useRecommendations
+                "builtin" -> effectiveUseBuiltinCatalog
+                "reco" -> false  // reco rows bypass rowOrder — added separately below
                 else -> true
             }
         }
         val resolved = resolveSavedRowOrderKeys(addons, effectiveRows)
+        // Append all reco rows from the backend directly (never from rowOrder).
+        val recoToAdd = if (config.useRecommendations) recoRowKeys else emptyList()
         // Collections aren't part of the dashboard rowOrder; append pinned/remaining
         // collections so they still surface (in their saved-or-default relative spot).
         val collectionKeys = collectionsCache.map { "collection_${it.id}" }
         val resolvedSet = resolved.toSet()
-        val mergedOrder = resolved + collectionKeys.filterNot { it in resolvedSet }
+        val mergedOrder = resolved +
+            recoToAdd.filterNot { it in resolvedSet } +
+            collectionKeys.filterNot { it in resolvedSet }
         synchronized(catalogStateLock) {
             catalogOrder.clear()
             catalogOrder.addAll(mergedOrder)

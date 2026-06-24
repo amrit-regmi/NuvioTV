@@ -123,6 +123,13 @@ class HomeCatalogSettingsSyncService @Inject constructor(
     @Volatile
     var isSyncingFromRemote: Boolean = false
 
+    @Volatile
+    private var completedInitialPull: Unit? = null
+
+    /** True once [pullRowOrderFromRemote] has returned at least once (success or failure). */
+    val isInitialPullComplete: Boolean
+        get() = completedInitialPull != null
+
     private var pushJob: Job? = null
 
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
@@ -256,6 +263,8 @@ class HomeCatalogSettingsSyncService @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull rowOrder", e)
             null
+        } finally {
+            completedInitialPull = Unit
         }
     }
 
