@@ -146,16 +146,15 @@ internal fun RecoRow.recoContentType(): String {
 private fun RecoRow.toCatalogRow(index: Int = 0): CatalogRow {
     val contentType = recoContentType()
     val type = if (contentType == "series") ContentType.SERIES else ContentType.MOVIE
-    // Append a content-type suffix so the movie and series variants of the same reco
-    // reason (e.g. "Top picks for you") are visually distinct on the home screen.
-    val typeSuffix = if (contentType == "series") "Series" else "Movies"
-    val displayLabel = if (label.contains(typeSuffix, ignoreCase = true)) label else "$label - $typeSuffix"
+    // Strip any backend-appended type suffix (e.g. " — Movies", " — Series") so the
+    // rendering layer adds exactly one suffix uniformly for all row types.
+    val cleanLabel = label.replace(Regex("""\s*[—–\-]\s*(Movies|Series)\s*$""", RegexOption.IGNORE_CASE), "").trim()
     return CatalogRow(
         addonId = "reco_engine",
         addonName = "For You",
         addonBaseUrl = BuildConfig.RECO_API_BASE_URL,
         catalogId = "${reason_type}_$index",
-        catalogName = displayLabel,
+        catalogName = cleanLabel,
         type = type,
         rawType = contentType,
         items = items.map { it.toMetaPreview() },
