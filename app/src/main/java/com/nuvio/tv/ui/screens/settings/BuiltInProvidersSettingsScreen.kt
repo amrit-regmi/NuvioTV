@@ -159,6 +159,20 @@ internal fun BuiltInProvidersSettingsContent(
                         }
                     }
 
+                    item(key = "builtin_subtitles_section") {
+                        BuiltInSectionLabel(text = "Subtitles")
+                    }
+
+                    item(key = "builtin_subtitles_toggle") {
+                        SettingsToggleRow(
+                            title = "Use built-in subtitle provider",
+                            subtitle = "Fetch subtitles from the private backend. Mirrors the subtitle toggle on the mobile app.",
+                            checked = uiState.useBuiltinSubtitles,
+                            enabled = true,
+                            onToggle = { viewModel.toggleSubtitles(!uiState.useBuiltinSubtitles) }
+                        )
+                    }
+
                     item(key = "builtin_stream_engine_section") {
                         BuiltInSectionLabel(text = "Stream Engine")
                     }

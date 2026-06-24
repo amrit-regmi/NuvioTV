@@ -534,6 +534,55 @@ class HomeCatalogSettingsSyncService @Inject constructor(
         }
     }
 
+    // ── Subtitle-provider toggle ↔ nuvio_profile_settings.useBuiltinSubtitles ─────────────
+    // The mobile app uses the boolean key `useBuiltinSubtitles` in the same
+    // nuvio_profile_settings.settings_json blob that `streamProvider` lives in.
+    // The TV reads and writes the same key so the subtitle-provider choice stays consistent
+    // across TV + mobile (true = use backend subtitles; false = skip built-in subtitles).
+
+    /**
+     * Reads the active profile's subtitle-provider flag from nuvio_profile_settings.
+     * Absent = true (built-in subtitles on by default). Returns null on error so callers
+     * keep the current local value rather than flipping it.
+     */
+    suspend fun pullSubtitleProviderEnabled(): Boolean? = withContext(Dispatchers.IO) {
+        try {
+            val profileId = profileManager.activeProfileId.value
+            val blob = fetchProfileSettingsBlob(profileId) ?: return@withContext true
+            (blob["useBuiltinSubtitles"] as? JsonPrimitive)?.booleanOrNull ?: true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to pull useBuiltinSubtitles", e)
+            null
+        }
+    }
+
+    /**
+     * Writes the subtitle-provider toggle to nuvio_profile_settings.useBuiltinSubtitles.
+     * Uses a read-merge-write so every sibling key (streamProvider, etc.) is preserved.
+     */
+    suspend fun pushSubtitleProviderEnabled(enabled: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val profileId = profileManager.activeProfileId.value
+            val existing = fetchProfileSettingsBlob(profileId)
+            val merged = buildJsonObject {
+                existing?.forEach { (key, value) -> put(key, value) }
+                put("useBuiltinSubtitles", JsonPrimitive(enabled))
+            }
+            val params = buildJsonObject {
+                put("p_profile_id", profileId)
+                put("p_settings_json", merged)
+            }
+            withJwtRefreshRetry {
+                postgrest.rpc("sync_push_profile_settings_blob", params)
+            }
+            Log.d(TAG, "Push useBuiltinSubtitles=$enabled success profile=$profileId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Push useBuiltinSubtitles failed", e)
+            Result.failure(e)
+        }
+    }
+
     /** Reads the raw nuvio_profile_settings settings_json blob for [profileId] (or null). */
     private suspend fun fetchProfileSettingsBlob(profileId: Int): JsonObject? {
         val params = buildJsonObject { put("p_profile_id", profileId) }

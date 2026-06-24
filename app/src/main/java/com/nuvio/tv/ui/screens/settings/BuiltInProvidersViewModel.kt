@@ -34,6 +34,7 @@ data class BuiltInProvidersUiState(
     // secondary profile never momentarily sees the device-profile section.
     val isPrimaryProfileActive: Boolean = false,
     val streamEngineEnabled: Boolean = false,
+    val useBuiltinSubtitles: Boolean = true,
     val useAutoDetectedProfile: Boolean = true,
     val deviceProfile: DeviceProfileDto? = null,
     val editMaxResolution: String = "2160p",
@@ -130,6 +131,15 @@ class BuiltInProvidersViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            // Pull the subtitle-provider toggle (nuvio_profile_settings.useBuiltinSubtitles)
+            // written by the mobile app so the TV shows the same on/off state across devices.
+            // Null = pull failed → keep the default (true = subtitles on).
+            val subtitlesEnabled = homeCatalogSettingsSyncService.pullSubtitleProviderEnabled()
+            if (subtitlesEnabled != null) {
+                _uiState.update { it.copy(useBuiltinSubtitles = subtitlesEnabled) }
+            }
+        }
+        viewModelScope.launch {
             // Hide/lock the toggle when the super admin has made personalization unavailable.
             featureAvailabilityManager.features.collectLatest { features ->
                 val available = features[com.nuvio.tv.core.feature.FeatureKeys.PERSONALIZATION] ?: true
@@ -179,6 +189,15 @@ class BuiltInProvidersViewModel @Inject constructor(
             // Bug #2 — also mirror to the shared per-profile store the web /configure Stream
             // Providers section reads (nuvio_profile_settings.streamProvider), so app↔web agree.
             homeCatalogSettingsSyncService.pushStreamProviderEnabled(enabled)
+        }
+    }
+
+    fun toggleSubtitles(enabled: Boolean) {
+        // Optimistic UI; persist to nuvio_profile_settings.useBuiltinSubtitles (the same key the
+        // mobile app writes) so the subtitle-provider choice is consistent across TV + mobile.
+        _uiState.update { it.copy(useBuiltinSubtitles = enabled) }
+        viewModelScope.launch {
+            homeCatalogSettingsSyncService.pushSubtitleProviderEnabled(enabled)
         }
     }
 
