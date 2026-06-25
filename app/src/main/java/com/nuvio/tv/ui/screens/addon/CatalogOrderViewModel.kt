@@ -387,8 +387,13 @@ class CatalogOrderViewModel @Inject constructor(
             val enabled = !item.isDisabled
             when {
                 key.startsWith("reco_engine_") -> {
-                    // Reco rows are not stored in rowOrder — the backend controls which reco rows
-                    // appear and in what order via the per-profile reco config.
+                    // key form: reco_engine_{rawType}_{reason_type}_{index}
+                    val rest = key.removePrefix("reco_engine_")
+                    val rawType = if (rest.startsWith("series_")) "series" else "movie"
+                    val id = rest.removePrefix("${rawType}_").substringBeforeLast("_")
+                    if (id.isNotBlank()) {
+                        result.add(HomeRowOrderEntry(id = id, kind = "reco", type = rawType, enabled = enabled))
+                    }
                 }
                 key.startsWith("collection_") -> {
                     // Collections are not part of the dashboard rowOrder model; skip.

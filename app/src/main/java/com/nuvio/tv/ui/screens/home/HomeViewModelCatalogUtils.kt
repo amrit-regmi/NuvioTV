@@ -184,32 +184,53 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
         // into profiles that disabled everything (e.g. a Kids profile whose only enabled row is
         // a reco row not yet populated, or a profile that turned the whole home off).
         //
-        // Kids profiles must never show the unfiltered builtin catalog (no content-rating filter).
-        // Force useBuiltinCatalog=false for any profile whose name contains "kids".
-        val isKidsProfile = profileManager.activeProfile?.name?.lowercase()?.contains("kids") == true
-        val effectiveUseBuiltinCatalog = if (isKidsProfile) false else config.useBuiltinCatalog
-
-        // Reco rows bypass rowOrder — the backend is the single source of truth for which reco
-        // rows appear (via the per-profile reco config). Never filter reco via local rowOrder.
         // Master flags are belt-and-suspenders with per-row `enabled` (the dashboard also
-        // writes those rows disabled): suppress ALL built-in rows when effectiveUseBuiltinCatalog=false
+        // writes those rows disabled): suppress ALL built-in rows when useBuiltinCatalog=false
         // and ALL reco rows when useRecommendations=false, even rows added after the toggle.
         val effectiveRows = config.rowOrder.filter { entry ->
             when (entry.kind.trim().lowercase()) {
-                "builtin" -> effectiveUseBuiltinCatalog
-                "reco" -> false  // reco rows bypass rowOrder — added separately below
+                "builtin" -> config.useBuiltinCatalog
+                "reco" -> config.useRecommendations && entry.enabled
                 else -> true
             }
         }
         val resolved = resolveSavedRowOrderKeys(addons, effectiveRows)
-        // Append all reco rows from the backend directly (never from rowOrder).
-        val recoToAdd = if (config.useRecommendations) recoRowKeys else emptyList()
         // Collections aren't part of the dashboard rowOrder; append pinned/remaining
         // collections so they still surface (in their saved-or-default relative spot).
         val collectionKeys = collectionsCache.map { "collection_${it.id}" }
         val resolvedSet = resolved.toSet()
+        // Append reco rows for types NOT yet represented in rowOrder (new reason types like
+        // also_liked, genre_theme, people_affinity that appeared after the last rowOrder save).
+        // Build the set of (id, type) pairs that rowOrder already covers for reco.
+        val knownRecoIdType = config.rowOrder
+            .filter { it.kind.trim().lowercase() == "reco" }
+            .flatMap { entry -> rowOrderTypes(entry.type).map { t -> "${entry.id}|$t" } }
+            .toSet()
+        val newRecoKeys = if (config.useRecommendations) {
+            recoRowKeys.filter { rk ->
+                if (rk in resolvedSet) return@filter false
+                val rest = rk.removePrefix("reco_engine_")
+                val rawType = if (rest.startsWith("series_")) "series" else "movie"
+                val id = rest.removePrefix("${rawType}_").substringBeforeLast("_")
+                "${id}|${rawType}" !in knownRecoIdType
+            }
+        } else emptyList()
+        // Append installed external addon catalog rows not tracked in the DB rowOrder.
+        // The backend only writes builtin/reco entries — user-installed addons (Cinemeta etc.)
+        // are profile-specific and unknown to the backend, so they must be appended here.
+        val backendHost = com.nuvio.tv.core.reco.RecoBackend.host
+        val installedAddonKeys = addons
+            .filter { addon -> !addon.baseUrl.contains(backendHost, ignoreCase = true) }
+            .flatMap { addon ->
+                addon.catalogs
+                    .filter { it.shouldShowOnHome() && !isCatalogDisabled(addon.baseUrl, addon.id, it.apiType, it.id, it.name) }
+                    .map { catalog -> catalogKey(addon.id, catalog.apiType, catalog.id) }
+            }
+            .filterNot { it in resolvedSet }
+            .distinct()
         val mergedOrder = resolved +
-            recoToAdd.filterNot { it in resolvedSet } +
+            newRecoKeys +
+            installedAddonKeys +
             collectionKeys.filterNot { it in resolvedSet }
         synchronized(catalogStateLock) {
             catalogOrder.clear()

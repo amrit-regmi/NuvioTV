@@ -215,26 +215,11 @@ class AuthManager @Inject constructor(
     }
 
     /**
-     * QR login RPCs currently require an authenticated Supabase session.
-     * This creates/reuses an anonymous session only for the QR flow while
-     * keeping app-level auth state exposed as SignedOut until a full account exists.
+     * The QR login RPCs (start/poll) are SECURITY DEFINER and accessible with the
+     * anon key — no authenticated session required. Anonymous sign-in is disabled on
+     * this backend, so just return success and let the RPCs use the anon key directly.
      */
-    suspend fun ensureQrSessionAuthenticated(): Result<Unit> {
-        val user = auth.currentUserOrNull()
-        val hasToken = auth.currentAccessTokenOrNull() != null
-
-        if (user != null && hasToken) {
-            return Result.success(Unit)
-        }
-
-        return try {
-            auth.signInAnonymously()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "QR anonymous sign in failed", e)
-            Result.failure(e)
-        }
-    }
+    suspend fun ensureQrSessionAuthenticated(): Result<Unit> = Result.success(Unit)
 
     suspend fun signOut(explicit: Boolean = true) {
         if (explicit) {
@@ -393,17 +378,17 @@ class AuthManager @Inject constructor(
 
     suspend fun exchangeTvLoginSession(code: String, deviceNonce: String): Result<Unit> {
         return try {
-            val token = auth.currentAccessTokenOrNull()
-                ?: return Result.failure(Exception("Not authenticated"))
             val payload = buildJsonObject {
                 put("code", code)
                 put("device_nonce", deviceNonce)
             }.toString()
             val backend = supabaseProvider.selectedBackend
+            // No user token needed — TV is unauthenticated (that's why we're exchanging).
+            // Security comes from the code+nonce pair; anon key is sufficient.
             val request = Request.Builder()
                 .url("${backend.normalizedSupabaseUrl}/functions/v1/tv-logins-exchange")
                 .header("apikey", backend.anonKey)
-                .header("Authorization", "Bearer $token")
+                .header("Authorization", "Bearer ${backend.anonKey}")
                 .post(payload.toRequestBody("application/json".toMediaType()))
                 .build()
             val body = withContext(Dispatchers.IO) {
