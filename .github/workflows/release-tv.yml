@@ -93,7 +93,7 @@ jobs:
           # Appended last, so this org.gradle.jvmargs wins (last occurrence in a .properties
           # file overrides the box's tight -Xmx1g/-XX:MaxMetaspaceSize=256m line). CI-only —
           # the runner has ~16GB, so give KSP/R8 room (default GC is fine with more heap).
-          echo 'org.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8' >> gradle.properties
+          printf '\norg.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\n' >> gradle.properties
 
       - name: Provision signing material
         env:
