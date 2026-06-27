@@ -439,6 +439,18 @@ class PlayerSettingsDataStore @Inject constructor(
     private fun store(profileId: Int = profileManager.activeProfileId.value) =
         factory.get(profileId, FEATURE)
 
+    /**
+     * Type-tolerant read. A settings-sync import (ProfileSettingsSyncService) shares the
+     * same "player_settings" DataStore and can write a value under the wrong type (e.g. an
+     * int-typed subtitle/stream key encoded as a String in the remote blob). A typed read
+     * via `prefs[intKey]` then throws ClassCastException inside the read-flow .map { } and
+     * crashes the app. Reading via .safe() swallows that mismatch so the existing
+     * `?: default` fallback kicks in; correctly-typed values behave identically.
+     */
+    private inline fun <reified T> androidx.datastore.preferences.core.Preferences.safe(
+        key: androidx.datastore.preferences.core.Preferences.Key<T>
+    ): T? = this.asMap()[key] as? T
+
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Keys
@@ -764,163 +776,163 @@ class PlayerSettingsDataStore @Inject constructor(
         factory.get(pid, FEATURE).data.onStart { migrateProfile(pid) }
     }.map { prefs ->
             PlayerSettings(
-                playerPreference = prefs[playerPreferenceKey]?.let {
+                playerPreference = prefs.safe(playerPreferenceKey)?.let {
                     runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
                 } ?: PlayerPreference.INTERNAL,
-                internalPlayerEngine = prefs[internalPlayerEngineKey]?.let {
+                internalPlayerEngine = prefs.safe(internalPlayerEngineKey)?.let {
                     runCatching { InternalPlayerEngine.valueOf(it) }.getOrDefault(InternalPlayerEngine.EXOPLAYER)
                 } ?: InternalPlayerEngine.EXOPLAYER,
-                autoSwitchInternalPlayerOnError = prefs[autoSwitchInternalPlayerOnErrorKey] ?: false,
-                useLibass = prefs[useLibassKey] ?: false,
-                libassRenderType = prefs[libassRenderTypeKey]?.let {
+                autoSwitchInternalPlayerOnError = prefs.safe(autoSwitchInternalPlayerOnErrorKey) ?: false,
+                useLibass = prefs.safe(useLibassKey) ?: false,
+                libassRenderType = prefs.safe(libassRenderTypeKey)?.let {
                     try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
                 } ?: LibassRenderType.OVERLAY_OPEN_GL,
-                decoderPriority = prefs[decoderPriorityKey] ?: 1,
+                decoderPriority = prefs.safe(decoderPriorityKey) ?: 1,
                 downmixEnabled =
-                    prefs[downmixEnabledKey]
+                    prefs.safe(downmixEnabledKey)
                         ?: (
-                            prefs[audioOutputChannelsKey] != null ||
-                                prefs[maintainOriginalAudioOnDownmixKey] != null ||
-                                prefs[downmixNormalizationEnabledLegacyKey] != null
+                            prefs.safe(audioOutputChannelsKey) != null ||
+                                prefs.safe(maintainOriginalAudioOnDownmixKey) != null ||
+                                prefs.safe(downmixNormalizationEnabledLegacyKey) != null
                             ),
                 audioOutputChannels = AudioOutputChannels.fromSettingValue(
-                    prefs[audioOutputChannelsKey]
+                    prefs.safe(audioOutputChannelsKey)
                 ),
                 maintainOriginalAudioOnDownmix =
-                    prefs[maintainOriginalAudioOnDownmixKey]
-                        ?: !(prefs[downmixNormalizationEnabledLegacyKey] ?: false),
-                tunnelingEnabled = prefs[tunnelingEnabledKey] ?: false,
-                forceOpticalPassthrough = prefs[forceOpticalPassthroughKey] ?: false,
-                skipSilence = prefs[skipSilenceKey] ?: false,
-                audioAmplificationDb = (prefs[audioAmplificationDbKey] ?: 0).coerceIn(
+                    prefs.safe(maintainOriginalAudioOnDownmixKey)
+                        ?: !(prefs.safe(downmixNormalizationEnabledLegacyKey) ?: false),
+                tunnelingEnabled = prefs.safe(tunnelingEnabledKey) ?: false,
+                forceOpticalPassthrough = prefs.safe(forceOpticalPassthroughKey) ?: false,
+                skipSilence = prefs.safe(skipSilenceKey) ?: false,
+                audioAmplificationDb = (prefs.safe(audioAmplificationDbKey) ?: 0).coerceIn(
                     AUDIO_AMPLIFICATION_DB_MIN,
                     AUDIO_AMPLIFICATION_DB_MAX
                 ),
-                centerMixLevelDb = (prefs[centerMixLevelDbKey] ?: 0).coerceIn(
+                centerMixLevelDb = (prefs.safe(centerMixLevelDbKey) ?: 0).coerceIn(
                     CENTER_MIX_LEVEL_DB_MIN,
                     CENTER_MIX_LEVEL_DB_MAX
                 ),
-                persistAudioAmplification = prefs[persistAudioAmplificationKey] ?: false,
-                rememberAudioDelayPerDevice = prefs[rememberAudioDelayPerDeviceKey] ?: true,
+                persistAudioAmplification = prefs.safe(persistAudioAmplificationKey) ?: false,
+                rememberAudioDelayPerDevice = prefs.safe(rememberAudioDelayPerDeviceKey) ?: true,
                 preferredAudioLanguage = normalizeSelectableLanguageCode(
-                    prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.DEVICE
+                    prefs.safe(preferredAudioLanguageKey) ?: AudioLanguageOption.DEVICE
                 ),
-                secondaryPreferredAudioLanguage = prefs[secondaryPreferredAudioLanguageKey]
+                secondaryPreferredAudioLanguage = prefs.safe(secondaryPreferredAudioLanguageKey)
                     ?.let(::normalizeSecondaryAudioLanguageCode),
-                loadingOverlayEnabled = prefs[loadingOverlayEnabledKey] ?: true,
-                showPlayerLoadingStatus = prefs[showPlayerLoadingStatusKey] ?: true,
-                pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
-                osdClockEnabled = prefs[osdClockEnabledKey] ?: true,
-                skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
-                parentalGuideEnabled = prefs[parentalGuideEnabledKey] ?: true,
-                autoSkipSegmentTypes = prefs[autoSkipSegmentTypesKey]
+                loadingOverlayEnabled = prefs.safe(loadingOverlayEnabledKey) ?: true,
+                showPlayerLoadingStatus = prefs.safe(showPlayerLoadingStatusKey) ?: true,
+                pauseOverlayEnabled = prefs.safe(pauseOverlayEnabledKey) ?: true,
+                osdClockEnabled = prefs.safe(osdClockEnabledKey) ?: true,
+                skipIntroEnabled = prefs.safe(skipIntroEnabledKey) ?: true,
+                parentalGuideEnabled = prefs.safe(parentalGuideEnabledKey) ?: true,
+                autoSkipSegmentTypes = prefs.safe(autoSkipSegmentTypesKey)
                     ?.mapNotNull(AutoSkipSegmentType::fromStoredValue)
                     ?.toSet()
                     ?: emptySet(),
-                dv5ToDv81Enabled = prefs[dv5ToDv81EnabledKey] ?: false,
-                dv7ToDv81PreserveMappingEnabled = prefs[dv7ToDv81PreserveMappingEnabledKey] ?: false,
+                dv5ToDv81Enabled = prefs.safe(dv5ToDv81EnabledKey) ?: false,
+                dv7ToDv81PreserveMappingEnabled = prefs.safe(dv7ToDv81PreserveMappingEnabledKey) ?: false,
                 dv7HandlingMode = when {
-                    prefs[dv7HandlingModeKey] != null ->
-                        Dv7HandlingMode.fromStoredString(prefs[dv7HandlingModeKey])
-                    prefs[legacyMapDv7ToHevcKey] == true -> Dv7HandlingMode.HDR10_BASE_LAYER
+                    prefs.safe(dv7HandlingModeKey) != null ->
+                        Dv7HandlingMode.fromStoredString(prefs.safe(dv7HandlingModeKey))
+                    prefs.safe(legacyMapDv7ToHevcKey) == true -> Dv7HandlingMode.HDR10_BASE_LAYER
                     else -> Dv7HandlingMode.AUTO
                 },
-                dv7LibdoviModeOverride = (prefs[dv7LibdoviModeOverrideKey] ?: -1).coerceIn(-1, 4),
-                stripHdr10PlusSei = prefs[stripHdr10PlusSeiKey] ?: false,
-                mpvHardwareDecodeMode = parseMpvHardwareDecodeMode(prefs[mpvHardwareDecodeModeKey]),
-                frameRateMatchingMode = prefs[frameRateMatchingModeKey]?.let {
+                dv7LibdoviModeOverride = (prefs.safe(dv7LibdoviModeOverrideKey) ?: -1).coerceIn(-1, 4),
+                stripHdr10PlusSei = prefs.safe(stripHdr10PlusSeiKey) ?: false,
+                mpvHardwareDecodeMode = parseMpvHardwareDecodeMode(prefs.safe(mpvHardwareDecodeModeKey)),
+                frameRateMatchingMode = prefs.safe(frameRateMatchingModeKey)?.let {
                     runCatching { FrameRateMatchingMode.valueOf(it) }.getOrNull()
-                } ?: if (prefs[frameRateMatchingKey] == true) FrameRateMatchingMode.START_STOP else FrameRateMatchingMode.OFF,
-                resolutionMatchingEnabled = prefs[resolutionMatchingEnabledKey] ?: false,
-                streamAutoPlayMode = prefs[streamAutoPlayModeKey]?.let {
+                } ?: if (prefs.safe(frameRateMatchingKey) == true) FrameRateMatchingMode.START_STOP else FrameRateMatchingMode.OFF,
+                resolutionMatchingEnabled = prefs.safe(resolutionMatchingEnabledKey) ?: false,
+                streamAutoPlayMode = prefs.safe(streamAutoPlayModeKey)?.let {
                     runCatching { StreamAutoPlayMode.valueOf(it) }.getOrDefault(StreamAutoPlayMode.MANUAL)
                 } ?: StreamAutoPlayMode.MANUAL,
-                streamAutoPlaySource = prefs[streamAutoPlaySourceKey]?.let {
+                streamAutoPlaySource = prefs.safe(streamAutoPlaySourceKey)?.let {
                     runCatching { StreamAutoPlaySource.valueOf(it) }.getOrDefault(StreamAutoPlaySource.ALL_SOURCES)
                 } ?: StreamAutoPlaySource.ALL_SOURCES,
-                streamAutoPlaySelectedAddons = prefs[streamAutoPlaySelectedAddonsKey] ?: emptySet(),
-                streamAutoPlaySelectedPlugins = prefs[streamAutoPlaySelectedPluginsKey] ?: emptySet(),
-                streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
-                streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
+                streamAutoPlaySelectedAddons = prefs.safe(streamAutoPlaySelectedAddonsKey) ?: emptySet(),
+                streamAutoPlaySelectedPlugins = prefs.safe(streamAutoPlaySelectedPluginsKey) ?: emptySet(),
+                streamAutoPlayRegex = prefs.safe(streamAutoPlayRegexKey) ?: "",
+                streamAutoPlayNextEpisodeEnabled = prefs.safe(streamAutoPlayNextEpisodeEnabledKey) ?: false,
                 streamAutoPlayPreferBingeGroupForNextEpisode =
-                    prefs[streamAutoPlayPreferBingeGroupForNextEpisodeKey] ?: true,
+                    prefs.safe(streamAutoPlayPreferBingeGroupForNextEpisodeKey) ?: true,
                 streamAutoPlayReuseBingeGroup =
-                    prefs[streamAutoPlayReuseBingeGroupKey] ?: true,
+                    prefs.safe(streamAutoPlayReuseBingeGroupKey) ?: true,
                 streamAutoPlayTimeoutSeconds = PlayerSettings.applyLegacyTimeoutSentinelMigration(
-                    prefs[streamAutoPlayTimeoutSecondsKey]
+                    prefs.safe(streamAutoPlayTimeoutSecondsKey)
                 ),
-                stillWatchingEnabled = prefs[stillWatchingEnabledKey] ?: false,
-                stillWatchingEpisodeThreshold = prefs[stillWatchingEpisodeThresholdKey]
+                stillWatchingEnabled = prefs.safe(stillWatchingEnabledKey) ?: false,
+                stillWatchingEpisodeThreshold = prefs.safe(stillWatchingEpisodeThresholdKey)
                     ?.coerceIn(
                         PlayerSettings.MIN_STILL_WATCHING_EPISODE_THRESHOLD,
                         PlayerSettings.MAX_STILL_WATCHING_EPISODE_THRESHOLD
                     )
                     ?: PlayerSettings.DEFAULT_STILL_WATCHING_EPISODE_THRESHOLD,
-                nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
+                nextEpisodeThresholdMode = prefs.safe(nextEpisodeThresholdModeKey)?.let {
                     runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
                 } ?: NextEpisodeThresholdMode.PERCENTAGE,
                 nextEpisodeThresholdPercent = normalizeHalfStep(
-                    value = prefs[nextEpisodeThresholdPercentKey]
-                        ?: prefs[nextEpisodeThresholdPercentLegacyKey]?.toFloat()
+                    value = prefs.safe(nextEpisodeThresholdPercentKey)
+                        ?: prefs.safe(nextEpisodeThresholdPercentLegacyKey)?.toFloat()
                         ?: 99f,
                     min = 97f,
                     max = 100f
                 ),
                 nextEpisodeThresholdMinutesBeforeEnd = normalizeHalfStep(
-                    value = prefs[nextEpisodeThresholdMinutesBeforeEndKey]
-                        ?: prefs[nextEpisodeThresholdMinutesBeforeEndLegacyKey]?.toFloat()
+                    value = prefs.safe(nextEpisodeThresholdMinutesBeforeEndKey)
+                        ?: prefs.safe(nextEpisodeThresholdMinutesBeforeEndLegacyKey)?.toFloat()
                         ?: 2f,
                     min = 0f,
                     max = 3.5f
                 ),
-                streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
-                streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
-                externalPlayerForwardSubtitles = prefs[externalPlayerForwardSubtitlesKey] ?: false,
-                subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
-                vodCacheEnabled = prefs[vodCacheEnabledKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_ENABLED,
-                vodCacheSizeMode = prefs[vodCacheSizeModeKey]?.let {
+                streamReuseLastLinkEnabled = prefs.safe(streamReuseLastLinkEnabledKey) ?: false,
+                streamReuseLastLinkCacheHours = (prefs.safe(streamReuseLastLinkCacheHoursKey) ?: 24).coerceIn(1, 168),
+                externalPlayerForwardSubtitles = prefs.safe(externalPlayerForwardSubtitlesKey) ?: false,
+                subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs.safe(subtitleOrganizationModeKey)),
+                vodCacheEnabled = prefs.safe(vodCacheEnabledKey) ?: PlayerSettings.DEFAULT_VOD_CACHE_ENABLED,
+                vodCacheSizeMode = prefs.safe(vodCacheSizeModeKey)?.let {
                     runCatching { VodCacheSizeMode.valueOf(it) }.getOrDefault(PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE)
                 } ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE,
-                vodCacheSizeMb = (prefs[vodCacheSizeMbKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB).coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB),
-                useParallelConnections = prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS,
-                bufferEngineEnabled = prefs[bufferEngineEnabledKey] ?: false,
-                parallelNetworkEnabled = prefs[parallelNetworkEnabledKey] ?: false,
-                allowLargeTargetBuffer = prefs[allowLargeTargetBufferKey] ?: PlayerSettings.DEFAULT_ALLOW_LARGE_TARGET_BUFFER,
-                bufferBudgetManaged = prefs[bufferBudgetManagedKey] ?: PlayerSettings.DEFAULT_BUFFER_BUDGET_MANAGED,
-                parallelConnectionCount = (prefs[parallelConnectionCountKey] ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceIn(PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT, PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT),
-                parallelChunkSizeMb = (prefs[parallelChunkSizeMbKey] ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB).coerceIn(PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB, PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB),
-                addonSubtitleStartupMode = parseAddonSubtitleStartupMode(prefs[addonSubtitleStartupModeKey]),
-                enableBufferLogs = prefs[enableBufferLogsKey] ?: false,
-                resizeMode = (prefs[resizeModeKey] ?: 0).coerceIn(0, 4),
+                vodCacheSizeMb = (prefs.safe(vodCacheSizeMbKey) ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB).coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB),
+                useParallelConnections = prefs.safe(useParallelConnectionsKey) ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS,
+                bufferEngineEnabled = prefs.safe(bufferEngineEnabledKey) ?: false,
+                parallelNetworkEnabled = prefs.safe(parallelNetworkEnabledKey) ?: false,
+                allowLargeTargetBuffer = prefs.safe(allowLargeTargetBufferKey) ?: PlayerSettings.DEFAULT_ALLOW_LARGE_TARGET_BUFFER,
+                bufferBudgetManaged = prefs.safe(bufferBudgetManagedKey) ?: PlayerSettings.DEFAULT_BUFFER_BUDGET_MANAGED,
+                parallelConnectionCount = (prefs.safe(parallelConnectionCountKey) ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceIn(PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT, PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT),
+                parallelChunkSizeMb = (prefs.safe(parallelChunkSizeMbKey) ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB).coerceIn(PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB, PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB),
+                addonSubtitleStartupMode = parseAddonSubtitleStartupMode(prefs.safe(addonSubtitleStartupModeKey)),
+                enableBufferLogs = prefs.safe(enableBufferLogsKey) ?: false,
+                resizeMode = (prefs.safe(resizeModeKey) ?: 0).coerceIn(0, 4),
                 subtitleStyle = SubtitleStyleSettings(
                     preferredLanguage = normalizeSubtitlePreferredLanguageForRead(
-                        prefs[subtitlePreferredLanguageKey],
-                        prefs[subtitleSecondaryLanguageKey]
+                        prefs.safe(subtitlePreferredLanguageKey),
+                        prefs.safe(subtitleSecondaryLanguageKey)
                     ),
-                    secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey]
+                    secondaryPreferredLanguage = prefs.safe(subtitleSecondaryLanguageKey)
                         ?.let(::normalizeSelectableLanguageCode)
                         ?.takeUnless { it == SUBTITLE_LANGUAGE_FORCED },
-                    useForcedSubtitles = (prefs[subtitleUseForcedSubtitlesKey] ?: false) ||
-                        prefs[subtitlePreferredLanguageKey]?.let(::normalizeSelectableLanguageCode) == SUBTITLE_LANGUAGE_FORCED ||
-                        prefs[subtitleSecondaryLanguageKey]?.let(::normalizeSelectableLanguageCode) == SUBTITLE_LANGUAGE_FORCED,
-                    showOnlyPreferredLanguages = prefs[subtitleShowOnlyPreferredLanguagesKey] ?: false,
-                    size = prefs[subtitleSizeKey] ?: 100,
-                    verticalOffset = prefs[subtitleVerticalOffsetKey] ?: 5,
-                    bold = prefs[subtitleBoldKey] ?: false,
-                    textColor = prefs[subtitleTextColorKey] ?: Color.White.toArgb(),
-                    backgroundColor = prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb(),
-                    outlineEnabled = prefs[subtitleOutlineEnabledKey] ?: true,
-                    outlineColor = prefs[subtitleOutlineColorKey] ?: Color.Black.toArgb(),
-                    outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2
+                    useForcedSubtitles = (prefs.safe(subtitleUseForcedSubtitlesKey) ?: false) ||
+                        prefs.safe(subtitlePreferredLanguageKey)?.let(::normalizeSelectableLanguageCode) == SUBTITLE_LANGUAGE_FORCED ||
+                        prefs.safe(subtitleSecondaryLanguageKey)?.let(::normalizeSelectableLanguageCode) == SUBTITLE_LANGUAGE_FORCED,
+                    showOnlyPreferredLanguages = prefs.safe(subtitleShowOnlyPreferredLanguagesKey) ?: false,
+                    size = prefs.safe(subtitleSizeKey) ?: 100,
+                    verticalOffset = prefs.safe(subtitleVerticalOffsetKey) ?: 5,
+                    bold = prefs.safe(subtitleBoldKey) ?: false,
+                    textColor = prefs.safe(subtitleTextColorKey) ?: Color.White.toArgb(),
+                    backgroundColor = prefs.safe(subtitleBackgroundColorKey) ?: Color.Transparent.toArgb(),
+                    outlineEnabled = prefs.safe(subtitleOutlineEnabledKey) ?: true,
+                    outlineColor = prefs.safe(subtitleOutlineColorKey) ?: Color.Black.toArgb(),
+                    outlineWidth = prefs.safe(subtitleOutlineWidthKey) ?: 2
                 ),
                 bufferSettings = BufferSettings(
-                    minBufferMs = prefs[minBufferMsKey] ?: BufferSettings.DEFAULT_MIN_BUFFER_MS,
-                    maxBufferMs = prefs[maxBufferMsKey] ?: BufferSettings.DEFAULT_MAX_BUFFER_MS,
-                    bufferForPlaybackMs = prefs[bufferForPlaybackMsKey] ?: BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
-                    bufferForPlaybackAfterRebufferMs = prefs[bufferForPlaybackAfterRebufferMsKey] ?: BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
-                    targetBufferSizeMb = prefs[targetBufferSizeMbKey]?.coerceAtLeast(0) ?: BufferSettings.DEFAULT_TARGET_BUFFER_SIZE_MB,
-                    backBufferDurationMs = prefs[backBufferDurationMsKey] ?: BufferSettings.DEFAULT_BACK_BUFFER_DURATION_MS,
-                    retainBackBufferFromKeyframe = prefs[retainBackBufferFromKeyframeKey] ?: false
+                    minBufferMs = prefs.safe(minBufferMsKey) ?: BufferSettings.DEFAULT_MIN_BUFFER_MS,
+                    maxBufferMs = prefs.safe(maxBufferMsKey) ?: BufferSettings.DEFAULT_MAX_BUFFER_MS,
+                    bufferForPlaybackMs = prefs.safe(bufferForPlaybackMsKey) ?: BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                    bufferForPlaybackAfterRebufferMs = prefs.safe(bufferForPlaybackAfterRebufferMsKey) ?: BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+                    targetBufferSizeMb = prefs.safe(targetBufferSizeMbKey)?.coerceAtLeast(0) ?: BufferSettings.DEFAULT_TARGET_BUFFER_SIZE_MB,
+                    backBufferDurationMs = prefs.safe(backBufferDurationMsKey) ?: BufferSettings.DEFAULT_BACK_BUFFER_DURATION_MS,
+                    retainBackBufferFromKeyframe = prefs.safe(retainBackBufferFromKeyframeKey) ?: false
                 )
             )
         }
@@ -928,19 +940,19 @@ class PlayerSettingsDataStore @Inject constructor(
     val useLibass: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.onStart { migrateProfile(pid) }
     }.map { prefs ->
-        prefs[useLibassKey] ?: false
+        prefs.safe(useLibassKey) ?: false
     }
 
     val libassRenderType: Flow<LibassRenderType> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.onStart { migrateProfile(pid) }
     }.map { prefs ->
-        prefs[libassRenderTypeKey]?.let {
+        prefs.safe(libassRenderTypeKey)?.let {
             try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
         } ?: LibassRenderType.OVERLAY_OPEN_GL
     }
     val lastPlaybackDiagnostics: Flow<LastPlaybackDiagnostics> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
-            val json = prefs[lastPlaybackDiagnosticsKey]
+            val json = prefs.safe(lastPlaybackDiagnosticsKey)
             if (json.isNullOrBlank()) LastPlaybackDiagnostics.EMPTY
             else LastPlaybackDiagnostics.fromJson(json)
         }

@@ -37,7 +37,8 @@ object DebridProviders {
         id = TORBOX_ID,
         displayName = "Torbox",
         shortName = "TB",
-        authMethod = DebridProviderAuthMethod.DeviceCode,
+        // TorBox-only product: API-key entry only. The device-code polling UI must be unreachable.
+        authMethod = DebridProviderAuthMethod.ApiKey,
         capabilities = setOf(
             DebridProviderCapability.ClientResolve,
             DebridProviderCapability.LocalTorrentCacheCheck,
@@ -67,7 +68,10 @@ object DebridProviders {
         capabilities = setOf(DebridProviderCapability.ClientResolve)
     )
 
-    private val registered = listOf(Torbox, Premiumize, RealDebrid)
+    // TorBox-only product: register ONLY TorBox so every UI/resolver path is unreachable
+    // for any other provider (Premiumize, Real-Debrid, etc.). The provider definitions above
+    // are kept (not deleted) so static references still compile, but they are not registered.
+    private val registered = listOf(Torbox)
 
     fun all(): List<DebridProvider> = registered
 

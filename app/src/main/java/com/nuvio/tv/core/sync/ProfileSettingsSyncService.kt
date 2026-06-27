@@ -595,34 +595,41 @@ class ProfileSettingsSyncService @Inject constructor(
         val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: return
         val value = obj["value"] ?: JsonNull
 
-        when (type) {
-            "string" -> {
-                val parsed = value.jsonPrimitive.contentOrNull ?: return
-                mutablePrefs[stringPreferencesKey(keyName)] = parsed
-            }
-            "boolean" -> {
-                val parsed = value.jsonPrimitive.contentOrNull?.toBooleanStrictOrNull() ?: return
-                mutablePrefs[booleanPreferencesKey(keyName)] = parsed
-            }
-            "int" -> {
-                val parsed = value.jsonPrimitive.intOrNull ?: return
-                mutablePrefs[intPreferencesKey(keyName)] = parsed
-            }
-            "long" -> {
-                val parsed = value.jsonPrimitive.longOrNull ?: return
-                mutablePrefs[longPreferencesKey(keyName)] = parsed
-            }
-            "float" -> {
-                val parsed = value.jsonPrimitive.floatOrNull ?: return
-                mutablePrefs[floatPreferencesKey(keyName)] = parsed
-            }
-            "double" -> {
-                val parsed = value.jsonPrimitive.doubleOrNull ?: return
-                mutablePrefs[doublePreferencesKey(keyName)] = parsed
-            }
-            "string_set" -> {
-                val parsed = value.jsonArray.mapNotNull { it.jsonPrimitive.contentOrNull }.toSet()
-                mutablePrefs[stringSetPreferencesKey(keyName)] = parsed
+        // Belt-and-suspenders: a malformed remote blob can declare a type whose `value`
+        // is not the expected JSON shape (e.g. JsonNull/JsonArray/JsonObject where a
+        // primitive is expected). `value.jsonPrimitive` (and `.jsonArray`) throw in that
+        // case; swallow it so one bad key is skipped instead of failing the whole import.
+        // The durable read-side fix lives in PlayerSettingsDataStore.safe().
+        runCatching {
+            when (type) {
+                "string" -> {
+                    val parsed = value.jsonPrimitive.contentOrNull ?: return
+                    mutablePrefs[stringPreferencesKey(keyName)] = parsed
+                }
+                "boolean" -> {
+                    val parsed = value.jsonPrimitive.contentOrNull?.toBooleanStrictOrNull() ?: return
+                    mutablePrefs[booleanPreferencesKey(keyName)] = parsed
+                }
+                "int" -> {
+                    val parsed = value.jsonPrimitive.intOrNull ?: return
+                    mutablePrefs[intPreferencesKey(keyName)] = parsed
+                }
+                "long" -> {
+                    val parsed = value.jsonPrimitive.longOrNull ?: return
+                    mutablePrefs[longPreferencesKey(keyName)] = parsed
+                }
+                "float" -> {
+                    val parsed = value.jsonPrimitive.floatOrNull ?: return
+                    mutablePrefs[floatPreferencesKey(keyName)] = parsed
+                }
+                "double" -> {
+                    val parsed = value.jsonPrimitive.doubleOrNull ?: return
+                    mutablePrefs[doublePreferencesKey(keyName)] = parsed
+                }
+                "string_set" -> {
+                    val parsed = value.jsonArray.mapNotNull { it.jsonPrimitive.contentOrNull }.toSet()
+                    mutablePrefs[stringSetPreferencesKey(keyName)] = parsed
+                }
             }
         }
     }

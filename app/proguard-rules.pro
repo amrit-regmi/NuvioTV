@@ -37,10 +37,34 @@
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
 
-# ── Data classes (DTOs) ────────────────────────────────────────────────────────
-# Keep all DTO classes used with Moshi/Retrofit
+# ── Conscrypt (installed as a JSSE security Provider at runtime) ────────────────
+# PluginRuntimeHooks does Security.insertProviderAt(Conscrypt.newProvider(), ...).
+# The provider + its algorithm impls are resolved reflectively by JSSE — keep them.
+-keep class org.conscrypt.** { *; }
+-keepclassmembers class org.conscrypt.** { *; }
+
+# ── ZXing (QR generation for addon management) ─────────────────────────────────
+-keep class com.google.zxing.** { *; }
+-dontwarn com.google.zxing.**
+
+# ── Data classes (DTOs / persisted models) ──────────────────────────────────────
+# Keep all DTO/model classes (de)serialized from backend JSON or persisted to
+# DataStore via Gson/Moshi/kotlinx-serialization. Keeping fields (not just the
+# class) is required so reflective (de)serialization can read/write them.
 -keep class com.nuvio.tv.data.remote.dto.** { *; }
 -keep class com.nuvio.tv.domain.model.** { *; }
+# Gson is used directly to persist these to DataStore / drive the local server,
+# and many carry no annotations — keep their fields by name.
+-keep class com.nuvio.tv.data.local.** { *; }
+-keep class com.nuvio.tv.core.reco.** { *; }
+-keep class com.nuvio.tv.core.streams.** { *; }
+-keep class com.nuvio.tv.core.sync.** { *; }
+-keep class com.nuvio.tv.core.network.** { *; }
+# Keep all enums' name()/valueOf() — enums are serialized by name in JSON/DataStore.
+-keepclassmembers enum com.nuvio.tv.** {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
 
 # ── Kotlin ─────────────────────────────────────────────────────────────────────
 -keepattributes *Annotation*
@@ -83,9 +107,42 @@
 -keep class io.ktor.** { *; }
 -dontwarn io.ktor.**
 -keep class com.nuvio.tv.data.remote.supabase.** { *; }
-# Keep @Serializable classes and their generated serializers
+
+# Official kotlinx.serialization R8/ProGuard rules.
+# Keep the runtime serialization library + generated $$serializer classes.
+-keepattributes RuntimeVisibleAnnotations,AnnotationDefault
+-dontwarn kotlinx.serialization.**
+-keep class kotlinx.serialization.** { *; }
+# Keep `INSTANCE.serializer()` of serializable objects.
+-if @kotlinx.serialization.Serializable class **
+-keepclassmembers class <1> {
+    static <1> INSTANCE;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+# Keep `serializer()` on companion objects of serializable classes.
+-if @kotlinx.serialization.Serializable class ** {
+    static **$* *;
+}
+-keepclassmembers class <2>$<3> {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+# Keep the generated serializer classes themselves and their members.
+-if @kotlinx.serialization.Serializable class **
+-keepclassmembers class <1>$$serializer {
+    *;
+}
+# Belt-and-suspenders: keep any explicitly named serializer member.
 -keepclassmembers class * {
     kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Keep ALL app classes that are kotlinx-@Serializable (fields + serializers).
+# @Serializable models live across many packages (core.network, core.reco,
+# core.streams, core.sync, data.local, data.remote.supabase, ui.screens.account).
+-keep @kotlinx.serialization.Serializable class com.nuvio.tv.** { *; }
+-keepclassmembers @kotlinx.serialization.Serializable class com.nuvio.tv.** {
+    *** Companion;
+    <fields>;
 }
 
 # ── External extension compatibility stubs (loaded via DexClassLoader) ────────
@@ -95,6 +152,28 @@
 -keepclassmembers class com.lagradost.nicehttp.** { *; }
 -keep class com.lagradost.api.** { *; }
 -keepclassmembers class com.lagradost.api.** { *; }
+
+# ── @Keep ────────────────────────────────────────────────────────────────────
+# Honor androidx.annotation.Keep anywhere it is applied (e.g. CollectionsDataStore).
+-keep,allowobfuscation @interface androidx.annotation.Keep
+-keep @androidx.annotation.Keep class * { *; }
+-keepclassmembers class * {
+    @androidx.annotation.Keep *;
+}
+
+# ── Hilt / Dagger ────────────────────────────────────────────────────────────
+# Hilt ships its own consumer rules, but keep generated components defensively.
+-keep class dagger.hilt.** { *; }
+-keep class * extends dagger.hilt.android.internal.managers.** { *; }
+-keep class hilt_aggregated_deps.** { *; }
+-keep class **_HiltModules** { *; }
+-dontwarn dagger.hilt.**
+
+# ── Coil ──────────────────────────────────────────────────────────────────────
+-dontwarn coil3.**
+-dontwarn coil.**
+
+# ── ZXing / NanoHTTPD already kept above ──────────────────────────────────────
 
 # ── General ────────────────────────────────────────────────────────────────────
 # Keep line numbers for crash reports

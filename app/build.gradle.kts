@@ -218,13 +218,19 @@ android {
             buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
         }
         release {
-            // Minify/shrink disabled to avoid R8 OOM on the fixed Gradle heap
-            // (owner constraint: do not change org.gradle.jvmargs). A non-minified
-            // release is acceptable for this small private app. This is still a real
-            // release variant: isDebuggable=false (default) and applicationId has no
-            // ".debug" suffix.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 minification + resource shrinking ENABLED to produce a much smaller
+            // installable APK for storage-constrained TV devices (Sony BRAVIA 4GB /data).
+            // Conservative -keep rules in proguard-rules.pro protect reflective libs
+            // (kotlinx.serialization, Gson, Moshi, Retrofit/OkHttp, Media3, DexClassLoader
+            // extension deps, etc.) against over-shrinking. This is a real release variant:
+            // isDebuggable=false (default) and applicationId has no ".debug" suffix.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // Optimizing default proguard file restored. The launch ClassCastException
+            // (typed DataStore Preferences read in PlayerSettingsDataStore) was NOT an
+            // R8 optimizer bug — it was a settings-sync import writing an int-typed
+            // player setting as a String into the shared "player_settings" store. The
+            // durable fix is type-tolerant reads in PlayerSettingsDataStore (.safe()).
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
