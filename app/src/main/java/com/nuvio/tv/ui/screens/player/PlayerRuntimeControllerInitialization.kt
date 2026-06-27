@@ -90,8 +90,15 @@ private const val ADAPTIVE_QUALITY_INCREASE_MIN_DURATION_MS = 2_000
 private const val ADAPTIVE_INITIAL_BITRATE_ESTIMATE_BPS = 25_000_000L
 
 internal data class StartupSubtitlePreparation(
+    // Subtitles surfaced in the UI list (may be filtered to preferred languages).
     val fetchedSubtitles: List<Subtitle>,
+    // Subtitles whose track-selection counts as "preferred" / auto-selectable at startup.
     val attachedSubtitles: List<Subtitle>,
+    // EVERY catalog subtitle known at prepare time. All of these are bundled into the
+    // initial MediaItem's SubtitleConfigurations so the FIRST switch to any of them is
+    // pure track-selection (no second prepare()/restart). ExoPlayer lazy-loads each .srt
+    // only when actually selected, so attaching the full pool does not slow startup.
+    val bundledSubtitles: List<Subtitle>,
     val fetchCompleted: Boolean
 )
 
@@ -1464,6 +1471,7 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
         return StartupSubtitlePreparation(
             fetchedSubtitles = emptyList(),
             attachedSubtitles = emptyList(),
+            bundledSubtitles = emptyList(),
             fetchCompleted = false
         )
     }
@@ -1472,6 +1480,7 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
         return StartupSubtitlePreparation(
             fetchedSubtitles = emptyList(),
             attachedSubtitles = emptyList(),
+            bundledSubtitles = emptyList(),
             fetchCompleted = false
         )
     }
@@ -1485,6 +1494,7 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
         return StartupSubtitlePreparation(
             fetchedSubtitles = emptyList(),
             attachedSubtitles = emptyList(),
+            bundledSubtitles = emptyList(),
             fetchCompleted = false
         )
     }
@@ -1504,7 +1514,7 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
                 _uiState.update { it.copy(loadingMessage = msg) }
             }
         )
-    } ?: return StartupSubtitlePreparation(emptyList(), emptyList(), false)
+    } ?: return StartupSubtitlePreparation(emptyList(), emptyList(), emptyList(), false)
 
     val attachedSubtitles = when (effectiveMode) {
         AddonSubtitleStartupMode.ALL_SUBTITLES -> fetchedSubtitles
@@ -1514,9 +1524,15 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
 
     val visibleSubtitles = if (showOnlyPreferredLanguages) attachedSubtitles else fetchedSubtitles
 
+    // Bundle EVERY fetched catalog subtitle into the initial MediaItem — not just the
+    // preferred subset. This makes the first user switch to ANY catalog subtitle a pure
+    // track-selection (no setMediaSource()/prepare() rebuild, hence no stream restart),
+    // which is the bug being fixed. ExoPlayer only fetches a side-loaded .srt when its
+    // track is actually selected, so the unused candidates cost nothing at startup.
     return StartupSubtitlePreparation(
         fetchedSubtitles = visibleSubtitles,
         attachedSubtitles = attachedSubtitles,
+        bundledSubtitles = fetchedSubtitles,
         fetchCompleted = true
     )
 }
@@ -1563,13 +1579,19 @@ internal suspend fun PlayerRuntimeController.prepareStreamStartSubtitles(
 }
 
 internal fun PlayerRuntimeController.applyStartupSubtitlePreparation(startupSubtitlePreparation: StartupSubtitlePreparation) {
-    attachedAddonSubtitleKeys = startupSubtitlePreparation.attachedSubtitles.distinctBy { addonSubtitleKey(it) }.map(::addonSubtitleKey).toSet()
+    // Track the keys of EVERY subtitle bundled into the initial MediaItem (not just the
+    // preferred subset). selectAddonSubtitle() consults attachedAddonSubtitleKeys to decide
+    // whether a subtitle can be applied via pure track-selection vs. a media reload; marking
+    // all bundled subs as attached keeps the first switch reload-free.
+    attachedAddonSubtitleKeys = startupSubtitlePreparation.bundledSubtitles.distinctBy { addonSubtitleKey(it) }.map(::addonSubtitleKey).toSet()
     if (!startupSubtitlePreparation.fetchCompleted) return
     _uiState.update { it.copy(addonSubtitles = startupSubtitlePreparation.fetchedSubtitles, isLoadingAddonSubtitles = false, addonSubtitlesError = null) }
 }
 
 internal fun PlayerRuntimeController.buildStartupSubtitleConfigurations(startupSubtitlePreparation: StartupSubtitlePreparation): List<androidx.media3.common.MediaItem.SubtitleConfiguration> {
-    return startupSubtitlePreparation.attachedSubtitles.distinctBy { "${it.id}|${it.url}" }.map(::toSubtitleConfiguration)
+    // Bundle every known catalog subtitle so the first selection of any of them is a pure
+    // track-selection (no re-prepare/restart). ExoPlayer lazy-loads each .srt on selection.
+    return startupSubtitlePreparation.bundledSubtitles.distinctBy { "${it.id}|${it.url}" }.map(::toSubtitleConfiguration)
 }
 
 internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {

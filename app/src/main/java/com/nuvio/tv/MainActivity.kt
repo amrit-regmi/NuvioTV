@@ -500,10 +500,8 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     if (hasSeenAuthQrOnFirstLaunch == null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(NuvioTheme.colors.Background)
+                        com.nuvio.tv.ui.components.CineXSplash(
+                            modifier = Modifier.fillMaxSize()
                         )
                         return@Surface
                     }
@@ -512,8 +510,11 @@ class MainActivity : ComponentActivity() {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(NuvioTheme.colors.Background)
-                        )
+                                .background(NuvioTheme.colors.Background),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            com.nuvio.tv.ui.components.CineXLoader()
+                        }
                         return@Surface
                     }
 
@@ -594,8 +595,11 @@ class MainActivity : ComponentActivity() {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(NuvioTheme.colors.Background)
-                        )
+                                .background(NuvioTheme.colors.Background),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            com.nuvio.tv.ui.components.CineXLoader()
+                        }
                         return@Surface
                     }
                     val effectiveExperienceMode = mainUiPrefs.experienceMode

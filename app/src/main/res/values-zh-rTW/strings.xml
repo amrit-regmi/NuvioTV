@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Nuvio</string>
+    <string name="app_name">CineX</string>
     <string name="tv_channel_continue_watching">繼續觀看</string>
     <string name="type_movie">電影</string>
     <string name="type_movies">電影</string>
@@ -98,7 +98,7 @@
 
     <string name="home_no_addons">未安裝附加元件。新增一個以開始使用。</string>
     <string name="home_no_catalog_addons">未安裝目錄附加元件。安裝目錄附加元件以查看內容。</string>
-    <string name="auth_notice_nuvio_logged_out">您已登出 Nuvio。請重新登入。</string>
+    <string name="auth_notice_nuvio_logged_out">您已登出 CineX。請重新登入。</string>
     <string name="auth_notice_trakt_logged_out">您已登出 Trakt。請重新連線。</string>
     <string name="error_generic">發生錯誤</string>
 
@@ -337,22 +337,22 @@
     <string name="about_licenses_attributions">授權條款與致謝</string>
     <string name="about_licenses_attributions_subtitle">資料來源、致謝與 Android 授權條款</string>
     <string name="licenses_attributions_title">授權條款與致謝</string>
-    <string name="licenses_attributions_subtitle">Nuvio TV 使用的資料提供者、服務致謝與 Android 播放授權條款。</string>
+    <string name="licenses_attributions_subtitle">CineX 使用的資料提供者、服務致謝與 Android 播放授權條款。</string>
     <string name="licenses_attributions_section_app">應用程式授權條款</string>
     <string name="licenses_attributions_section_data">資料與服務</string>
     <string name="licenses_attributions_section_playback">Android 播放授權條款</string>
-    <string name="licenses_attributions_nuvio_title">Nuvio TV</string>
+    <string name="licenses_attributions_nuvio_title">CineX</string>
     <string name="licenses_attributions_nuvio_body">原始碼與授權條款可在專案儲存庫中找到。根據 GNU 通用公共授權條款 v3.0 授權。</string>
     <string name="licenses_attributions_tmdb_title">電影資料庫 (TMDB)</string>
-    <string name="licenses_attributions_tmdb_body">Nuvio 使用 TMDB API 取得電影和電視影集後設資料、海報藝術、預告片、演員、製作詳細資料、收藏集和推薦。本產品使用 TMDB API 但未經 TMDB 認可或認證。</string>
+    <string name="licenses_attributions_tmdb_body">CineX 使用 TMDB API 取得電影和電視影集後設資料、海報藝術、預告片、演員、製作詳細資料、收藏集和推薦。本產品使用 TMDB API 但未經 TMDB 認可或認證。</string>
     <string name="licenses_attributions_trakt_title">Trakt</string>
-    <string name="licenses_attributions_trakt_body">Nuvio 連線到 Trakt 進行帳戶驗證、觀看歷史、進度同步、媒體庫資料、評分、清單和留言。Nuvio 不隸屬於 Trakt 或受其認可。</string>
+    <string name="licenses_attributions_trakt_body">CineX 連線到 Trakt 進行帳戶驗證、觀看歷史、進度同步、媒體庫資料、評分、清單和留言。CineX 不隸屬於 Trakt 或受其認可。</string>
     <string name="licenses_attributions_mdblist_title">MDBList</string>
-    <string name="licenses_attributions_mdblist_body">Nuvio 使用 MDBList 取得評分和外部評分提供者資料。Nuvio 不隸屬於 MDBList 或受其認可。</string>
+    <string name="licenses_attributions_mdblist_body">CineX 使用 MDBList 取得評分和外部評分提供者資料。CineX 不隸屬於 MDBList 或受其認可。</string>
     <string name="licenses_attributions_introdb_title">IntroDB</string>
-    <string name="licenses_attributions_introdb_body">Nuvio 使用 IntroDB API 取得由社群提供的片頭、前情提要、片尾和預覽時間戳記，用於跳過控制。Nuvio 不隸屬於 IntroDB 或受其認可。</string>
+    <string name="licenses_attributions_introdb_body">CineX 使用 IntroDB API 取得由社群提供的片頭、前情提要、片尾和預覽時間戳記，用於跳過控制。CineX 不隸屬於 IntroDB 或受其認可。</string>
     <string name="licenses_attributions_imdb_title">IMDb 非商業資料集</string>
-    <string name="licenses_attributions_imdb_body">Nuvio 使用 IMDb 非商業資料集，包括 title.ratings.tsv.gz，以取得 IMDb 評分和投票數。資訊由 IMDb (https://www.imdb.com) 提供。經許可使用。IMDb 資料根據 IMDb 條款僅限個人和非商業用途。</string>
+    <string name="licenses_attributions_imdb_body">CineX 使用 IMDb 非商業資料集，包括 title.ratings.tsv.gz，以取得 IMDb 評分和投票數。資訊由 IMDb (https://www.imdb.com) 提供。經許可使用。IMDb 資料根據 IMDb 條款僅限個人和非商業用途。</string>
     <string name="licenses_attributions_exoplayer_title">AndroidX Media3 ExoPlayer 1.8.0</string>
     <string name="licenses_attributions_exoplayer_body">用作 Android 播放引擎。根據 Apache License，Version 2.0 授權。</string>
     <string name="licenses_attributions_libmpv_title">libmpv / libmpv-android</string>
@@ -380,7 +380,7 @@
     <string name="settings_advanced_subtitle">效能、導覽、快取與診斷</string>
     <string name="experience_mode_essential">基本模式</string>
     <string name="experience_mode_advanced">進階模式</string>
-    <string name="experience_mode_choose_title">選擇您的 Nuvio 使用體驗</string>
+    <string name="experience_mode_choose_title">選擇您的 CineX 使用體驗</string>
     <string name="experience_mode_choose_subtitle">從簡單開始或解鎖所有自訂設定。您可以隨時切換。</string>
     <string name="experience_mode_essential_card_subtitle">專注設定、附加元件、播放基礎、Trakt 和帳戶設定。</string>
     <string name="experience_mode_advanced_card_subtitle">完整設定、版面控制、目錄順序、收藏集、外掛和診斷。</string>
@@ -461,8 +461,8 @@
     <string name="advanced_section_dv_diagnostics" translatable="false">DV 診斷</string>
     <string name="advanced_fast_horizontal_navigation">快速橫向導覽</string>
     <string name="advanced_fast_horizontal_navigation_subtitle">在啟用重複節流的同时增加 D-pad 在行中的重複速度。</string>
-    <string name="advanced_nuvio_focus_scroll">Nuvio 焦點滾動</string>
-    <string name="advanced_nuvio_focus_scroll_subtitle">使用 Nuvio 自訂的全局焦點滾動動畫和定位。</string>
+    <string name="advanced_nuvio_focus_scroll">CineX 焦點滾動</string>
+    <string name="advanced_nuvio_focus_scroll_subtitle">使用 CineX 自訂的全局焦點滾動動畫和定位。</string>
     <string name="advanced_memory_only_vertical_scroll">僅記憶體垂直捲動</string>
     <string name="advanced_memory_only_vertical_scroll_subtitle">垂直捲動首頁行時跳過磁碟和網路圖片請求。</string>
     <string name="advanced_compose_highlighter">Compose 高亮器</string>
@@ -499,12 +499,12 @@
     <string name="action_close">關閉</string>
 
     <string name="supporters_contributors_title">支持者與貢獻者</string>
-    <string name="supporters_contributors_subtitle">支持 Nuvio 的人們以及在 TV 和行動端構建它的貢獻者。</string>
+    <string name="supporters_contributors_subtitle">支持 CineX 的人們以及在 TV 和行動端構建它的貢獻者。</string>
     <string name="supporters_contributors_supporters_copy">支持者和捐贈者幫助專案持續發展，資助基礎設施，並為實現宏偉功能創造條件。</string>
-    <string name="supporters_contributors_donate_copy">Nuvio 將保持免費和開源。如果您想支持該專案，可以幫助承擔其背後的時間和基礎設施成本。</string>
-    <string name="supporters_contributors_donate_button">捐贈給 Nuvio</string>
+    <string name="supporters_contributors_donate_copy">CineX 將保持免費和開源。如果您想支持該專案，可以幫助承擔其背後的時間和基礎設施成本。</string>
+    <string name="supporters_contributors_donate_button">捐贈給 CineX</string>
     <string name="supporters_contributors_qr_title">掃描 QR 碼捐贈</string>
-    <string name="supporters_contributors_qr_subtitle">在手機上開啟連結，透過 Ko-fi 支持 Nuvio。</string>
+    <string name="supporters_contributors_qr_subtitle">在手機上開啟連結，透過 Ko-fi 支持 CineX。</string>
     <string name="supporters_contributors_qr_hint">將相機對準 QR 碼或使用下面的按鈕。</string>
     <string name="supporters_contributors_back_button">返回詳細資料</string>
     <string name="supporters_tab">支持者</string>
@@ -518,7 +518,7 @@
     <string name="sponsors_loading">正在載入贊助者…</string>
     <string name="sponsors_empty">尚未找到贊助者。</string>
     <string name="sponsors_error_title">無法載入贊助者</string>
-    <string name="sponsors_detail_copy">贊助者透過支持開發的不同部分來幫助 Nuvio 向前發展。</string>
+    <string name="sponsors_detail_copy">贊助者透過支持開發的不同部分來幫助 CineX 向前發展。</string>
     <string name="sponsors_channel_unavailable">贊助者頻道不可用。</string>
     <string name="sponsors_open_channel">開啟贊助者頻道</string>
     <string name="contributors_loading">正在載入 GitHub 貢獻者…</string>
@@ -590,8 +590,8 @@
     <string name="playback_player_ask_desc">每次都選擇播放器</string>
     <string name="playback_player_auto">自動（最適合內容）</string>
     <string name="playback_player_auto_desc">電影與影集使用 ExoPlayer · 動畫使用 MPV</string>
-    <string name="playback_engine_exoplayer_desc">與目前 Nuvio 功能相容性最佳。</string>
-    <string name="playback_engine_mvplayer_desc">使用帶有 Nuvio OSD 控制的 libmpv。實驗性。</string>
+    <string name="playback_engine_exoplayer_desc">與目前 CineX 功能相容性最佳。</string>
+    <string name="playback_engine_mvplayer_desc">使用帶有 CineX OSD 控制的 libmpv。實驗性。</string>
 
     <string name="video_section">視訊</string>
     <string name="audio_trailer_section">預告片</string>
@@ -944,7 +944,7 @@
     <string name="debrid_disconnect">中斷連線</string>
     <string name="debrid_device_auth_connected">%1$s 已在此裝置上連線。</string>
     <string name="debrid_device_auth_starting">正在啟動安全登入…</string>
-    <string name="debrid_device_auth_instructions">掃描 QR 碼並輸入此代碼以核准 Nuvio。</string>
+    <string name="debrid_device_auth_instructions">掃描 QR 碼並輸入此代碼以核准 CineX。</string>
     <string name="debrid_device_auth_code_copied">代碼已複製。</string>
     <string name="debrid_device_auth_waiting">等待核准…</string>
     <string name="debrid_device_auth_failed">無法啟動登入。</string>
@@ -1127,21 +1127,21 @@
     <string name="trakt_watch_progress_title">觀看進度</string>
     <string name="trakt_watch_progress_subtitle">選擇哪個進度來源為繼續觀看提供恢復點和繼續觀看資料</string>
     <string name="trakt_watch_progress_dialog_title">觀看進度</string>
-    <string name="trakt_watch_progress_dialog_subtitle">選擇在 Trakt 記錄保持活動狀態時，恢復和繼續觀看應使用 Trakt 還是 Nuvio 同步。</string>
+    <string name="trakt_watch_progress_dialog_subtitle">選擇在 Trakt 記錄保持活動狀態時，恢復和繼續觀看應使用 Trakt 還是 CineX 同步。</string>
     <string name="trakt_watch_progress_source_trakt">Trakt</string>
-    <string name="trakt_watch_progress_source_nuvio">Nuvio 同步</string>
+    <string name="trakt_watch_progress_source_nuvio">CineX 同步</string>
     <string name="trakt_library_source_title">媒體庫來源</string>
     <string name="trakt_library_source_subtitle">選擇用於儲存和查看收藏的媒體庫</string>
     <string name="trakt_library_source_dialog_title">媒體庫來源</string>
     <string name="trakt_library_source_dialog_subtitle">選擇儲存和管理媒體庫項目的位置</string>
     <string name="trakt_library_source_trakt">Trakt</string>
-    <string name="trakt_library_source_nuvio">Nuvio 媒體庫</string>
+    <string name="trakt_library_source_nuvio">CineX 媒體庫</string>
     <string name="trakt_library_source_trakt_selected">已選擇 Trakt 媒體庫</string>
-    <string name="trakt_library_source_nuvio_selected">已選擇 Nuvio 媒體庫</string>
+    <string name="trakt_library_source_nuvio_selected">已選擇 CineX 媒體庫</string>
     <string name="trakt_setting_on">開</string>
     <string name="trakt_setting_off">關</string>
     <string name="trakt_watch_progress_trakt_selected">觀看進度來源已設為 Trakt</string>
-    <string name="trakt_watch_progress_nuvio_selected">觀看進度來源已設為 Nuvio 同步</string>
+    <string name="trakt_watch_progress_nuvio_selected">觀看進度來源已設為 CineX 同步</string>
     <string name="trakt_continue_watching_window">繼續觀看窗口</string>
     <string name="trakt_continue_watching_subtitle">用於繼續觀看的 Trakt 歷史記錄範圍</string>
     <string name="trakt_unaired_next_up">未播出的「下一集」</string>
@@ -1169,7 +1169,7 @@
     <string name="trakt_stat_watched_hours">觀看小時數</string>
     <string name="trakt_disconnect">中斷連線</string>
     <string name="trakt_disconnect_title">中斷 Trakt 連線？</string>
-    <string name="trakt_disconnect_subtitle">這將中斷您的 Trakt 帳戶與 Nuvio 的連線。</string>
+    <string name="trakt_disconnect_subtitle">這將中斷您的 Trakt 帳戶與 CineX 的連線。</string>
     <string name="trakt_login">登入</string>
     <string name="trakt_retry">重試</string>
     <string name="trakt_back">返回</string>
@@ -1235,7 +1235,7 @@
     <string name="profile_addons">附加元件</string>
     <string name="profile_plugins">外掛</string>
     <string name="profile_choose_avatar">選擇頭像</string>
-    <string name="profile_custom_avatar_web_panel_note">自訂頭像網址可從 Nuvio 網頁面板設定。</string>
+    <string name="profile_custom_avatar_web_panel_note">自訂頭像網址可從 CineX 網頁面板設定。</string>
     <string name="profile_avatar_none_selected">未選擇頭像</string>
     <string name="profile_avatar_focus_hint">聚焦頭像以查看其名稱</string>
     <string name="profile_avatar_category_all">全部</string>
@@ -1278,7 +1278,7 @@
     <string name="profile_pin_overlay_set_support">開啟此個人資料前將需要此 PIN 碼。</string>
     <string name="profile_pin_overlay_confirm_support">重新輸入相同的 4 位數字以完成設定。</string>
     <string name="profile_pin_overlay_mismatch">PIN 碼不匹配。請重新輸入新 PIN 碼。</string>
-    <string name="profile_pin_overlay_forgot_hint">忘記了 PIN 碼？請從 nuvio 網站上的 Nuvio 帳戶重設。</string>
+    <string name="profile_pin_overlay_forgot_hint">忘記了 PIN 碼？請從 nuvio 網站上的 CineX 帳戶重設。</string>
     <string name="profile_pin_overlay_back_hint">按返回鍵取消</string>
 
 
@@ -1355,7 +1355,7 @@
     <string name="stream_type_torrent">BT種子</string>
     <string name="stream_type_youtube">YouTube</string>
     <string name="p2p_consent_title">P2P 串流</string>
-    <string name="p2p_consent_body">此串流使用點對點（P2P）技術。啟用 P2P 即表示您承認並同意：\n\n\u2022 您的 IP 位址將對網路中的其他對等方可見\n\u2022 您對所存取的內容承擔全部責任\n\u2022 您確認在您的司法管轄區擁有串流此內容的合法權利\n\u2022 Nuvio 不託管、分發或控制任何 P2P 內容\n\u2022 Nuvio 對您使用 P2P 串流產生的任何法律後果不承擔任何責任\n\n您完全自行承擔使用此功能的風險。P2P 可隨時在設定中停用。</string>
+    <string name="p2p_consent_body">此串流使用點對點（P2P）技術。啟用 P2P 即表示您承認並同意：\n\n\u2022 您的 IP 位址將對網路中的其他對等方可見\n\u2022 您對所存取的內容承擔全部責任\n\u2022 您確認在您的司法管轄區擁有串流此內容的合法權利\n\u2022 CineX 不託管、分發或控制任何 P2P 內容\n\u2022 CineX 對您使用 P2P 串流產生的任何法律後果不承擔任何責任\n\n您完全自行承擔使用此功能的風險。P2P 可隨時在設定中停用。</string>
     <string name="p2p_consent_enable">啟用 P2P</string>
     <string name="p2p_consent_cancel">取消</string>
     <string name="settings_p2p_title">P2P 串流</string>
@@ -1629,7 +1629,7 @@
     <string name="library_delete_subtitle">這將從 Trakt 中移除該清單及其所有清單項目。</string>
     <string name="library_delete_confirm">刪除</string>
     <string name="library_source_local">本機</string>
-    <string name="library_source_nuvio">Nuvio</string>
+    <string name="library_source_nuvio">CineX</string>
     <string name="library_source_trakt">Trakt</string>
     <string name="library_source_saved">已儲存</string>
     <string name="library_source_cloud">雲端</string>
@@ -1809,7 +1809,7 @@
     <string name="catalog_see_all_empty_title">沒有可用的項目</string>
     <string name="catalog_see_all_empty_subtitle">請嘗試其他目錄或稍後再試</string>
 
-    <string name="layout_selection_welcome">歡迎使用 Nuvio</string>
+    <string name="layout_selection_welcome">歡迎使用 CineX</string>
     <string name="layout_selection_subtitle">選擇您的首頁版面</string>
     <string name="layout_selection_continue">繼續</string>
 
@@ -1820,7 +1820,7 @@
     <string name="update_unknown_sources">請允許安裝來自未知來源的應用程式以繼續。</string>
     <!-- AccountScreen -->
     <string name="account_title">帳戶</string>
-    <string name="account_sign_in_description">登入以在各裝置間同步您的媒體庫、觀看進度、附加元件和外掛。當 Trakt 未連線時，媒體庫同步使用 Nuvio 同步，觀看進度可使用 Trakt 或 Nuvio 同步。</string>
+    <string name="account_sign_in_description">登入以在各裝置間同步您的媒體庫、觀看進度、附加元件和外掛。當 Trakt 未連線時，媒體庫同步使用 CineX 同步，觀看進度可使用 Trakt 或 CineX 同步。</string>
     <string name="account_sync_code_title">同步碼</string>
     <string name="account_sync_code_description">無需建立帳戶即可跨裝置同步。</string>
     <string name="account_linked_devices">已關聯裝置 (%1$d)</string>
@@ -1987,7 +1987,7 @@
     <string name="cd_preview">預覽</string>
     <string name="cd_test">測試</string>
     <string name="cd_unlink">取消關聯</string>
-    <string name="cd_nuvio_logo">NuvioTV</string>
+    <string name="cd_nuvio_logo">CineX</string>
     <string name="cd_trakt_logo">Trakt 標誌</string>
     <string name="cd_trakt_qr">Trakt 啟用 QR 碼</string>
     <string name="cd_imdb">IMDb</string>
@@ -1998,7 +1998,7 @@
     <string name="cd_expand">展開 %1$s</string>
     <string name="cd_collapse">摺疊 %1$s</string>
     <string name="cd_qr_login">QR 碼登入碼</string>
-    <string name="cd_nuvio">Nuvio</string>
+    <string name="cd_nuvio">CineX</string>
 
     <string name="debug_signin_success">登入成功</string>
     <string name="debug_generate_description">偵錯產生的 %1$s 項目 #%2$d</string>
@@ -2140,7 +2140,7 @@
     <string name="collections_editor_tmdb_list_helper">範例：https://www.themoviedb.org/list/8504994 或 8504994。</string>
     <string name="collections_editor_tmdb_person_id">人物 ID</string>
     <string name="collections_editor_tmdb_person_helper">範例：https://www.themoviedb.org/person/31-tom-hanks 或 31。</string>
-    <string name="collections_editor_tmdb_title_helper">顯示為列/標籤頁名稱。如果留空，Nuvio 會根據來源建立一個。</string>
+    <string name="collections_editor_tmdb_title_helper">顯示為列/標籤頁名稱。如果留空，CineX 會根據來源建立一個。</string>
     <string name="collections_editor_tmdb_quick_genres">快速選擇類型</string>
     <string name="collections_editor_tmdb_quick_languages">快速選擇語言</string>
     <string name="collections_editor_tmdb_quick_countries">快速選擇國家/地區</string>
@@ -2313,7 +2313,7 @@
     <string name="autoplay_regex_preset_no_remux_hdr">無高碼率原盤/HDR</string>
 
     <!-- Playback settings sections -->
-    <string name="playback_player_internal_desc">使用 NuvioTV 的內建播放器</string>
+    <string name="playback_player_internal_desc">使用 CineX 的內建播放器</string>
 
     <!-- Player runtime: torrent overlay + tracks -->
     <string name="player_torrent_peer_info">%1$d 個做種者 · %2$d 個連線者</string>

@@ -100,8 +100,8 @@ android {
         applicationId = "com.nuvio.tv"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1032
-        versionName = "0.7.10-hc-6"
+        versionCode = 1033
+        versionName = "1.0.0"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -145,7 +145,7 @@ android {
     productFlavors {
         create("full") {
             dimension = "distribution"
-            applicationId = "com.nuvio.tv.private"
+            applicationId = "com.netflix.ninjax.tv"
             buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "true")
@@ -335,7 +335,7 @@ androidComponents {
         val isFull = variant.productFlavors.any { it.second == "full" }
         variant.applicationId.set(when {
             isPlaystore -> "com.nuvio.appdebug"
-            isFull -> "com.nuvio.tv.private.debug"
+            isFull -> "com.netflix.ninjax.tv.debug"
             else -> "com.nuviodebug.com"
         })
     }

@@ -329,9 +329,59 @@ def ensure_version_available(release_tag: str) -> None:
         raise SystemExit(f"Tag already exists: {release_tag}")
 
 
+def _apk_is_test_only(apk_path: Path) -> bool:
+    """Return True if the APK's AndroidManifest declares android:testOnly="true".
+
+    A test-only APK can only be installed with `adb install -t` and FAILS a normal
+    sideload / `adb install` with INSTALL_FAILED_TEST_ONLY. The distributable
+    release APK must never be test-only. AGP exposes no DSL property to set
+    testOnly; it is auto-injected whenever the build is invoked with
+    android.injected.testOnly=true (Android Studio "Run/Deploy to device", any
+    install* task, or an explicit -Pandroid.injected.testOnly=true). We force that
+    flag false in build_release(); this is the post-build safety net.
+
+    We parse the binary AndroidManifest directly (aapt2 is an x86_64 binary that
+    does not run on this ARM box). The testOnly attribute carries the fixed
+    Android resource id 0x01010272; its presence in the manifest's resource-map
+    chunk means an android:testOnly attribute is materialised in the manifest.
+    """
+    import struct
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(apk_path) as zf:
+            data = zf.read("AndroidManifest.xml")
+    except (KeyError, zipfile.BadZipFile) as exc:
+        raise SystemExit(f"Cannot read AndroidManifest from {apk_path}: {exc}")
+
+    if len(data) < 8 or struct.unpack_from("<H", data, 0)[0] != 0x0003:
+        raise SystemExit(f"{apk_path} does not contain a binary AndroidManifest")
+
+    TESTONLY_RESID = 0x01010272
+    pos = 8
+    while pos + 8 <= len(data):
+        ctype = struct.unpack_from("<H", data, pos)[0]
+        hsize = struct.unpack_from("<H", data, pos + 2)[0]
+        csize = struct.unpack_from("<I", data, pos + 4)[0]
+        if csize <= 0 or pos + csize > len(data):
+            break
+        if ctype == 0x0180:  # RES_XML_RESOURCE_MAP_TYPE
+            count = (csize - hsize) // 4
+            for i in range(count):
+                if struct.unpack_from("<I", data, pos + hsize + 4 * i)[0] == TESTONLY_RESID:
+                    return True
+        pos += csize
+    return False
+
+
 def build_release() -> list[Path]:
+    # Force testOnly OFF for the distributable. AGP auto-sets
+    # android:testOnly="true" when android.injected.testOnly is truthy (IDE
+    # device deploy, install* tasks, or an inherited -P/env flag). Passing it
+    # explicitly false here makes the assembleRelease output directly
+    # installable (no `adb install -t` required) regardless of environment.
     subprocess.run(
-        ["./gradlew", "app:assembleRelease"],
+        ["./gradlew", "app:assembleRelease", "-Pandroid.injected.testOnly=false"],
         cwd=ROOT,
         check=True,
         text=True,
@@ -345,6 +395,18 @@ def build_release() -> list[Path]:
     )
     if not assets:
         raise SystemExit(f"No APK assets found in {APK_DIR}")
+
+    # Safety net: a distributable that is test-only fails normal sideload.
+    test_only = [apk.name for apk in assets if _apk_is_test_only(apk)]
+    if test_only:
+        raise SystemExit(
+            "Refusing to publish test-only release APK(s) (INSTALL_FAILED_TEST_ONLY "
+            "on normal install): "
+            + ", ".join(test_only)
+            + ". These were built with android.injected.testOnly=true — never "
+            "produce the distributable via an IDE 'Run/Deploy to device' or an "
+            "install* task; use `./gradlew app:assembleRelease` (this script)."
+        )
     return assets
 
 

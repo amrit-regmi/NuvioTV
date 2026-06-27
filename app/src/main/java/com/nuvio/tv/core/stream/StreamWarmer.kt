@@ -14,6 +14,7 @@ import com.nuvio.tv.core.player.FrameRateUtils
 import com.nuvio.tv.core.player.PlayerPreWarmer
 import com.nuvio.tv.core.reco.RecoBackend
 import com.nuvio.tv.data.local.DebridSettingsDataStore
+import com.nuvio.tv.data.local.DeviceProfileDataStore
 import com.nuvio.tv.data.mapper.toDomain
 import com.nuvio.tv.core.subtitle.SubtitleWarmer
 import com.nuvio.tv.data.remote.api.AddonApi
@@ -68,6 +69,7 @@ class StreamWarmer @Inject constructor(
     private val api: AddonApi,
     private val subtitleWarmer: SubtitleWarmer,
     private val debridSettingsDataStore: DebridSettingsDataStore,
+    private val deviceProfileDataStore: DeviceProfileDataStore,
     private val playerPreWarmer: PlayerPreWarmer,
     private val torboxResolver: TorboxDirectDebridResolver,
     okHttpClient: OkHttpClient
@@ -521,13 +523,32 @@ class StreamWarmer @Inject constructor(
     // (the baked secret as Bearer is not accepted in private mode).
     private fun catalogAuth(baseUrl: String): String? = null
 
-    private fun buildStreamUrl(baseUrl: String, type: String, videoId: String): String {
+    private suspend fun buildStreamUrl(baseUrl: String, type: String, videoId: String): String {
         val clean = baseUrl.trim().trimEnd('/')
         val q = clean.indexOf('?')
         val basePath = if (q >= 0) clean.substring(0, q).trimEnd('/') else clean
         val baseQuery = if (q >= 0) clean.substring(q) else ""
         val encType = URLEncoder.encode(type, "UTF-8").replace("+", "%20")
         val encId = URLEncoder.encode(videoId, "UTF-8").replace("+", "%20")
+        // Mirror StreamRepositoryImpl.getStreamsFromAddon: only the backend catalog-addon
+        // supports per-device right-sizing via ?profile=<deviceId>. The warm fetch MUST send
+        // the SAME profile param the foreground fetch sends, otherwise warm-cache hits serve
+        // the UNFILTERED max-quality list and defeat the backend's per-device filtering.
+        // Never add the param to third-party Stremio addons. Fail-safe: if no profile id is
+        // available, fall back to the no-param URL (don't crash).
+        if (baseUrl.contains(BACKEND_ADDON_HOST, ignoreCase = true)) {
+            val profileId = try {
+                deviceProfileDataStore.selectedProfileId.first()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            if (!profileId.isNullOrEmpty()) {
+                val profileParam = if (baseQuery.isEmpty()) "?profile=$profileId" else "&profile=$profileId"
+                return "$basePath/stream/$encType/$encId.json$baseQuery$profileParam"
+            }
+        }
         return "$basePath/stream/$encType/$encId.json$baseQuery"
     }
 

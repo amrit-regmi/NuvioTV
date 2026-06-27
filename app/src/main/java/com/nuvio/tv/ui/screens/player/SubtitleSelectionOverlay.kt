@@ -1240,7 +1240,7 @@ private fun OverlayLoadingCard(text: String) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            LoadingIndicator(modifier = Modifier.size(NuvioTheme.spacing.xl))
+            LoadingIndicator(size = NuvioTheme.spacing.xxxl)
             Text(
                 text = text,
                 style = MaterialTheme.typography.bodyMedium,

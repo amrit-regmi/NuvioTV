@@ -65,6 +65,27 @@ cd NuvioTV
 adb shell am start -n com.nuviodebug.com/com.nuvio.tv.MainActivity
 ```
 
+### Distributable Release Build (directly installable)
+
+Build the release-signed, **directly installable** APKs with a plain `assemble`
+task — never via an IDE "Run/Deploy to device", and never an `install*` task:
+
+```bash
+# Produces release-signed per-ABI + universal APKs under
+# app/build/outputs/apk/release/ (signed with nuviotv.jks)
+./gradlew :app:assembleRelease
+```
+
+> [!IMPORTANT]
+> Do NOT produce the distributable via Android Studio "Run/Deploy to device" or
+> any `install*` / `:app:installRelease` task. Those invoke the build with
+> `android.injected.testOnly=true`, which makes AGP add `android:testOnly="true"`
+> to the manifest. A test-only APK installs **only** with `adb install -t` and
+> FAILS a normal sideload / `adb install` with `INSTALL_FAILED_TEST_ONLY`. AGP
+> exposes no DSL property to turn this off — it is purely a function of how the
+> build is invoked. `scripts/release_beta.py` passes
+> `-Pandroid.injected.testOnly=false` and verifies the output is not test-only.
+
 ## Legal & DMCA
 
 NuvioTV functions solely as a client-side interface for browsing metadata and playing media provided by user-installed extensions and/or user-provided sources. It is intended for content the user owns or is otherwise authorized to access.
