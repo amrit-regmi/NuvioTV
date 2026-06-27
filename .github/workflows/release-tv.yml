@@ -1,0 +1,169 @@
+name: Release (CineX TV)
+
+# CineX private-fork TV release pipeline.
+# Builds signed Full-flavour release APKs (per-ABI splits) and publishes them to GitHub
+# Releases on amrit-regmi/NuvioTV, where the in-app updater (full flavour) discovers them
+# via the GitHub Releases /latest endpoint.
+#
+# How discovery works (see app/src/full/java/com/nuvio/tv/updater/*):
+#   - UpdateRepository reads BuildConfig.GITHUB_OWNER / GITHUB_REPO (now amrit-regmi / NuvioTV)
+#     and fetches the LATEST release, SKIPPING any release marked draft or prerelease.
+#   - AbiSelector picks the asset whose filename CONTAINS the device ABI substring
+#     (arm64-v8a / armeabi-v7a / x86_64 / x86), else a "universal"/"all" asset, else the
+#     first .apk asset. So uploaded asset names MUST keep the ABI substring in the filename.
+#   - The updater has NO branch/channel filter, so target_commitish is informational only
+#     (set to main here for clarity).
+#
+# REQUIRED repository secrets (Settings → Secrets and variables → Actions) — already set:
+#   KEYSTORE_BASE64              base64 of the release keystore  ( base64 -w0 release.jks )
+#   NUVIO_RELEASE_STORE_PASSWORD keystore store password
+#   NUVIO_RELEASE_KEY_ALIAS      signing key alias
+#   NUVIO_RELEASE_KEY_PASSWORD   signing key password
+# The release itself is published with the auto-provided GITHUB_TOKEN (no PAT needed).
+
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Mark the GitHub release as a pre-release"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*.*.*"
+
+# Informational only: the TV updater takes releases/latest (skipping draft/prerelease)
+# and has no branch/channel filter. Set as target_commitish for clarity.
+env:
+  RELEASE_TARGET_BRANCH: main
+
+concurrency:
+  group: release-tv-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # create releases + upload assets
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version from app/build.gradle.kts
+        id: ver
+        run: |
+          VERSION_NAME=$(grep -E '^\s*versionName\s*=\s*"' app/build.gradle.kts | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+          VERSION_CODE=$(grep -E '^\s*versionCode\s*=\s*[0-9]+' app/build.gradle.kts | head -n1 | sed -E 's/[^0-9]*([0-9]+).*/\1/')
+          if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
+            echo "::error::Could not parse versionName/versionCode from app/build.gradle.kts"; exit 1
+          fi
+          echo "version=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Releasing v${VERSION_NAME} (versionCode ${VERSION_CODE})"
+
+      - name: Abort if release tag already exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ steps.ver.outputs.tag }}" >/dev/null 2>&1; then
+            echo "::error::Release ${{ steps.ver.outputs.tag }} already exists. Bump versionName in app/build.gradle.kts."
+            exit 1
+          fi
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Use the runner's x86_64 AAPT2 (drop the ARM64 build-box override)
+        run: |
+          # gradle.properties pins an aarch64 AAPT2 that only exists on the build box.
+          # GitHub runners are x86_64, so remove the override and let AGP use the Maven AAPT2.
+          sed -i '/android.aapt2FromMavenOverride/d' gradle.properties
+          # android.enableResourceOptimizations stays as-is (false).
+
+      - name: Provision signing material
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          NUVIO_RELEASE_STORE_PASSWORD: ${{ secrets.NUVIO_RELEASE_STORE_PASSWORD }}
+          NUVIO_RELEASE_KEY_ALIAS: ${{ secrets.NUVIO_RELEASE_KEY_ALIAS }}
+          NUVIO_RELEASE_KEY_PASSWORD: ${{ secrets.NUVIO_RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 secret is not set."; exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          {
+            echo "NUVIO_RELEASE_STORE_FILE=$RUNNER_TEMP/release.jks"
+            echo "NUVIO_RELEASE_STORE_PASSWORD=$NUVIO_RELEASE_STORE_PASSWORD"
+            echo "NUVIO_RELEASE_KEY_ALIAS=$NUVIO_RELEASE_KEY_ALIAS"
+            echo "NUVIO_RELEASE_KEY_PASSWORD=$NUVIO_RELEASE_KEY_PASSWORD"
+          } >> local.properties
+
+      - name: Build signed Full release APKs (per-ABI splits)
+        run: ./gradlew :app:assembleFullRelease --no-daemon --stacktrace
+
+      - name: Verify + rename APK assets (keep ABI substring for AbiSelector)
+        id: apk
+        run: |
+          OUTDIR=app/build/outputs/apk/full/release
+          TAG="${{ steps.ver.outputs.tag }}"
+          if [ ! -d "$OUTDIR" ]; then
+            echo "::error::Output dir $OUTDIR not found."; exit 1
+          fi
+          shopt -s nullglob
+          APKS=("$OUTDIR"/*.apk)
+          if [ ${#APKS[@]} -eq 0 ]; then
+            echo "::error::No APKs produced under $OUTDIR."; exit 1
+          fi
+          mkdir -p dist
+          ASSET_LIST=""
+          for APK in "${APKS[@]}"; do
+            python3 - "$APK" <<'PY'
+          import sys, zipfile, os
+          apk = sys.argv[1]
+          n = zipfile.ZipFile(apk).namelist()
+          ok = 'AndroidManifest.xml' in n and 'resources.arsc' in n and any(x.startswith('res/') for x in n)
+          print(f"{os.path.basename(apk)}: entries={len(n)} manifest={'AndroidManifest.xml' in n} arsc={'resources.arsc' in n} size={os.path.getsize(apk)}")
+          if not ok:
+              print(f"::error::{apk} is missing manifest/resources — not installable."); sys.exit(1)
+          PY
+            BASE=$(basename "$APK")
+            # Stock split names look like app-<abi>-full-release.apk (and app-universal-full-release.apk).
+            # Preserve the ABI/universal token so AbiSelector still matches; brand the prefix.
+            if   [[ "$BASE" == *arm64-v8a* ]];   then ABI="arm64-v8a"
+            elif [[ "$BASE" == *armeabi-v7a* ]]; then ABI="armeabi-v7a"
+            elif [[ "$BASE" == *x86_64* ]];      then ABI="x86_64"
+            elif [[ "$BASE" == *x86* ]];         then ABI="x86"
+            elif [[ "$BASE" == *universal* ]];   then ABI="universal"
+            else ABI="universal"
+            fi
+            OUT="dist/CineX-TV-${TAG}-${ABI}.apk"
+            cp "$APK" "$OUT"
+            echo "renamed $BASE -> $OUT"
+            ASSET_LIST="${ASSET_LIST}${OUT}"$'\n'
+          done
+          {
+            echo "files<<EOF"
+            printf '%s' "$ASSET_LIST"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: CineX TV ${{ steps.ver.outputs.tag }}
+          # target_commitish is informational for TV (updater has no channel filter).
+          target_commitish: ${{ env.RELEASE_TARGET_BRANCH }}
+          prerelease: ${{ inputs.prerelease == true }}
+          generate_release_notes: true
+          files: ${{ steps.apk.outputs.files }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
