@@ -14,6 +14,8 @@ import com.nuvio.tv.core.debrid.DirectDebridResolver
 import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.reco.ForceRescrapeService
+import com.nuvio.tv.data.local.DeviceProfileDataStore
 import com.nuvio.tv.core.subtitle.SubtitleWarmer
 import com.nuvio.tv.core.stream.StreamWarmer
 import com.nuvio.tv.core.torrent.TorrentSettings
@@ -86,6 +88,8 @@ class StreamScreenViewModel @Inject constructor(
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     private val streamWarmer: StreamWarmer,
     private val torrentService: TorrentService,
+    private val forceRescrapeService: ForceRescrapeService,
+    private val deviceProfileDataStore: DeviceProfileDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -1377,6 +1381,60 @@ class StreamScreenViewModel @Inject constructor(
 
     fun onStreamQueuedMessageShown() {
         updateUiStateIfChanged { it.copy(streamQueuedMessage = null) }
+    }
+
+    fun onForceFetchMessageShown() {
+        updateUiStateIfChanged { it.copy(forceFetchMessage = null) }
+    }
+
+    /**
+     * Force fetch: ask the backend to re-scrape THIS title/episode for fresh streams,
+     * then re-fetch the stream list so any newly-found hashes appear. Re-locks the
+     * button while in-flight. 429 → short "please wait" message; other failures → toast.
+     */
+    fun forceFetch() {
+        if (_uiState.value.isForceFetching) return
+        val normalizedType = when (contentType.lowercase()) {
+            "series", "tv", "show" -> "series"
+            else -> "movie"
+        }
+        updateUiStateIfChanged { it.copy(isForceFetching = true) }
+        viewModelScope.launch {
+            val profileId = try {
+                deviceProfileDataStore.selectedProfileId.first()
+            } catch (_: Exception) {
+                null
+            }
+            val result = forceRescrapeService.rescrape(
+                type = normalizedType,
+                videoId = videoId,
+                profileId = profileId
+            )
+            when (result) {
+                is ForceRescrapeService.Result.Success -> {
+                    if (!result.ok || (result.added == 0 && result.valid == 0)) {
+                        updateUiStateIfChanged {
+                            it.copy(forceFetchMessage = context.getString(R.string.stream_force_fetch_none))
+                        }
+                    }
+                    // Re-fetch the stream list regardless so the latest hashes show.
+                    resumeBaselineStreams = null
+                    streamLoadCompleted = false
+                    loadStreams()
+                }
+                is ForceRescrapeService.Result.RateLimited -> {
+                    updateUiStateIfChanged {
+                        it.copy(forceFetchMessage = context.getString(R.string.stream_force_fetch_wait))
+                    }
+                }
+                is ForceRescrapeService.Result.Failure -> {
+                    updateUiStateIfChanged {
+                        it.copy(forceFetchMessage = context.getString(R.string.stream_force_fetch_failed))
+                    }
+                }
+            }
+            updateUiStateIfChanged { it.copy(isForceFetching = false) }
+        }
     }
 
     fun cancelDownload() {

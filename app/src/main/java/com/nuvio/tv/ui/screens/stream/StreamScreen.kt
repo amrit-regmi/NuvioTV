@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +56,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -288,6 +291,12 @@ fun StreamScreen(
         viewModel.onStreamQueuedMessageShown()
     }
 
+    LaunchedEffect(uiState.forceFetchMessage) {
+        val message = uiState.forceFetchMessage ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        viewModel.onForceFetchMessageShown()
+    }
+
     // Once streams are resolved, release the MainActivity auto-next loader so it doesn't
     // mask this screen (whether it auto-launches a player or shows the manual list).
     LaunchedEffect(uiState.isLoading) {
@@ -418,6 +427,8 @@ fun StreamScreen(
                     streams = uiState.filteredStreams,
                     availableAddons = uiState.availableAddons,
                     sourceChips = uiState.sourceChips,
+                    isForceFetching = uiState.isForceFetching,
+                    onForceFetch = { viewModel.forceFetch() },
                     selectedAddonFilter = uiState.selectedAddonFilter,
                     showFileSizeBadges = streamBadgeSettings.showFileSizeBadges,
                     showAddonLogo = streamBadgeSettings.showAddonLogo,
@@ -771,6 +782,8 @@ private fun RightStreamSection(
     streams: List<Stream>,
     availableAddons: List<String>,
     sourceChips: List<SourceChipItem>,
+    isForceFetching: Boolean = false,
+    onForceFetch: () -> Unit = {},
     selectedAddonFilter: String?,
     showFileSizeBadges: Boolean,
     showAddonLogo: Boolean,
@@ -831,22 +844,35 @@ private fun RightStreamSection(
     ) {
         val chipRowHeight = NuvioTheme.spacing.huge
 
-        // Addon filter chips
-        Box(modifier = Modifier.height(chipRowHeight)) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = sourceChips.isNotEmpty() || (!isLoading && availableAddons.isNotEmpty()),
-                enter = fadeIn(animationSpec = tween(300)),
-                exit = fadeOut(animationSpec = tween(300))
-            ) {
-                AddonFilterChips(
-                    addons = availableAddons,
-                    sourceChips = sourceChips,
-                    selectedAddon = selectedAddonFilter,
-                    onAddonSelected = { onAddonFilterSelectedGuarded(it) },
-                    focusRequesters = chipFocusRequesters,
-                    orderedNames = orderedAddonNames
-                )
+        // Addon filter chips + Force fetch (re-scrape) action
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(chipRowHeight),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+        ) {
+            Box(modifier = Modifier.weight(1f, fill = true)) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = sourceChips.isNotEmpty() || (!isLoading && availableAddons.isNotEmpty()),
+                    enter = fadeIn(animationSpec = tween(300)),
+                    exit = fadeOut(animationSpec = tween(300))
+                ) {
+                    AddonFilterChips(
+                        addons = availableAddons,
+                        sourceChips = sourceChips,
+                        selectedAddon = selectedAddonFilter,
+                        onAddonSelected = { onAddonFilterSelectedGuarded(it) },
+                        focusRequesters = chipFocusRequesters,
+                        orderedNames = orderedAddonNames
+                    )
+                }
             }
+
+            ForceFetchButton(
+                isLoading = isForceFetching,
+                onClick = onForceFetch
+            )
         }
 
         Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
@@ -907,6 +933,73 @@ private fun RightStreamSection(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Force-fetch (re-scrape) action button shown in the sources header. D-pad focusable
+ * (TV Card). Shows a spinner + relocks while the re-scrape POST is in flight. The
+ * tooltip text is exposed as the content description so the platform's focus reader /
+ * accessibility surfaces "Forces a fresh re-scrape for valid streams of this title."
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun ForceFetchButton(
+    isLoading: Boolean,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val label = stringResource(R.string.stream_force_fetch)
+    val tooltip = stringResource(R.string.stream_force_fetch_tooltip)
+    val contentColor = if (isFocused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.TextPrimary
+
+    Card(
+        onClick = { if (!isLoading) onClick() },
+        modifier = Modifier
+            .onFocusChanged { isFocused = it.isFocused }
+            .semantics { contentDescription = tooltip },
+        colors = CardDefaults.colors(
+            containerColor = NuvioTheme.colors.BackgroundCard,
+            focusedContainerColor = NuvioTheme.colors.Secondary
+        ),
+        border = CardDefaults.border(
+            border = Border(
+                border = BorderStroke(NuvioTheme.spacing.hairline, NuvioTheme.colors.Border),
+                shape = RoundedCornerShape(20.dp)
+            ),
+            focusedBorder = Border(
+                border = BorderStroke(NuvioTheme.spacing.xxs, NuvioTheme.colors.FocusRing),
+                shape = RoundedCornerShape(20.dp)
+            )
+        ),
+        shape = CardDefaults.shape(shape = RoundedCornerShape(20.dp)),
+        scale = CardDefaults.scale(focusedScale = 1.02f)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            if (isLoading) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(NuvioTheme.spacing.md),
+                    color = contentColor,
+                    strokeWidth = 1.5.dp
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(NuvioTheme.spacing.lg),
+                    tint = contentColor
+                )
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = contentColor
+            )
         }
     }
 }

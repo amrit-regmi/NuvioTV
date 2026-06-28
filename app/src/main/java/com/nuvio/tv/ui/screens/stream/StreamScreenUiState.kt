@@ -39,6 +39,9 @@ data class StreamScreenUiState(
     val error: String? = null,
     val playbackErrorMessage: String? = null,
     val streamQueuedMessage: String? = null,
+    // Force-fetch (re-scrape) button state.
+    val isForceFetching: Boolean = false,
+    val forceFetchMessage: String? = null,
     // Active non-cached download state (null = no active download)
     val activeDownload: DebridDownloadState? = null,
     // Set of stream stable keys for direct-debrid streams that are already

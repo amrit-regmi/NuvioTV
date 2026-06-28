@@ -1394,6 +1394,11 @@
     <string name="debrid_not_cached">Not cached on this service.</string>
     <string name="debrid_resolution_failed">Could not resolve this Debrid stream.</string>
     <string name="stream_queued_toast">Stream queued for download. Check back soon.</string>
+    <string name="stream_force_fetch">Force fetch</string>
+    <string name="stream_force_fetch_tooltip">Forces a fresh re-scrape for valid streams of this title.</string>
+    <string name="stream_force_fetch_wait">Please wait a moment before trying again.</string>
+    <string name="stream_force_fetch_failed">Couldn\'t refresh streams. Try again later.</string>
+    <string name="stream_force_fetch_none">No new streams found yet. Try again shortly.</string>
     <string name="stream_queued_eta">Stream queued — ready in ~%d minutes</string>
     <string name="stream_download_queued">Queued</string>
     <string name="stream_download_downloading">Downloading</string>
