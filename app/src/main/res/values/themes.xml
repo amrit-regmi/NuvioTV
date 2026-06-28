@@ -2,7 +2,16 @@
 
     <style name="Theme.MyApplication" parent="Theme.AppCompat.DayNight.NoActionBar" />
 
-    <style name="Theme.MyApplication.Launcher" parent="Theme.MyApplication">
-        <item name="android:windowBackground">@drawable/splash_screen_background</item>
+    <!--
+        Launcher / cold-start splash. Parents Theme.SplashScreen so the
+        androidx core-splashscreen back-compat layer renders the centered CineX
+        logo on ALL API levels (minSdk 24). Without this parent, pre-API-31
+        devices (most Android TV boxes) showed only a blank dark window.
+        API 31+ overrides this in values-v31/themes.xml with the platform splash.
+    -->
+    <style name="Theme.MyApplication.Launcher" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/app_logo_mark</item>
+        <item name="postSplashScreenTheme">@style/Theme.MyApplication</item>
     </style>
 </resources>
