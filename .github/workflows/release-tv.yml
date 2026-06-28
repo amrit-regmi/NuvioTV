@@ -113,6 +113,17 @@ jobs:
             echo "NUVIO_RELEASE_KEY_PASSWORD=$NUVIO_RELEASE_KEY_PASSWORD"
           } >> local.properties
 
+      - name: Provision production app config
+        env:
+          APP_CONFIG_PROPERTIES: ${{ secrets.APP_CONFIG_PROPERTIES }}
+        run: |
+          if [ -z "$APP_CONFIG_PROPERTIES" ]; then
+            echo "::error::APP_CONFIG_PROPERTIES secret is not set — refusing to build a misconfigured (localhost) APK."
+            exit 1
+          fi
+          printf '\n%s\n' "$APP_CONFIG_PROPERTIES" >> local.properties
+          echo "Appended production app config to local.properties ($(grep -c '=' local.properties) total keys)."
+
       - name: Build signed Full release APKs (per-ABI splits)
         run: ./gradlew :app:assembleFullRelease --no-daemon --stacktrace
 
