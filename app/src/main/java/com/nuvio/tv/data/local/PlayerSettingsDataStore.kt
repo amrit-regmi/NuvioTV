@@ -119,6 +119,19 @@ val AVAILABLE_SUBTITLE_LANGUAGES = listOf(
     SubtitleLanguage("zu", "Zulu")
 )
 
+/**
+ * The ONLY subtitle languages our backend supports (SUPPORTED_SUBTITLE_LANGS): English,
+ * Swedish, Finnish. The SETTINGS "preferred / secondary subtitle language" pickers offer
+ * exactly these three (their choice is synced to GET/POST /configure/subtitle-langs). The
+ * in-PLAYER subtitle track selector is unaffected — it still lists every language the
+ * /subtitles endpoint returns.
+ */
+val SUPPORTED_PREFERENCE_SUBTITLE_LANGUAGES = listOf(
+    SubtitleLanguage("en", "English"),
+    SubtitleLanguage("sv", "Swedish"),
+    SubtitleLanguage("fi", "Finnish")
+)
+
 val AVAILABLE_TMDB_LANGUAGES = AVAILABLE_SUBTITLE_LANGUAGES + listOf(
     SubtitleLanguage("en-AU", "English (Australia)"),
     SubtitleLanguage("en-CA", "English (Canada)"),

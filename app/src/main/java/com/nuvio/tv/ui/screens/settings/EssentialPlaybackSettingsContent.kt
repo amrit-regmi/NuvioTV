@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -44,6 +45,11 @@ fun EssentialPlaybackSettingsContent(
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
     var showP2pConsentDialog by remember { mutableStateOf(false) }
     val settings = playerSettings
+
+    // Prefill the subtitle preference (en/sv/fi) from the backend once when settings open.
+    LaunchedEffect(Unit) {
+        viewModel.syncSubtitleLangsFromBackend()
+    }
 
     val listState = rememberLazyListState()
 
@@ -171,6 +177,8 @@ fun EssentialPlaybackSettingsContent(
             title = stringResource(R.string.essential_subtitle_language),
             selectedLanguage = if (settings.subtitleStyle.preferredLanguage == "none") null else settings.subtitleStyle.preferredLanguage,
             showNoneOption = true,
+            // Backend supports ONLY en/sv/fi for the preference (SUPPORTED_SUBTITLE_LANGS).
+            languageList = com.nuvio.tv.data.local.SUPPORTED_PREFERENCE_SUBTITLE_LANGUAGES,
             onLanguageSelected = { language ->
                 coroutineScope.launch { viewModel.setSubtitlePreferredLanguage(language ?: "none") }
                 showSubtitleLanguageDialog = false

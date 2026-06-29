@@ -26,6 +26,9 @@ import com.nuvio.tv.core.torrent.TorrentSettingsData
 import com.nuvio.tv.data.local.VodCacheSizeMode
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
+import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.core.reco.RecommendationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -39,8 +42,42 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val addonRepository: AddonRepository,
     private val pluginManager: PluginManager,
-    private val torrentSettings: TorrentSettings
+    private val torrentSettings: TorrentSettings,
+    private val recommendationRepository: RecommendationRepository,
+    private val authManager: AuthManager,
+    private val profileManager: ProfileManager
 ) : ViewModel() {
+
+    // Subtitle language preference (en/sv/fi) is mirrored to the backend at
+    // GET/POST /configure/subtitle-langs so it persists server-side (backend uses it
+    // for prewarm + ordering). See API bridge contract.
+    private fun activeProfileIdString(): String = profileManager.activeProfileId.value.toString()
+
+    /**
+     * Pulls the saved subtitle preference from the backend and prefills the local
+     * datastore. Called when the subtitle settings open. Best-effort: no-op if not
+     * signed in or the call fails (keeps the local value).
+     */
+    suspend fun syncSubtitleLangsFromBackend() {
+        val token = authManager.currentAccessToken() ?: return
+        val pref = recommendationRepository.fetchSubtitleLangs(token, activeProfileIdString()) ?: return
+        pref.primary?.takeIf { it.isNotBlank() }?.let {
+            playerSettingsDataStore.setSubtitlePreferredLanguage(it)
+        }
+        // Secondary: null/blank clears it.
+        playerSettingsDataStore.setSubtitleSecondaryLanguage(pref.secondary?.takeIf { it.isNotBlank() })
+    }
+
+    /** Pushes the current subtitle preference pair to the backend (best-effort). */
+    private suspend fun pushSubtitleLangsToBackend(primary: String, secondary: String?) {
+        val token = authManager.currentAccessToken() ?: return
+        recommendationRepository.setSubtitleLangs(
+            bearerToken = token,
+            primary = primary,
+            secondary = secondary?.takeIf { it.isNotBlank() },
+            profileId = activeProfileIdString()
+        )
+    }
 
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
     val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
@@ -221,10 +258,15 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setSubtitlePreferredLanguage(language: String) {
         playerSettingsDataStore.setSubtitlePreferredLanguage(language)
+        // Sync the new pair to the backend so it persists server-side.
+        val current = playerSettings.first().subtitleStyle
+        pushSubtitleLangsToBackend(language, current.secondaryPreferredLanguage)
     }
 
     suspend fun setSubtitleSecondaryLanguage(language: String?) {
         playerSettingsDataStore.setSubtitleSecondaryLanguage(language)
+        val current = playerSettings.first().subtitleStyle
+        pushSubtitleLangsToBackend(current.preferredLanguage, language)
     }
 
     suspend fun setUseForcedSubtitles(enabled: Boolean) {

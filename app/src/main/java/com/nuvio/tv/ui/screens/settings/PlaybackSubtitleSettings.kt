@@ -366,6 +366,8 @@ internal fun SubtitleSettingsDialogs(
             title = stringResource(R.string.sub_preferred_lang),
             selectedLanguage = if (playerSettings.subtitleStyle.preferredLanguage == "none") null else playerSettings.subtitleStyle.preferredLanguage,
             showNoneOption = true,
+            // Backend supports ONLY en/sv/fi for the preference (SUPPORTED_SUBTITLE_LANGS).
+            languageList = com.nuvio.tv.data.local.SUPPORTED_PREFERENCE_SUBTITLE_LANGUAGES,
             onLanguageSelected = {
                 onSetPreferredLanguage(it)
                 onDismissLanguageDialog()
@@ -379,6 +381,8 @@ internal fun SubtitleSettingsDialogs(
             title = stringResource(R.string.sub_secondary_lang),
             selectedLanguage = playerSettings.subtitleStyle.secondaryPreferredLanguage,
             showNoneOption = true,
+            // Backend supports ONLY en/sv/fi for the preference (SUPPORTED_SUBTITLE_LANGS).
+            languageList = com.nuvio.tv.data.local.SUPPORTED_PREFERENCE_SUBTITLE_LANGUAGES,
             onLanguageSelected = {
                 onSetSecondaryLanguage(it)
                 onDismissSecondaryLanguageDialog()

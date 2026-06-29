@@ -122,6 +122,12 @@ fun PlaybackSettingsContent(
     var memoryUsageTrigger by remember { mutableStateOf(0) }
     var showMemoryUsage by remember { mutableStateOf(false) }
 
+    // Prefill the subtitle preference (en/sv/fi) from the backend once when settings open,
+    // so the pickers reflect the server-saved value. Best-effort; keeps local on failure.
+    LaunchedEffect(Unit) {
+        viewModel.syncSubtitleLangsFromBackend()
+    }
+
     // Dialog states
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showSecondaryLanguageDialog by remember { mutableStateOf(false) }
@@ -1193,12 +1199,16 @@ internal fun LanguageSelectionDialog(
     selectedLanguage: String?,
     showNoneOption: Boolean,
     extraOptions: List<Pair<String, String>> = emptyList(),
+    // When non-null, the picker offers ONLY these languages instead of the full list.
+    // Used by the subtitle preference pickers, which the backend caps to en/sv/fi.
+    languageList: List<com.nuvio.tv.data.local.SubtitleLanguage>? = null,
     onLanguageSelected: (String?) -> Unit,
     onDismiss: () -> Unit
 ) {
     val tmdbTitle = stringResource(R.string.tmdb_language_dialog_title)
-    val sortedLanguages = remember {
-        val baseList = if (title == tmdbTitle) AVAILABLE_TMDB_LANGUAGES else AVAILABLE_SUBTITLE_LANGUAGES
+    val sortedLanguages = remember(languageList) {
+        val baseList = languageList
+            ?: if (title == tmdbTitle) AVAILABLE_TMDB_LANGUAGES else AVAILABLE_SUBTITLE_LANGUAGES
         baseList.sortedBy { it.displayName.lowercase() }
     }
     val languageOptions: List<SettingsPickerOption<String?>> = buildList {

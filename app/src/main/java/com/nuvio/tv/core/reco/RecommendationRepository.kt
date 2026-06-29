@@ -61,6 +61,15 @@ data class FeatureStatus(
     val locked_by_admin: Boolean = false,
 )
 
+/**
+ * The user's saved subtitle language preference, from GET /configure/subtitle-langs.
+ * Codes are 2-letter (en/sv/fi); [secondary] is null when not set.
+ */
+data class SubtitleLangPref(
+    val primary: String?,
+    val secondary: String?
+)
+
 @Serializable
 data class MeInfo(
     val is_super_admin: Boolean = false,
@@ -216,6 +225,62 @@ class RecommendationRepository @Inject constructor(
                 null
             }
         }
+
+    /**
+     * Fetches the user's saved subtitle language preference from the backend.
+     * GET /configure/subtitle-langs (Bearer-gated, reco host). Returns the saved
+     * {primary, secondary} 2-letter codes (en/sv/fi); secondary may be null/blank.
+     * Returns null on any failure so the caller keeps the local value.
+     */
+    suspend fun fetchSubtitleLangs(bearerToken: String, profileId: String? = null): SubtitleLangPref? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val request = Request.Builder()
+                    .url("${BuildConfig.RECO_API_BASE_URL}/configure/subtitle-langs")
+                    .header("Authorization", "Bearer $bearerToken")
+                    .apply { if (profileId != null) addHeader("X-Profile-Id", profileId) }
+                    .get()
+                    .build()
+                val body = httpClient.newCall(request).execute().use { it.body?.string() ?: "" }
+                val obj = Json.parseToJsonElement(body).jsonObject
+                val primary = obj["primary"]?.jsonPrimitive?.contentOrNull
+                val secondary = obj["secondary"]?.jsonPrimitive?.contentOrNull
+                SubtitleLangPref(primary = primary, secondary = secondary?.takeIf { it.isNotBlank() })
+            }.getOrElse {
+                Log.w("RecoRepo", "fetchSubtitleLangs failed", it)
+                null
+            }
+        }
+
+    /**
+     * Persists the user's subtitle language preference server-side (used by the backend
+     * for prewarm + ordering). POST /configure/subtitle-langs with {primary, secondary}
+     * (2-letter codes en/sv/fi). [secondary] null is sent as JSON null. Best-effort.
+     */
+    suspend fun setSubtitleLangs(
+        bearerToken: String,
+        primary: String,
+        secondary: String?,
+        profileId: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val bodyJson = buildJsonObject {
+                put("primary", primary)
+                put("secondary", secondary)
+            }
+            val body = bodyJson.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("${BuildConfig.RECO_API_BASE_URL}/configure/subtitle-langs")
+                .header("Authorization", "Bearer $bearerToken")
+                .apply { if (profileId != null) addHeader("X-Profile-Id", profileId) }
+                .post(body)
+                .build()
+            httpClient.newCall(request).execute().use { it.isSuccessful }
+        }.getOrElse {
+            Log.w("RecoRepo", "setSubtitleLangs failed", it)
+            false
+        }
+    }
 
     suspend fun deleteProfile(bearerToken: String, profileUuid: String): Boolean =
         withContext(Dispatchers.IO) {
