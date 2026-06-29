@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cold-start splash icon.
+
+    windowSplashScreenAnimatedIcon renders inside a fixed icon slot that the
+    platform (API 31+) masks to a circle (~2/3 of the icon canvas). A raw,
+    full-bleed, opaque square logo (app_logo_mark is 1080x1080 with no alpha)
+    gets center-cropped to that circle, so the logo's outer mark is clipped
+    and — against the near-black splash background — the window looks blank on
+    cold start (the reported bug). Inset the logo so it lands inside the
+    keyline, and the same inset keeps it legible on the pre-31 compat path too.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:drawable="@drawable/app_logo_mark"
+        android:left="26%"
+        android:top="26%"
+        android:right="26%"
+        android:bottom="26%" />
+</layer-list>
