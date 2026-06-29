@@ -7,9 +7,12 @@ import com.nuvio.tv.data.remote.dto.StreamClientResolveRawDto
 import com.nuvio.tv.data.remote.dto.StreamClientResolveStreamDto
 import com.nuvio.tv.data.remote.dto.StreamClientResolveDto
 import com.nuvio.tv.data.remote.dto.StreamDto
+import com.nuvio.tv.data.remote.dto.StreamInfoDto
 import com.nuvio.tv.domain.model.ProxyHeaders
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamBehaviorHints
+import com.nuvio.tv.domain.model.StreamCacheStatus
+import com.nuvio.tv.domain.model.StreamInfo
 import com.nuvio.tv.domain.model.StreamClientResolve
 import com.nuvio.tv.domain.model.StreamClientResolveParsed
 import com.nuvio.tv.domain.model.StreamClientResolveRaw
@@ -28,7 +31,25 @@ fun StreamDto.toDomain(addonName: String, addonLogo: String?): Stream = Stream(
     addonName = addonName,
     addonLogo = addonLogo,
     sources = sources,
-    clientResolve = clientResolve?.toDomain()
+    clientResolve = clientResolve?.toDomain(),
+    streamInfo = streamInfo?.toDomain()
+)
+
+fun StreamInfoDto.toDomain(): StreamInfo = StreamInfo(
+    title = title,
+    season = season,
+    episode = episode,
+    cacheStatus = StreamCacheStatus.fromWire(cacheStatus),
+    quality = quality,
+    resolution = resolution,
+    videoCodec = videoCodec,
+    dynamicRange = dynamicRange ?: emptyList(),
+    audioCodec = audioCodec,
+    audioChannels = audioChannels,
+    sizeBytes = sizeBytes,
+    sizeLabel = sizeLabel,
+    bitrateBps = bitrateBps,
+    bitrateLabel = bitrateLabel
 )
 
 fun StreamClientResolveDto.toDomain(): StreamClientResolve = StreamClientResolve(

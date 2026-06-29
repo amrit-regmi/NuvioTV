@@ -24,7 +24,8 @@ data class Stream(
     val qualityValue: Int = -1,
     val clientResolve: StreamClientResolve? = null,
     val debridCacheStatus: StreamDebridCacheStatus? = null,
-    val badges: List<StreamBadge> = emptyList()
+    val badges: List<StreamBadge> = emptyList(),
+    val streamInfo: StreamInfo? = null
 ) {
     /**
      * Returns the primary stream source URL
@@ -163,6 +164,45 @@ data class Stream(
         if (occurrence > 0) {
             append('\u0000')
             append(occurrence)
+        }
+    }
+}
+
+/**
+ * Structured, pre-parsed stream descriptor from the backend (see API bridge contract
+ * "Structured stream object — streamInfo"). The UI renders these fields in a fixed
+ * 6-line layout instead of the raw torrent name, so TV + mobile look identical.
+ * Any null/empty field's line is hidden; [dynamicRange] defaults to empty (never null).
+ */
+@Immutable
+data class StreamInfo(
+    val title: String?,
+    val season: Int?,
+    val episode: Int?,
+    val cacheStatus: StreamCacheStatus,
+    val quality: String?,
+    val resolution: String?,
+    val videoCodec: String?,
+    val dynamicRange: List<String> = emptyList(),
+    val audioCodec: String?,
+    val audioChannels: String?,
+    val sizeBytes: Long?,
+    val sizeLabel: String?,
+    val bitrateBps: Long?,
+    val bitrateLabel: String?
+)
+
+/** cacheStatus enum from the contract: instant | cached | not_cached. */
+enum class StreamCacheStatus {
+    INSTANT,
+    CACHED,
+    NOT_CACHED;
+
+    companion object {
+        fun fromWire(value: String?): StreamCacheStatus = when (value?.lowercase()) {
+            "instant" -> INSTANT
+            "cached" -> CACHED
+            else -> NOT_CACHED
         }
     }
 }

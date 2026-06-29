@@ -147,39 +147,65 @@ internal fun StreamItem(
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.xxs))
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
-                ) {
-                    Text(
-                        text = streamName,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = NuvioTheme.colors.TextPrimary
-                    )
-
-                    if (isCurrentStream) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(NuvioTheme.colors.Primary.copy(alpha = 0.2f))
-                                .padding(horizontal = NuvioTheme.spacing.sm, vertical = NuvioTheme.spacing.xs)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.sources_playing),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = NuvioTheme.colors.Primary
-                            )
+                val streamInfo = stream.streamInfo
+                if (streamInfo != null) {
+                    // Backend structured info: render the fixed 6-line layout (with the
+                    // "Playing" pill on line 1) and DROP the raw torrent name/description.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+                    ) {
+                        com.nuvio.tv.ui.components.StreamInfoContent(streamInfo = streamInfo)
+                        if (isCurrentStream) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(NuvioTheme.colors.Primary.copy(alpha = 0.2f))
+                                    .padding(horizontal = NuvioTheme.spacing.sm, vertical = NuvioTheme.spacing.xs)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.sources_playing),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = NuvioTheme.colors.Primary
+                                )
+                            }
                         }
                     }
-                }
-
-                streamDescription?.let { description ->
-                    if (description != streamName) {
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+                    ) {
                         Text(
-                            text = description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NuvioTheme.extendedColors.textSecondary
+                            text = streamName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = NuvioTheme.colors.TextPrimary
                         )
+
+                        if (isCurrentStream) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(NuvioTheme.colors.Primary.copy(alpha = 0.2f))
+                                    .padding(horizontal = NuvioTheme.spacing.sm, vertical = NuvioTheme.spacing.xs)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.sources_playing),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = NuvioTheme.colors.Primary
+                                )
+                            }
+                        }
+                    }
+
+                    streamDescription?.let { description ->
+                        if (description != streamName) {
+                            Text(
+                                text = description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = NuvioTheme.extendedColors.textSecondary
+                            )
+                        }
                     }
                 }
 

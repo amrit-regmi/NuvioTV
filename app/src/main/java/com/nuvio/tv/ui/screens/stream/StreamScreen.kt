@@ -1411,19 +1411,26 @@ private fun StreamCard(
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.xxs))
                 }
 
-                Text(
-                    text = streamName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioTheme.colors.TextPrimary
-                )
+                val streamInfo = stream.streamInfo
+                if (streamInfo != null) {
+                    // Backend structured info: render the fixed 6-line layout and DROP the
+                    // raw torrent name/description (contract: streamInfo).
+                    com.nuvio.tv.ui.components.StreamInfoContent(streamInfo = streamInfo)
+                } else {
+                    Text(
+                        text = streamName,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = NuvioTheme.colors.TextPrimary
+                    )
 
-                streamDescription?.let { description ->
-                    if (description.isNotBlank() && description != streamName) {
-                        Text(
-                            text = description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NuvioTheme.extendedColors.textSecondary
-                        )
+                    streamDescription?.let { description ->
+                        if (description.isNotBlank() && description != streamName) {
+                            Text(
+                                text = description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = NuvioTheme.extendedColors.textSecondary
+                            )
+                        }
                     }
                 }
 
