@@ -122,6 +122,10 @@ class MetaDetailsViewModel @Inject constructor(
     private var collectionJob: Job? = null
     private var prepareStreamJob: Job? = null
 
+    // Dedup guard for the details-open prewarm call (parity with mobile CatalogPrewarmService).
+    // Keyed by "type/videoId"; once fired for a given title we don't fire again this session.
+    private val prewarmedKeys = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
     val lastFocusedEpisodeIdBySeason = androidx.compose.runtime.mutableStateMapOf<Int, String>()
     private var episodeRatingsJob: Job? = null
     private var nextToWatchJob: Job? = null
@@ -267,6 +271,10 @@ class MetaDetailsViewModel @Inject constructor(
         val isSeries = type.equals("series", ignoreCase = true) || type.equals("tv", ignoreCase = true)
         val videoId = (if (isSeries) nextToWatch.nextVideoId else targetMeta.id)
             ?.takeIf { it.isNotBlank() } ?: return
+        // Parity with mobile (CatalogPrewarmService): on details-open, fire the backend
+        // prewarm endpoint so genuinely-cached candidates get pre-resolved + subs bootstrapped.
+        // Backend never auto-downloads uncached titles, so this is safe to fire on every open.
+        prewarmOnDetailsOpen(type, videoId)
         streamWarmer.warm(type, videoId)
         // After a brief delay (letting the warm complete), read the cached uncached stream count.
         // This drives the smart download button: exactly 1 uncached stream → direct download;
@@ -276,6 +284,42 @@ class MetaDetailsViewModel @Inject constructor(
             val count = streamWarmer.getCachedUncachedStreamCount(type, videoId)
             if (count >= 0) {
                 _uiState.update { it.copy(uncachedStreamCount = count) }
+            }
+        }
+    }
+
+    /**
+     * Fire-and-forget backend prewarm on details-open (parity with mobile CatalogPrewarmService).
+     * POST {backend}/catalog-addon/prewarm/{type}/{videoId} — best-effort, deduped, never blocks
+     * the UI, never throws. RecoAuthInterceptor attaches the user's Supabase Bearer token (same
+     * auth as every other catalog-addon call), so we pass authorization = null here.
+     *
+     * Because backend prewarm no longer auto-starts downloads, this never triggers a download for
+     * uncached titles. On success we evict the warmer's stream cache for this title and re-warm so
+     * any newly-resolved cached_url / cacheStatus updates are reflected when the user opens streams.
+     */
+    private fun prewarmOnDetailsOpen(rawType: String, videoId: String) {
+        val isSeries = rawType.equals("series", ignoreCase = true) || rawType.equals("tv", ignoreCase = true)
+        val type = if (isSeries) "series" else "movie"
+        val id = videoId.trim().takeIf { it.isNotBlank() } ?: return
+        val key = "$type/$id"
+        if (!prewarmedKeys.add(key)) return // already prewarmed this session
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val resp = catalogAddonApi.prewarm(type, id, null)
+                if (resp.isSuccessful) {
+                    Log.d(TAG, "Prewarm ok for $key — re-warming stream list")
+                    // Re-fetch so newly-warmed cached_url / cacheStatus updates surface.
+                    streamWarmer.evictStreamsForVideo(type, id)
+                    streamWarmer.warm(type, id)
+                } else {
+                    Log.d(TAG, "Prewarm $key non-OK (${resp.code()}) — ignored (best-effort)")
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Best-effort: failures must never affect the UI.
+                Log.d(TAG, "Prewarm $key failed (best-effort, ignored): ${e.message}")
             }
         }
     }

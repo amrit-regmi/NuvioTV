@@ -25,6 +25,19 @@ interface CatalogAddonApi {
         @Path(value = "videoId", encoded = true) videoId: String
     ): Response<CatalogStreamStatusDto>
 
+    // Details-open prewarm (parity with mobile CatalogPrewarmService). Best-effort:
+    // pre-resolves the top genuinely-cached candidate(s) to a direct CDN url + bootstraps
+    // subtitles so a subsequent /stream returns instantly-playable streams. Backend NEVER
+    // auto-starts a download for uncached titles, so this is safe to fire on every open.
+    // type = "movie"|"series"; videoId = "tt123" or "tt123:S:E". RecoAuthInterceptor attaches
+    // the user's Supabase Bearer token (pass null here, same as the other catalog-addon calls).
+    @POST("prewarm/{type}/{videoId}")
+    suspend fun prewarm(
+        @Path("type") type: String,
+        @Path(value = "videoId", encoded = true) videoId: String,
+        @Header("Authorization") authorization: String? = null
+    ): Response<Unit>
+
     @POST("stream/{type}/{videoId}/prepare")
     suspend fun prepareStream(
         @Path("type") type: String,

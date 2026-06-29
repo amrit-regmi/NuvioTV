@@ -204,16 +204,18 @@ data class StreamInfo(
     val runtimeLabel: String? = null
 )
 
-/** cacheStatus enum from the contract: instant | cached | not_cached. */
+/** cacheStatus enum from the contract: instant | cached | downloading | not_cached. */
 enum class StreamCacheStatus {
     INSTANT,
     CACHED,
+    DOWNLOADING,
     NOT_CACHED;
 
     companion object {
         fun fromWire(value: String?): StreamCacheStatus = when (value?.lowercase()) {
             "instant" -> INSTANT
             "cached" -> CACHED
+            "downloading" -> DOWNLOADING
             else -> NOT_CACHED
         }
     }

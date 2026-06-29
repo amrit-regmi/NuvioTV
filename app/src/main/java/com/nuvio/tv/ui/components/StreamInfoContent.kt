@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Hd
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Movie
@@ -216,6 +217,7 @@ private fun CacheStatusPill(status: StreamCacheStatus) {
     val (icon: ImageVector, tint: Color, label: String) = when (status) {
         StreamCacheStatus.INSTANT -> Triple(Icons.Rounded.Bolt, Color(0xFFE0A800), "Instant")
         StreamCacheStatus.CACHED -> Triple(Icons.Rounded.CloudDone, Color(0xFF43A047), "Cached")
+        StreamCacheStatus.DOWNLOADING -> Triple(Icons.Rounded.CloudSync, Color(0xFF1E88E5), "Downloading")
         StreamCacheStatus.NOT_CACHED -> Triple(
             Icons.Rounded.CloudDownload,
             NuvioTheme.extendedColors.textSecondary,
