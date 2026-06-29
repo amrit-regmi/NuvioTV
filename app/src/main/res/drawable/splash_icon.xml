@@ -11,10 +11,17 @@
     keyline, and the same inset keeps it legible on the pre-31 compat path too.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        Inset in fixed dp (NOT percent — AAPT rejects "%" for dimension attrs and
+        fails processFullReleaseResources). The Android 12 splash icon canvas is a
+        240dp window whose inner ~108dp is masked to a circle. Insetting 66dp on
+        every side ((240-108)/2) lands the full-bleed square mark inside that
+        keyline and centers it consistently with the mobile CineX splash.
+    -->
     <item
         android:drawable="@drawable/app_logo_mark"
-        android:left="26%"
-        android:top="26%"
-        android:right="26%"
-        android:bottom="26%" />
+        android:left="66dp"
+        android:top="66dp"
+        android:right="66dp"
+        android:bottom="66dp" />
 </layer-list>

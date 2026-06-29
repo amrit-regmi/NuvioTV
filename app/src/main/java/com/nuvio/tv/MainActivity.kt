@@ -179,6 +179,21 @@ val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
 
 private const val SIDEBAR_AUTO_COLLAPSE_DELAY_MS = 4_000L
 
+// Cold-start splash: minimum time the in-app CineX splash must remain visible before the
+// app navigates onward, so the full animation always plays (mirrors mobile's ~2s hold:
+// CineXLoader ~2000ms logo drop + ~1300+600ms letter animation).
+private const val SPLASH_MIN_HOLD_MS = 2_000L
+
+// True once the cold-start splash has played its full hold in THIS process. Survives
+// recompositions/config changes so the splash only plays once per launch, never again
+// when returning from background.
+@Volatile
+private var splashAlreadyPlayedThisProcess = false
+
+// True once the startup auto update-check has run in THIS process (once per process).
+@Volatile
+private var startupUpdateCheckDoneThisProcess = false
+
 // Web-only personalization deep link surfaced by the post-first-login nudge.
 private const val PERSONALIZE_WEB_URL = "https://hamrocinema.regmig.com/configure/settings#sec-personalization"
 
@@ -328,6 +343,19 @@ class MainActivity : ComponentActivity() {
         val launchContentType = intent?.getStringExtra("contentType")
 
         setContent {
+            // Cold-start splash: ALWAYS play the full CineX animation for a fixed minimum
+            // (~2s) before navigating to the next screen, even if content loads faster.
+            // Mirrors mobile (CineXLoader ~2000ms drop + letter animation). Process-scoped:
+            // shown once per cold start. See `splashMinHoldElapsed` gate below.
+            var splashMinHoldElapsed by rememberSaveable { mutableStateOf(splashAlreadyPlayedThisProcess) }
+            LaunchedEffect(Unit) {
+                if (!splashMinHoldElapsed) {
+                    delay(SPLASH_MIN_HOLD_MS)
+                    splashAlreadyPlayedThisProcess = true
+                    splashMinHoldElapsed = true
+                }
+            }
+
             var hasSelectedProfileThisSession by rememberSaveable { mutableStateOf(false) }
             var onboardingCompletedThisSession by remember { mutableStateOf(false) }
             var onboardingProfileSyncInProgress by remember { mutableStateOf(false) }
@@ -499,7 +527,11 @@ class MainActivity : ComponentActivity() {
                         containerColor = NuvioTheme.colors.Background
                     )
                 ) {
-                    if (hasSeenAuthQrOnFirstLaunch == null) {
+                    // Keep the full-screen CineX splash up until BOTH (a) the onboarding
+                    // datastore is ready AND (b) the minimum splash hold has elapsed, so the
+                    // splash always plays its full animation on cold start before any
+                    // navigation — even when state resolves instantly.
+                    if (hasSeenAuthQrOnFirstLaunch == null || !splashMinHoldElapsed) {
                         com.nuvio.tv.ui.components.CineXSplash(
                             modifier = Modifier.fillMaxSize()
                         )
@@ -834,6 +866,15 @@ class MainActivity : ComponentActivity() {
                     if (AppFeaturePolicy.inAppUpdatesEnabled && !BuildConfig.IS_DEBUG_BUILD) {
                         val updateViewModel: UpdateViewModel = hiltViewModel(this@MainActivity)
                         val updateState by updateViewModel.uiState.collectAsState()
+                        // Auto-check for updates once per process on cold start (matches mobile):
+                        // silent unless a newer GitHub release exists. The manual About check
+                        // (force=true) is unchanged.
+                        LaunchedEffect(Unit) {
+                            if (!startupUpdateCheckDoneThisProcess) {
+                                startupUpdateCheckDoneThisProcess = true
+                                updateViewModel.checkForUpdates(force = false, showNoUpdateFeedback = false)
+                            }
+                        }
                         UpdatePromptDialog(
                             state = updateState,
                             onDismiss = { updateViewModel.dismissDialog() },
