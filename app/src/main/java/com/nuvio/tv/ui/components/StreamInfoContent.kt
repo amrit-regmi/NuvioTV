@@ -1,18 +1,38 @@
 package com.nuvio.tv.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CloudDone
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.Hd
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.StreamCacheStatus
@@ -20,135 +40,240 @@ import com.nuvio.tv.domain.model.StreamInfo
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 /**
- * Renders the backend-provided structured [StreamInfo] in the fixed 6-line layout from the
- * API bridge contract ("Structured stream object — streamInfo"). Both the details stream
- * list (StreamCard) and the in-player source list (StreamItem) call this so TV + mobile look
- * identical. We render THIS instead of the raw torrent name/description.
+ * Renders the backend-provided structured [StreamInfo] in the unified stream-row layout
+ * shared with NuvioMobile (see API bridge contract "Structured stream object — streamInfo").
+ * Both the details stream list (StreamCard) and the in-player source list (StreamItem) call
+ * this so TV + mobile look identical. We render THIS instead of the raw torrent name/description.
  *
- *   Line 1: <title>  ·  S<season> E<episode>   [cache badge: Instant | Cached | Not Cached]
- *   Line 2: <quality>            (e.g. "4K UHD", "1080p")
- *   Line 3: <videoCodec> · <dynamicRange joined by " · ">   (e.g. "HEVC · DV · HDR10")
- *   Line 4: <audioCodec>         (e.g. "Atmos", "E-AC3")
- *   Line 5: <audioChannels>      (e.g. "5.1")
- *   Line 6: <sizeLabel> · <bitrateLabel>   (bitrate hidden when null — common for packs)
+ *   Title line:  <title> (<year>)                                   [cache pill]
+ *   Quality:     [Hd]      S05 E16  ·  1080p  ·  BluRay
+ *   Video+audio: [Movie]   HEVC · 10bit · DV · HDR10     [Speaker]  DTS-HD MA 5.1
+ *   Size:        [Storage] 9 GB  ·  56m  ·  18 Mbps
+ *   Languages:   [Language] EN · ES                      [Subtitles] EN · ES
  *
- * Any line whose value is null/empty is omitted entirely (no empty bullet). Icons are
- * single-tint monochrome matching the text color (no flashy colors).
+ * Every icon is MONOCHROME (textSecondary). The ONLY coloured element is the cache pill
+ * (Instant=gold, Cached=green, Not Cached=grey). Any line/segment whose text is blank is
+ * omitted entirely (no empty bullet). On TV the optional [currentLabel] "Playing" badge
+ * renders under the title line (D-pad focus model is handled by the surrounding Card).
  */
 @Composable
 fun StreamInfoContent(
     streamInfo: StreamInfo,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isCurrentStream: Boolean = false,
+    currentLabel: String? = null
 ) {
-    // Line 1: title · S.E + cache badge.
-    val seasonEpisode = formatSeasonEpisode(streamInfo.season, streamInfo.episode)
-    val line1 = listOfNotNull(
-        streamInfo.title?.takeIf { it.isNotBlank() },
-        seasonEpisode
-    ).joinToString("  ·  ")
+    val info = streamInfo
+    val titleStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold,
+        lineHeight = 20.sp,
+        letterSpacing = 0.sp
+    )
+    val lineStyle = MaterialTheme.typography.bodySmall.copy(
+        fontSize = 12.sp,
+        lineHeight = 18.sp
+    )
+    val secondary = NuvioTheme.extendedColors.textSecondary
+    val dot = "  ·  "
 
+    // Title (+ year) only; cache pill trails on the right.
+    val titleLine = buildString {
+        append(info.title?.takeIf { it.isNotBlank() } ?: "Stream")
+        info.year?.let { append(" (").append(it).append(")") }
+    }
     Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        if (line1.isNotBlank()) {
-            Text(
-                text = line1,
-                style = MaterialTheme.typography.titleMedium,
-                color = NuvioTheme.colors.TextPrimary
-            )
+        Text(
+            text = titleLine,
+            modifier = Modifier.weight(1f),
+            style = titleStyle,
+            color = NuvioTheme.colors.TextPrimary,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        CacheStatusPill(info.cacheStatus)
+    }
+
+    if (isCurrentStream && !currentLabel.isNullOrBlank()) {
+        Spacer(modifier = Modifier.height(4.dp))
+        CurrentStreamBadge(label = currentLabel)
+    }
+
+    // Quality: [Hd] S05 E16 · 1080p · BluRay
+    val seText = buildString {
+        info.season?.let { append("S").append(it.toString().padStart(2, '0')) }
+        info.episode?.let {
+            if (isNotEmpty()) append(" ")
+            append("E").append(it.toString().padStart(2, '0'))
         }
-        CacheBadge(streamInfo.cacheStatus)
+    }
+    val qualityText = listOfNotNull(
+        seText.takeIf { it.isNotBlank() },
+        info.resolution?.takeIf { it.isNotBlank() },
+        info.source?.takeIf { it.isNotBlank() }
+    ).joinToString(dot)
+    if (qualityText.isNotBlank()) {
+        InfoRow {
+            InfoSegment(Icons.Rounded.Hd, qualityText, secondary, lineStyle, Modifier.weight(1f, fill = false))
+        }
     }
 
-    // Line 2: quality.
-    streamInfo.quality?.takeIf { it.isNotBlank() }?.let { quality ->
-        Text(
-            text = quality,
-            style = MaterialTheme.typography.bodySmall,
-            color = NuvioTheme.extendedColors.textSecondary
-        )
+    // Video + audio on one line: [Movie] HEVC · 10bit · HDR10   [Speaker] DTS-HD MA 5.1
+    val videoText = (
+        listOfNotNull(
+            info.videoCodec?.takeIf { it.isNotBlank() },
+            info.bitDepth?.takeIf { it.isNotBlank() }
+        ) + info.dynamicRange.filter { it.isNotBlank() }
+        ).joinToString(dot)
+    val audioText = listOfNotNull(
+        info.audioCodec?.takeIf { it.isNotBlank() },
+        info.audioChannels?.takeIf { it.isNotBlank() }
+    ).joinToString(" ")
+    if (videoText.isNotBlank() || audioText.isNotBlank()) {
+        InfoRow {
+            if (videoText.isNotBlank()) {
+                InfoSegment(Icons.Rounded.Movie, videoText, secondary, lineStyle, Modifier.weight(1f, fill = false))
+            }
+            if (audioText.isNotBlank()) {
+                InfoSegment(Icons.AutoMirrored.Rounded.VolumeUp, audioText, secondary, lineStyle, Modifier.weight(1f, fill = false))
+            }
+        }
     }
 
-    // Line 3: videoCodec · dynamicRange...
-    val line3 = listOfNotNull(streamInfo.videoCodec?.takeIf { it.isNotBlank() })
-        .plus(streamInfo.dynamicRange.filter { it.isNotBlank() })
-        .joinToString(" · ")
-    if (line3.isNotBlank()) {
-        Text(
-            text = line3,
-            style = MaterialTheme.typography.bodySmall,
-            color = NuvioTheme.extendedColors.textSecondary
-        )
+    // Size: [Storage] 9 GB · 56m · 18 Mbps
+    val sizeText = listOfNotNull(
+        info.sizeLabel?.takeIf { it.isNotBlank() },
+        info.runtimeLabel?.takeIf { it.isNotBlank() },
+        info.bitrateLabel?.takeIf { it.isNotBlank() }
+    ).joinToString(dot)
+    if (sizeText.isNotBlank()) {
+        InfoRow {
+            InfoSegment(Icons.Rounded.Storage, sizeText, secondary, lineStyle, Modifier.weight(1f, fill = false))
+        }
     }
 
-    // Line 4: audioCodec.
-    streamInfo.audioCodec?.takeIf { it.isNotBlank() }?.let { audioCodec ->
-        Text(
-            text = audioCodec,
-            style = MaterialTheme.typography.bodySmall,
-            color = NuvioTheme.extendedColors.textSecondary
-        )
-    }
-
-    // Line 5: audioChannels.
-    streamInfo.audioChannels?.takeIf { it.isNotBlank() }?.let { channels ->
-        Text(
-            text = channels,
-            style = MaterialTheme.typography.bodySmall,
-            color = NuvioTheme.extendedColors.textSecondary
-        )
-    }
-
-    // Line 6: sizeLabel · bitrateLabel (bitrate hidden when null).
-    val line6 = listOfNotNull(
-        streamInfo.sizeLabel?.takeIf { it.isNotBlank() },
-        streamInfo.bitrateLabel?.takeIf { it.isNotBlank() }
-    ).joinToString(" · ")
-    if (line6.isNotBlank()) {
-        Text(
-            text = line6,
-            style = MaterialTheme.typography.bodySmall,
-            color = NuvioTheme.extendedColors.textSecondary
-        )
+    // Languages: [Language] EN · ES    [Subtitles] EN · ES
+    val audioLangs = info.audioLanguages.toLangTags()
+    val subLangs = info.subtitleLanguages.toLangTags()
+    if (audioLangs.isNotBlank() || subLangs.isNotBlank()) {
+        InfoRow {
+            if (audioLangs.isNotBlank()) {
+                InfoSegment(Icons.Rounded.Language, audioLangs, secondary, lineStyle, Modifier.weight(1f, fill = false))
+            }
+            if (subLangs.isNotBlank()) {
+                InfoSegment(Icons.Rounded.Subtitles, subLangs, secondary, lineStyle, Modifier.weight(1f, fill = false))
+            }
+        }
     }
 }
 
-/** "S4 E7", "S4" (episode null), or null when both are null (e.g. movies). */
-private fun formatSeasonEpisode(season: Int?, episode: Int?): String? = when {
-    season != null && episode != null -> "S$season E$episode"
-    season != null -> "S$season"
-    episode != null -> "E$episode"
-    else -> null
+@Composable
+private fun InfoRow(content: @Composable RowScope.() -> Unit) {
+    Spacer(modifier = Modifier.height(3.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        content = content
+    )
+}
+
+@Composable
+private fun InfoSegment(
+    icon: ImageVector,
+    text: String,
+    tint: Color,
+    style: TextStyle,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = text,
+            style = style,
+            color = tint,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
 }
 
 /**
- * Minimalist monochrome cache badge: a small single-tint glyph + label. Not colorful —
- * the glyph and text use the app's secondary text color so the row stays monochrome.
- *   instant -> "Instant" (bolt), cached -> "Cached" (check), not_cached -> "Not Cached" (cloud).
+ * Readiness chip — the ONLY colour in the row. Instant=gold, Cached=green, Not Cached=grey.
  */
 @Composable
-private fun CacheBadge(status: StreamCacheStatus) {
-    val (icon: ImageVector, label: String) = when (status) {
-        StreamCacheStatus.INSTANT -> Icons.Default.Bolt to "Instant"
-        StreamCacheStatus.CACHED -> Icons.Default.Check to "Cached"
-        StreamCacheStatus.NOT_CACHED -> Icons.Default.CloudQueue to "Not Cached"
+private fun CacheStatusPill(status: StreamCacheStatus) {
+    val (icon: ImageVector, tint: Color, label: String) = when (status) {
+        StreamCacheStatus.INSTANT -> Triple(Icons.Rounded.Bolt, Color(0xFFE0A800), "Instant")
+        StreamCacheStatus.CACHED -> Triple(Icons.Rounded.CloudDone, Color(0xFF43A047), "Cached")
+        StreamCacheStatus.NOT_CACHED -> Triple(
+            Icons.Rounded.CloudDownload,
+            NuvioTheme.extendedColors.textSecondary,
+            "Not Cached"
+        )
     }
     Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(tint.copy(alpha = 0.14f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            modifier = Modifier.size(14.dp),
-            tint = NuvioTheme.extendedColors.textSecondary
+            tint = tint,
+            modifier = Modifier.size(13.dp)
         )
+        Spacer(modifier = Modifier.width(3.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = NuvioTheme.extendedColors.textSecondary
+            color = tint,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
+
+/** TV-only "Playing" pill, shown under the title for the active stream. */
+@Composable
+private fun CurrentStreamBadge(label: String) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(NuvioTheme.colors.Primary.copy(alpha = 0.2f))
+            .padding(horizontal = NuvioTheme.spacing.sm, vertical = NuvioTheme.spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = NuvioTheme.colors.Primary
+        )
+    }
+}
+
+/**
+ * Renders a list of ISO-639-1 language codes as plain uppercase tags ("EN · ES") for the
+ * stream-info rows. Kept as text (not flag emoji) so it renders identically cross-platform.
+ * Empty when none.
+ */
+private fun List<String>.toLangTags(): String =
+    asSequence()
+        .map { it.trim().substringBefore('-') }
+        .filter { it.isNotBlank() }
+        .map { it.uppercase() }
+        .distinct()
+        .joinToString(" · ")

@@ -177,19 +177,31 @@ data class Stream(
 @Immutable
 data class StreamInfo(
     val title: String?,
+    val year: Int? = null,
     val season: Int?,
     val episode: Int?,
     val cacheStatus: StreamCacheStatus,
     val quality: String?,
+    /** Release/source type, e.g. "BluRay", "WEB-DL", "Remux". */
+    val source: String? = null,
     val resolution: String?,
     val videoCodec: String?,
+    /** Colour depth, e.g. "10bit"/"8bit" (NOT the bitrate). */
+    val bitDepth: String? = null,
     val dynamicRange: List<String> = emptyList(),
     val audioCodec: String?,
     val audioChannels: String?,
+    /** ISO-639-1 audio language codes, e.g. ["en","es"]. */
+    val audioLanguages: List<String> = emptyList(),
+    /** ISO-639-1 subtitle language codes available for this title/episode. */
+    val subtitleLanguages: List<String> = emptyList(),
     val sizeBytes: Long?,
     val sizeLabel: String?,
     val bitrateBps: Long?,
-    val bitrateLabel: String?
+    val bitrateLabel: String?,
+    val runtimeMinutes: Int? = null,
+    /** Pre-formatted runtime, e.g. "56m" / "1h 4m". */
+    val runtimeLabel: String? = null
 )
 
 /** cacheStatus enum from the contract: instant | cached | not_cached. */

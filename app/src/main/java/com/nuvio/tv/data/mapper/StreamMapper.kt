@@ -37,19 +37,26 @@ fun StreamDto.toDomain(addonName: String, addonLogo: String?): Stream = Stream(
 
 fun StreamInfoDto.toDomain(): StreamInfo = StreamInfo(
     title = title,
+    year = year,
     season = season,
     episode = episode,
     cacheStatus = StreamCacheStatus.fromWire(cacheStatus),
     quality = quality,
+    source = source,
     resolution = resolution,
     videoCodec = videoCodec,
+    bitDepth = bitDepth,
     dynamicRange = dynamicRange ?: emptyList(),
     audioCodec = audioCodec,
     audioChannels = audioChannels,
+    audioLanguages = audioLanguages ?: emptyList(),
+    subtitleLanguages = subtitleLanguages ?: emptyList(),
     sizeBytes = sizeBytes,
     sizeLabel = sizeLabel,
     bitrateBps = bitrateBps,
-    bitrateLabel = bitrateLabel
+    bitrateLabel = bitrateLabel,
+    runtimeMinutes = runtimeMinutes,
+    runtimeLabel = runtimeLabel
 )
 
 fun StreamClientResolveDto.toDomain(): StreamClientResolve = StreamClientResolve(

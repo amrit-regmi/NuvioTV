@@ -149,28 +149,14 @@ internal fun StreamItem(
 
                 val streamInfo = stream.streamInfo
                 if (streamInfo != null) {
-                    // Backend structured info: render the fixed 6-line layout (with the
-                    // "Playing" pill on line 1) and DROP the raw torrent name/description.
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
-                    ) {
-                        com.nuvio.tv.ui.components.StreamInfoContent(streamInfo = streamInfo)
-                        if (isCurrentStream) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(NuvioTheme.colors.Primary.copy(alpha = 0.2f))
-                                    .padding(horizontal = NuvioTheme.spacing.sm, vertical = NuvioTheme.spacing.xs)
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.sources_playing),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = NuvioTheme.colors.Primary
-                                )
-                            }
-                        }
-                    }
+                    // Backend structured info: render the unified stream-row layout (shared with
+                    // mobile; cache pill trails the title, "Playing" badge under it) and DROP the
+                    // raw torrent name/description.
+                    com.nuvio.tv.ui.components.StreamInfoContent(
+                        streamInfo = streamInfo,
+                        isCurrentStream = isCurrentStream,
+                        currentLabel = stringResource(R.string.sources_playing)
+                    )
                 } else {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

@@ -39,19 +39,26 @@ data class StreamDto(
 @JsonClass(generateAdapter = true)
 data class StreamInfoDto(
     @Json(name = "title") val title: String? = null,
+    @Json(name = "year") val year: Int? = null,
     @Json(name = "season") val season: Int? = null,
     @Json(name = "episode") val episode: Int? = null,
     @Json(name = "cacheStatus") val cacheStatus: String? = null,
     @Json(name = "quality") val quality: String? = null,
+    @Json(name = "source") val source: String? = null,
     @Json(name = "resolution") val resolution: String? = null,
     @Json(name = "videoCodec") val videoCodec: String? = null,
+    @Json(name = "bitDepth") val bitDepth: String? = null,
     @Json(name = "dynamicRange") val dynamicRange: List<String>? = null,
     @Json(name = "audioCodec") val audioCodec: String? = null,
     @Json(name = "audioChannels") val audioChannels: String? = null,
+    @Json(name = "audioLanguages") val audioLanguages: List<String>? = null,
+    @Json(name = "subtitleLanguages") val subtitleLanguages: List<String>? = null,
     @Json(name = "sizeBytes") val sizeBytes: Long? = null,
     @Json(name = "sizeLabel") val sizeLabel: String? = null,
     @Json(name = "bitrateBps") val bitrateBps: Long? = null,
-    @Json(name = "bitrateLabel") val bitrateLabel: String? = null
+    @Json(name = "bitrateLabel") val bitrateLabel: String? = null,
+    @Json(name = "runtimeMinutes") val runtimeMinutes: Int? = null,
+    @Json(name = "runtimeLabel") val runtimeLabel: String? = null
 )
 
 @JsonClass(generateAdapter = true)
