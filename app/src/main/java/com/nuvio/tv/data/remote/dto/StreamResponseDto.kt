@@ -25,13 +25,17 @@ data class StreamDto(
     @Json(name = "clientResolve") val clientResolve: StreamClientResolveDto? = null
 )
 
-/**
- * Structured stream descriptor emitted by the backend (catalog-addon `/stream/*`),
- * per the API bridge contract "Structured stream object — streamInfo (2026-06-29)".
- * The app renders THIS instead of parsing the raw torrent filename, so TV + mobile
- * look identical. Additive/non-breaking: legacy name/title/description still present.
- * Unknown scalars are null; [dynamicRange] is [] (never null).
- */
+// Structured stream descriptor emitted by the backend (catalog-addon `/stream/*`),
+// per the API bridge contract "Structured stream object - streamInfo (2026-06-29)".
+// The app renders THIS instead of parsing the raw torrent filename, so TV + mobile
+// look identical. Additive/non-breaking: legacy name/title/description still present.
+// Unknown scalars are null; dynamicRange is mapped to an empty list (never null).
+//
+// NOTE: keep this as a plain line comment, NOT a KDoc /** */ block. Moshi 1.15.1's
+// KSP codegen copies the originating-element KDoc onto the generated adapter and
+// feeds it to kotlinpoet-ksp, whose toTypeName() throws PROCESSING_ERROR on bracketed
+// KDoc doc-link references such as the previous "[dynamicRange]" / "[]". A line comment
+// avoids that code path and lets the adapter generate cleanly.
 @JsonClass(generateAdapter = true)
 data class StreamInfoDto(
     @Json(name = "title") val title: String? = null,
