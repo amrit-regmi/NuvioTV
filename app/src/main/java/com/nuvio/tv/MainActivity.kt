@@ -180,9 +180,11 @@ val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
 private const val SIDEBAR_AUTO_COLLAPSE_DELAY_MS = 4_000L
 
 // Cold-start splash: minimum time the in-app CineX splash must remain visible before the
-// app navigates onward, so the full animation always plays (mirrors mobile's ~2s hold:
-// CineXLoader ~2000ms logo drop + ~1300+600ms letter animation).
-private const val SPLASH_MIN_HOLD_MS = 2_000L
+// app navigates onward, so the full animation always plays. Timeline: ~2000ms dot drop,
+// 1300+600ms letter reveal, then the equaliser wave on the lens icon starts at 2000ms,
+// ramps to full amplitude by 2500ms, and one full oscillation cycle (2*pi/3.5 ≈ 1795ms)
+// completes ~4300ms. Hold = 4300ms so the equaliser wave is seen for a full visible cycle.
+private const val SPLASH_MIN_HOLD_MS = 4_300L
 
 // True once the cold-start splash has played its full hold in THIS process. Survives
 // recompositions/config changes so the splash only plays once per launch, never again

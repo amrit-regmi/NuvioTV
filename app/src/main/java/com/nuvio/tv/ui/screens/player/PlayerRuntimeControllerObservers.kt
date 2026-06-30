@@ -93,7 +93,7 @@ internal suspend fun PlayerRuntimeController.fetchAddonSubtitlesNow(
         }
     }
 
-    return subtitleRepository.getSubtitles(
+    val subtitles = subtitleRepository.getSubtitles(
         type = request.type,
         id = request.id,
         videoId = request.videoId,
@@ -102,6 +102,11 @@ internal suspend fun PlayerRuntimeController.fetchAddonSubtitlesNow(
         filename = currentFilename,
         onProgress = onProgress
     )
+    // #88 — detect the best-per-language result (each id carries the `_best_` marker minted by
+    // SubtitleRepositoryImpl) so the picker exposes ONLY these entries (no visibility filtering).
+    lastSubtitleFetchWasBestPerLang =
+        subtitles.isNotEmpty() && subtitles.all { it.id.contains("_best_") }
+    return subtitles
 }
 
 internal fun PlayerRuntimeController.fetchAddonSubtitles() {
@@ -158,6 +163,7 @@ internal fun PlayerRuntimeController.refreshSubtitlesForCurrentEpisode() {
     pendingAudioSelectionAfterSubtitleRefresh = null
     resetSubtitleAutoSyncState()
     attachedAddonSubtitleKeys = emptySet()
+    lastSubtitleFetchWasBestPerLang = false
     _uiState.update {
         it.copy(
             addonSubtitles = emptyList(),
@@ -173,6 +179,9 @@ internal fun PlayerRuntimeController.refreshSubtitlesForCurrentEpisode() {
 internal fun PlayerRuntimeController.filterToVisibleAddonSubtitles(
     subtitles: List<Subtitle>
 ): List<Subtitle> {
+    // #88 — best-per-language results are authoritative (≤3, one per language, already
+    // server-ordered primary→secondary→en): show them verbatim, never narrow by preferred lang.
+    if (lastSubtitleFetchWasBestPerLang) return subtitles
     val style = _uiState.value.subtitleStyle
     if (!style.showOnlyPreferredLanguages) return subtitles
 

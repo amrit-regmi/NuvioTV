@@ -1516,13 +1516,17 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
         )
     } ?: return StartupSubtitlePreparation(emptyList(), emptyList(), emptyList(), false)
 
-    val attachedSubtitles = when (effectiveMode) {
-        AddonSubtitleStartupMode.ALL_SUBTITLES -> fetchedSubtitles
-        AddonSubtitleStartupMode.PREFERRED_ONLY -> fetchedSubtitles.filter { subtitle -> preferredTargets.any { target -> PlayerSubtitleUtils.matchesLanguageCode(subtitle.lang, target) } }
-        AddonSubtitleStartupMode.FAST_STARTUP -> emptyList()
+    // #88 — best-per-language results are authoritative (≤3, one per language, already
+    // server-ordered primary→secondary→en). Surface all of them and treat them all as
+    // auto-selectable; never narrow by preferred language (matches the mobile contract).
+    val attachedSubtitles = when {
+        lastSubtitleFetchWasBestPerLang -> fetchedSubtitles
+        effectiveMode == AddonSubtitleStartupMode.ALL_SUBTITLES -> fetchedSubtitles
+        effectiveMode == AddonSubtitleStartupMode.PREFERRED_ONLY -> fetchedSubtitles.filter { subtitle -> preferredTargets.any { target -> PlayerSubtitleUtils.matchesLanguageCode(subtitle.lang, target) } }
+        else -> emptyList() // FAST_STARTUP
     }
 
-    val visibleSubtitles = if (showOnlyPreferredLanguages) attachedSubtitles else fetchedSubtitles
+    val visibleSubtitles = if (showOnlyPreferredLanguages && !lastSubtitleFetchWasBestPerLang) attachedSubtitles else fetchedSubtitles
 
     // Bundle EVERY fetched catalog subtitle into the initial MediaItem — not just the
     // preferred subset. This makes the first user switch to ANY catalog subtitle a pure
@@ -1546,6 +1550,7 @@ internal fun PlayerRuntimeController.resetAddonSubtitleStateForNewStream() {
     explicitSubtitleSelectionForEngineSwitch = null
     effectiveSubtitleSelectionForEngineSwitch = null
     attachedAddonSubtitleKeys = emptySet()
+    lastSubtitleFetchWasBestPerLang = false
     val canFetch = buildSubtitleFetchRequest() != null
     _uiState.update {
         it.copy(

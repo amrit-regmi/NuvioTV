@@ -353,6 +353,11 @@ class PlayerRuntimeController(
     internal var subtitleAddonRestoredByPersistedPreference: Boolean = false
     internal var pendingRestoredAddonSubtitle: com.nuvio.tv.domain.model.Subtitle? = null
     internal var attachedAddonSubtitleKeys: Set<String> = emptySet()
+    // #88 — set when the last subtitle fetch returned the backend's best-per-language set (≤3, one
+    // per language, server-ordered). When true the picker shows ONLY those entries verbatim — the
+    // preferred-language / showOnlyPreferredLanguages visibility filters are skipped (the backend
+    // already release-matched + ordered by preference), matching the mobile contract.
+    internal var lastSubtitleFetchWasBestPerLang: Boolean = false
     internal var hasScannedTextTracksOnce: Boolean = false
     internal var streamReuseLastLinkEnabled: Boolean = false
     internal var autoSwitchInternalPlayerOnErrorEnabled: Boolean = false

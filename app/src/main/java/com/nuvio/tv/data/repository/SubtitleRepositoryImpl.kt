@@ -4,13 +4,16 @@ import android.content.Context
 import android.util.Log
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.network.safeApiCall
+import com.nuvio.tv.core.reco.RecoBackend
 import com.nuvio.tv.core.subtitle.SubtitleWarmer
 import com.nuvio.tv.data.local.AddonPreferences
+import com.nuvio.tv.data.local.DeviceProfileDataStore
 import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.SubtitleRepository
+import com.nuvio.tv.ui.screens.player.PlayerSubtitleUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -26,12 +29,14 @@ class SubtitleRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val api: AddonApi,
     private val addonRepository: AddonRepositoryImpl,
-    private val subtitleWarmer: SubtitleWarmer
+    private val subtitleWarmer: SubtitleWarmer,
+    private val deviceProfileDataStore: DeviceProfileDataStore
 ) : SubtitleRepository {
 
     companion object {
         private const val TAG = "SubtitleRepository"
         private const val PER_ADDON_TIMEOUT_MS = 20_000L
+        private const val BEST_PER_ADDON_TIMEOUT_MS = 8_000L
     }
 
     override suspend fun getSubtitles(
@@ -43,6 +48,41 @@ class SubtitleRepositoryImpl @Inject constructor(
         filename: String?,
         onProgress: ((completed: Int, total: Int, addonName: String?) -> Unit)?
     ): List<Subtitle> = withContext(Dispatchers.IO) {
+        val requestType = canonicalSubtitleType(type)
+        // For series, the backend best-per-lang id is the season/episode-scoped videoId
+        // (imdb:s:e / imdb-sNNeNN form) — the same id the full /subtitles list uses below.
+        val bestId = if (requestType == "series" && videoId != null) videoId else id
+
+        // Get installed addons up-front; they're needed by both the best-per-lang and full paths.
+        val addons = try {
+            addonRepository.getInstalledAddons().first().enabledAddons()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get installed addons", e)
+            emptyList()
+        }
+
+        // #88 (api_bridge "best-subtitle-per-language"): when the built-in subtitle provider is ON,
+        // ask OUR backend for the prewarmed BEST subtitle per language (≤3, already moviehash/
+        // release-matched and SERVER-ORDERED primary→secondary→en) via `/subtitles/best`. Per the
+        // frozen contract, when ON the player exposes ONLY these ≤3 entries — NOT the full
+        // variant/language list — so they bundle at the initial prepare and every switch is pure
+        // track-selection. A true miss (endpoint absent / empty) falls through to the full
+        // `/subtitles` list below so the user is never left with nothing.
+        val subtitleProviderEnabled = try {
+            deviceProfileDataStore.getBuiltinSubtitlesEnabled()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read useBuiltinSubtitles flag; defaulting to enabled", e)
+            true
+        }
+        if (subtitleProviderEnabled) {
+            val best = fetchBestPerLanguageSubtitles(addons, requestType, bestId)
+            if (best.isNotEmpty()) {
+                Log.d(TAG, "Best-per-lang HIT: ${best.size} langs=${best.map { it.lang }} for id=$bestId")
+                return@withContext best
+            }
+            Log.d(TAG, "Best-per-lang MISS for id=$bestId → falling through to full /subtitles list")
+        }
+
         // The warmer pre-fetches ONLY the first subtitle addon (which, in private mode, is the
         // built-in catalog-addon prepended to the list). Treat its result as a contribution from
         // that one addon — NOT a complete answer — so we still query the profile's other subtitle
@@ -58,19 +98,12 @@ class SubtitleRepositoryImpl @Inject constructor(
         // displayNames already covered by the warm result — skip re-fetching those addons.
         val warmedAddonNames = warmSubtitles.mapNotNull { it.addonName }.toSet()
 
-        val requestType = canonicalSubtitleType(type)
         val startedAtMs = System.currentTimeMillis()
         Log.d(TAG, "Fetching subtitles for type=$requestType, id=$id, videoId=$videoId")
 
-        // Get installed addons
-        val addons = try {
-            addonRepository.getInstalledAddons().first().enabledAddons()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to get installed addons", e)
+        if (addons.isEmpty()) {
             return@withContext warmSubtitles
         }
-
-
 
         // Filter addons that support subtitles resource
         val subtitleAddons = addons.filter { addon ->
@@ -124,6 +157,83 @@ class SubtitleRepositoryImpl @Inject constructor(
             "Subtitle fetch completed total=${result.size} (warm=${warmSubtitles.size} fetched=${fetched.size}) fromAddons=${addonsToFetch.size} in ${System.currentTimeMillis() - startedAtMs}ms"
         )
         result
+    }
+
+    /**
+     * #88 — fetch the BEST subtitle per language from OUR backend's catalog-addon
+     * `/subtitles/best/{type}/{id}.json`. Iterates the backend (reco-host) subtitle addons; the
+     * FIRST one that returns a non-empty `best` array wins, and its server-side
+     * primary→secondary→en order is preserved verbatim (no client re-sort). `lang` in the response
+     * is 3-letter ISO-639-2 (eng/swe/fin) and is mapped to our normalized codes for labels +
+     * track selection. Returns empty on a true miss so the caller falls through to the full list.
+     */
+    private suspend fun fetchBestPerLanguageSubtitles(
+        addons: List<Addon>,
+        requestType: String,
+        bestId: String
+    ): List<Subtitle> {
+        // Best-per-lang is a private-backend feature: only OUR catalog-addon (reco host) serves it.
+        val backendAddons = addons.filter { addon ->
+            addon.baseUrl.contains(RecoBackend.host, ignoreCase = true) &&
+                addon.resources.any { resource ->
+                    isSubtitleResource(resource.name) && supportsType(resource, requestType, bestId)
+                }
+        }
+        if (backendAddons.isEmpty()) return emptyList()
+
+        for (addon in backendAddons) {
+            val bestUrl = buildBestSubtitleUrl(addon, requestType, bestId)
+            Log.d(TAG, "Fetching best-per-lang from ${addon.name}: $bestUrl")
+            val items = withTimeoutOrNull(BEST_PER_ADDON_TIMEOUT_MS) {
+                when (val result = safeApiCall(context) { api.getBestSubtitles(bestUrl) }) {
+                    is NetworkResult.Success -> result.data.best.orEmpty()
+                    is NetworkResult.Error -> {
+                        Log.w(TAG, "Best-per-lang fetch failed for ${addon.name}: code=${result.code} message=${result.message}")
+                        emptyList()
+                    }
+                    NetworkResult.Loading -> emptyList()
+                }
+            }.orEmpty()
+
+            if (items.isEmpty()) continue
+
+            // First backend addon that returns a best set wins — keep its server order verbatim.
+            return items.mapIndexedNotNull { index, dto ->
+                val url = dto.url.takeIf { it.isNotBlank() } ?: return@mapIndexedNotNull null
+                val normalizedLang = normalizeIso6392ToAppCode(dto.lang)
+                Subtitle(
+                    id = "${addon.displayName}_best_${normalizedLang}_$index",
+                    url = url,
+                    lang = normalizedLang,
+                    addonName = addon.displayName,
+                    addonLogo = addon.logo
+                )
+            }
+        }
+        return emptyList()
+    }
+
+    /** Builds `{base}/subtitles/best/{type}/{id}.json`, preserving any base query string. */
+    private fun buildBestSubtitleUrl(addon: Addon, requestType: String, bestId: String): String {
+        val rawBaseUrl = addon.baseUrl.trimEnd('/')
+        val queryStart = rawBaseUrl.indexOf('?')
+        val basePath = if (queryStart >= 0) rawBaseUrl.substring(0, queryStart).trimEnd('/') else rawBaseUrl
+        val baseQuery = if (queryStart >= 0) rawBaseUrl.substring(queryStart) else ""
+        return "$basePath/subtitles/best/$requestType/$bestId.json$baseQuery"
+    }
+
+    /**
+     * Maps the contract's 3-letter ISO-639-2 `lang` (eng/swe/fin/…) to our normalized app code,
+     * mirroring the mobile mapping. Falls back to PlayerSubtitleUtils normalization for any other
+     * value so non-shorthand codes still resolve to a real language.
+     */
+    private fun normalizeIso6392ToAppCode(rawLang: String): String {
+        return when (rawLang.trim().lowercase()) {
+            "eng" -> "en"
+            "swe" -> "sv"
+            "fin" -> "fi"
+            else -> PlayerSubtitleUtils.normalizeLanguageCode(rawLang).ifBlank { rawLang }
+        }
     }
 
     private fun canonicalSubtitleType(type: String): String {

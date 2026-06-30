@@ -3,6 +3,7 @@ package com.nuvio.tv.data.remote.api
 import com.nuvio.tv.data.remote.dto.AddonManifestDto
 import com.nuvio.tv.data.remote.dto.CatalogResponseDto
 import com.nuvio.tv.data.remote.dto.MetaResponseDto
+import com.nuvio.tv.data.remote.dto.BestSubtitleResponseDto
 import com.nuvio.tv.data.remote.dto.StreamResponseDto
 import com.nuvio.tv.data.remote.dto.SubtitleResponseDto
 import retrofit2.Response
@@ -35,4 +36,8 @@ interface AddonApi {
 
     @GET
     suspend fun getSubtitles(@Url subtitleUrl: String): Response<SubtitleResponseDto>
+
+    // #88 — best-subtitle-per-language: `/subtitles/best/{type}/{id}.json` on the backend.
+    @GET
+    suspend fun getBestSubtitles(@Url bestSubtitleUrl: String): Response<BestSubtitleResponseDto>
 }

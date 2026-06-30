@@ -41,6 +41,11 @@ class DeviceProfileDataStore @Inject constructor(
     // of meta/catalog/search when the active profile has the built-in catalog OFF, so
     // detail pages don't silently fall back to built-in meta. Default true.
     private val useBuiltinCatalogKey = booleanPreferencesKey("use_builtin_catalog")
+    // #88 — fast, per-profile LOCAL mirror of the subtitle-provider master flag
+    // (authoritative copy lives in nuvio_profile_settings.useBuiltinSubtitles). The subtitle
+    // repository reads this synchronously at playback to decide whether to query the backend's
+    // best-per-language `/subtitles/best` endpoint vs. skip built-in subtitles. Default true.
+    private val useBuiltinSubtitlesKey = booleanPreferencesKey("use_builtin_subtitles")
     private val capabilitiesHashKey = stringPreferencesKey("device_capabilities_hash")
     private val downloadSpeedMbpsKey = floatPreferencesKey("download_speed_mbps")
     private val downloadSpeedMeasuredAtKey = longPreferencesKey("download_speed_measured_at")
@@ -83,6 +88,21 @@ class DeviceProfileDataStore @Inject constructor(
     suspend fun setBuiltinCatalogEnabled(enabled: Boolean) {
         factory.get(profileManager.activeProfileId.value, FEATURE).edit { prefs ->
             prefs[useBuiltinCatalogKey] = enabled
+        }
+    }
+
+    /**
+     * #88 — synchronous-friendly read of the active profile's `useBuiltinSubtitles` mirror for the
+     * subtitle repository's best-per-language gate. Default true (subtitles on) so an un-synced
+     * profile still fetches subtitles.
+     */
+    suspend fun getBuiltinSubtitlesEnabled(): Boolean =
+        factory.get(profileManager.activeProfileId.value, FEATURE).data.first()[useBuiltinSubtitlesKey] ?: true
+
+    /** Writes the local `useBuiltinSubtitles` mirror after a pull/toggle so the subtitle gate is fast. */
+    suspend fun setBuiltinSubtitlesEnabled(enabled: Boolean) {
+        factory.get(profileManager.activeProfileId.value, FEATURE).edit { prefs ->
+            prefs[useBuiltinSubtitlesKey] = enabled
         }
     }
 

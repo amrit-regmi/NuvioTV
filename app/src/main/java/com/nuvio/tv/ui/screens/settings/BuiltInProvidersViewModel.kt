@@ -137,6 +137,9 @@ class BuiltInProvidersViewModel @Inject constructor(
             val subtitlesEnabled = homeCatalogSettingsSyncService.pullSubtitleProviderEnabled()
             if (subtitlesEnabled != null) {
                 _uiState.update { it.copy(useBuiltinSubtitles = subtitlesEnabled) }
+                // #88 — mirror locally so the subtitle repository can gate the best-per-language
+                // `/subtitles/best` fetch synchronously at playback.
+                deviceProfileDataStore.setBuiltinSubtitlesEnabled(subtitlesEnabled)
             }
         }
         viewModelScope.launch {
@@ -197,6 +200,8 @@ class BuiltInProvidersViewModel @Inject constructor(
         // mobile app writes) so the subtitle-provider choice is consistent across TV + mobile.
         _uiState.update { it.copy(useBuiltinSubtitles = enabled) }
         viewModelScope.launch {
+            // #88 — mirror locally first so the subtitle gate flips immediately for this profile.
+            deviceProfileDataStore.setBuiltinSubtitlesEnabled(enabled)
             homeCatalogSettingsSyncService.pushSubtitleProviderEnabled(enabled)
         }
     }
