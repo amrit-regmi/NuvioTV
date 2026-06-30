@@ -599,6 +599,24 @@ class StreamWarmer @Inject constructor(
     }
 
     /**
+     * Returns the full prewarmed resolve result (url + filename + videoSize) for a direct-debrid
+     * stream if it was warmed in the background and is still within the 60-min TTL, or null if
+     * not cached / expired. Mirrors [DirectDebridResolver.resolve]'s Success shape so callers can
+     * short-circuit the TorBox round-trip on click and reuse the same playback-info build path.
+     */
+    fun getCachedResolveResult(stream: Stream): DirectDebridResolveResult.Success? {
+        val key = stream.resolvedUrlCacheKey() ?: return null
+        val entry = resolvedUrlCache[key] ?: return null
+        if (System.currentTimeMillis() - entry.resolvedAt >= RESOLVED_URL_TTL_MS) return null
+        if (entry.url.isBlank()) return null
+        return DirectDebridResolveResult.Success(
+            url = entry.url,
+            filename = entry.filename,
+            videoSize = entry.videoSize
+        )
+    }
+
+    /**
      * Evicts the resolved URL cache entry for a stream (e.g. after a CDN 4xx/5xx during playback).
      */
     fun evictResolvedUrl(stream: Stream) {

@@ -1407,6 +1407,17 @@ class StreamScreenViewModel @Inject constructor(
         }
 
         val basePlaybackInfo = if (!skipQueueCheck) getStreamForPlayback(stream) else null
+
+        // Fast path: if StreamWarmer already resolved this exact stream in the background
+        // (same service/infoHash/fileIdx/torrentId key) and the CDN URL is still within the
+        // 60-min TTL, reuse it and skip the 200-800ms TorBox resolve round-trip. Falls through
+        // to a normal resolve when nothing is cached or the entry is stale/expired.
+        val prewarmed = streamWarmer.getCachedResolveResult(stream)
+        if (prewarmed != null) {
+            Log.d(TAG, "resolveStreamForPlayback: using prewarmed CDN URL — skipping TorBox resolve")
+            return buildResolvedPlaybackInfo(stream, prewarmed, basePlaybackInfo)
+        }
+
         val result = directDebridResolver.resolve(stream, season, episode, skipPlayableCheck = skipQueueCheck)
         val resolveMs = System.currentTimeMillis() - resolveStartMs
         Log.d(TAG, "resolveStreamForPlayback: debrid resolve completed in ${resolveMs}ms result=${result::class.simpleName}")
@@ -1460,7 +1471,7 @@ class StreamScreenViewModel @Inject constructor(
                     // to get a CURRENT torrent_id, then a fresh CDN link. Don't reuse the stale
                     // torrent_id / cached_url. forceFresh also bypasses the resolve cache.
                     Log.d(TAG, "resolveStreamForPlayback: Stale — re-resolving from hash (forceFresh)")
-                    delay(1_200L)
+                    delay(300L)
                     val retry = directDebridResolver.resolve(
                         stream, season, episode,
                         skipPlayableCheck = skipQueueCheck,
