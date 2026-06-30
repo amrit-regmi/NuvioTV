@@ -90,6 +90,7 @@ class StreamScreenViewModel @Inject constructor(
     private val torrentService: TorrentService,
     private val forceRescrapeService: ForceRescrapeService,
     private val deviceProfileDataStore: DeviceProfileDataStore,
+    private val catalogAddonApi: com.nuvio.tv.data.remote.api.CatalogAddonApi,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -259,17 +260,35 @@ class StreamScreenViewModel @Inject constructor(
         }
     }
 
+    private var instantPollJob: Job? = null
+
     /**
-     * Polls StreamWarmer's resolvedUrlCache every 2 seconds for up to 2 minutes.
-     * Any direct-debrid stream whose CDN URL is already resolved gets its stableKey
-     * added to [StreamScreenUiState.instantStreamKeys] so the UI can show ⚡ Instant.
+     * Single coroutine that, while the stream list / details are active, every 3s for up to
+     * ~2 minutes (40 × 3s):
+     *   1. Updates [StreamScreenUiState.instantStreamKeys] from StreamWarmer's in-app resolved
+     *      URL cache (any direct-debrid stream whose CDN URL is already resolved → ⚡ Instant).
+     *   2. Hits the lightweight UNCACHED backend endpoint
+     *      GET /stream/{type}/{videoId}/status and patches each matching Stream's
+     *      streamInfo.cacheStatus so the CacheStatusPill recomposes when a prewarm lands
+     *      (downloading/cached → instant) WITHOUT a hard refresh.
+     *
+     * Mapping (per backend contract): has_url==true → INSTANT, else cached==true → CACHED,
+     * else leave as-is. We NEVER downgrade a pill (only promote toward INSTANT) so a transient
+     * miss can't flip INSTANT back to CACHED.
+     *
+     * Stops early once no stream is still DOWNLOADING or CACHED-but-not-instant (i.e. nothing
+     * left to promote), and after the bounded ~2-minute window. Restart via [onEvent] OnResume
+     * if any stream is still non-instant.
      */
     private fun pollInstantStreams() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-            repeat(60) {
-                delay(2_000L)
+        instantPollJob?.cancel()
+        instantPollJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            repeat(40) {
+                delay(3_000L)
                 val streams = _uiState.value.allStreams
                 if (streams.isEmpty()) return@repeat
+
+                // (1) In-app warmer cache → instantStreamKeys (preserve existing behavior).
                 val instant = streams
                     .filter { it.isDirectDebrid() && streamWarmer.getCachedResolvedUrl(it) != null }
                     .map { it.stableKey() }
@@ -278,7 +297,91 @@ class StreamScreenViewModel @Inject constructor(
                 if (instant != current) {
                     updateUiStateIfChanged { it.copy(instantStreamKeys = instant) }
                 }
+
+                // (2) Backend /status → patch cacheStatus on matching streams so the pill flips.
+                val desiredByHash: Map<String, com.nuvio.tv.domain.model.StreamCacheStatus> = try {
+                    val resp = catalogAddonApi.getStreamStatus(contentType, videoId)
+                    val items = resp.body()?.items.orEmpty()
+                    items.mapNotNull { item ->
+                        val hash = item.infoHash?.takeIf { h -> h.isNotBlank() } ?: return@mapNotNull null
+                        val desired = when {
+                            item.hasUrl == true -> com.nuvio.tv.domain.model.StreamCacheStatus.INSTANT
+                            item.cached == true -> com.nuvio.tv.domain.model.StreamCacheStatus.CACHED
+                            else -> return@mapNotNull null
+                        }
+                        hash.lowercase() to desired
+                    }.toMap()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    emptyMap()
+                }
+
+                if (desiredByHash.isNotEmpty()) {
+                    patchCacheStatuses(desiredByHash)
+                }
+
+                // Stop early once nothing is left to promote: no stream is DOWNLOADING and
+                // none is CACHED-but-not-instant.
+                val anyPromotable = _uiState.value.allStreams.any { s ->
+                    when (s.streamInfo?.cacheStatus) {
+                        com.nuvio.tv.domain.model.StreamCacheStatus.DOWNLOADING,
+                        com.nuvio.tv.domain.model.StreamCacheStatus.CACHED -> true
+                        else -> false
+                    }
+                }
+                if (!anyPromotable) return@launch
             }
+        }
+    }
+
+    /**
+     * Promotes the cacheStatus of streams matching [desiredByHash] (keyed by lowercased
+     * info_hash) toward INSTANT inside _uiState (allStreams + addonStreams + filteredStreams).
+     * Only ever promotes (DOWNLOADING/NOT_CACHED → CACHED/INSTANT, CACHED → INSTANT); never
+     * downgrades. State is only emitted when something actually changed (via updateUiStateIfChanged).
+     */
+    private fun patchCacheStatuses(
+        desiredByHash: Map<String, com.nuvio.tv.domain.model.StreamCacheStatus>
+    ) {
+        if (desiredByHash.isEmpty()) return
+
+        // Rank for "only promote toward INSTANT": higher = more advanced.
+        fun rank(status: com.nuvio.tv.domain.model.StreamCacheStatus): Int = when (status) {
+            com.nuvio.tv.domain.model.StreamCacheStatus.NOT_CACHED -> 0
+            com.nuvio.tv.domain.model.StreamCacheStatus.DOWNLOADING -> 1
+            com.nuvio.tv.domain.model.StreamCacheStatus.CACHED -> 2
+            com.nuvio.tv.domain.model.StreamCacheStatus.INSTANT -> 3
+        }
+
+        fun promote(stream: Stream): Stream {
+            val info = stream.streamInfo ?: return stream
+            val hash = stream.getEffectiveInfoHash()?.lowercase() ?: return stream
+            val desired = desiredByHash[hash] ?: return stream
+            return if (rank(desired) > rank(info.cacheStatus)) {
+                stream.copy(streamInfo = info.copy(cacheStatus = desired))
+            } else {
+                stream
+            }
+        }
+
+        updateUiStateIfChanged { state ->
+            val updatedAddonStreams = state.addonStreams.map { group ->
+                group.copy(streams = group.streams.map { promote(it) })
+            }
+            if (updatedAddonStreams == state.addonStreams) return@updateUiStateIfChanged state
+            val updatedAllStreams = updatedAddonStreams.flatMap { it.streams }
+            val currentFilter = state.selectedAddonFilter
+            val filteredStreams = if (currentFilter == null) {
+                updatedAllStreams
+            } else {
+                updatedAllStreams.filter { it.addonName == currentFilter }
+            }
+            state.copy(
+                addonStreams = updatedAddonStreams,
+                allStreams = updatedAllStreams,
+                filteredStreams = filteredStreams
+            )
         }
     }
 
@@ -323,6 +426,16 @@ class StreamScreenViewModel @Inject constructor(
                 // while the repository re-fetches remaining addons.
                 if (!streamLoadCompleted && streamLoadJob == null) {
                     loadStreams()
+                }
+                // Restart the cache-status poll if it has stopped (early-exit or
+                // window elapsed) and any stream is still non-instant, so a prewarm
+                // that lands while the screen is backgrounded still flips the pill.
+                if (instantPollJob?.isActive != true) {
+                    val anyNonInstant = _uiState.value.allStreams.any { s ->
+                        s.streamInfo?.cacheStatus != null &&
+                            s.streamInfo.cacheStatus != com.nuvio.tv.domain.model.StreamCacheStatus.INSTANT
+                    }
+                    if (anyNonInstant) pollInstantStreams()
                 }
             }
         }
@@ -1612,6 +1725,8 @@ class StreamScreenViewModel @Inject constructor(
         streamLoadScope = null
         streamLoadJob = null
         sourceChipErrorDismissJob?.cancel()
+        instantPollJob?.cancel()
+        instantPollJob = null
     }
 
     /**
