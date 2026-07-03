@@ -83,14 +83,40 @@ val useLocalFfmpegDecoder = truthy(
         ?: env("USE_LOCAL_FFMPEG_DECODER")
         ?: localProperties.getProperty("USE_LOCAL_FFMPEG_DECODER")
 )
+// Release signing material comes ONLY from env vars or local.properties.
+// There are intentionally NO baked fallback values: a missing key fails the
+// signed release build (see the fail-fast check below) instead of silently
+// signing with a hardcoded password.
 val releaseStoreFilePath = env("NUVIO_RELEASE_STORE_FILE")
     ?: localProperties.getProperty("NUVIO_RELEASE_STORE_FILE")
 val releaseKeyAliasValue = env("NUVIO_RELEASE_KEY_ALIAS")
-    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS", "nuviotv")
+    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS")
 val releaseKeyPasswordValue = env("NUVIO_RELEASE_KEY_PASSWORD")
-    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD", "815787")
+    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD")
 val releaseStorePasswordValue = env("NUVIO_RELEASE_STORE_PASSWORD")
-    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "815787")
+    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD")
+
+val missingReleaseSigningKeys = buildList {
+    if (releaseKeyAliasValue.isNullOrBlank()) add("NUVIO_RELEASE_KEY_ALIAS")
+    if (releaseKeyPasswordValue.isNullOrBlank()) add("NUVIO_RELEASE_KEY_PASSWORD")
+    if (releaseStorePasswordValue.isNullOrBlank()) add("NUVIO_RELEASE_STORE_PASSWORD")
+}
+// Fail fast when a signed release/bundle is requested without complete signing
+// material. CI_USE_DEBUG_SIGNING=true (beta/dry-run builds) legitimately skips
+// the release keystore, so it is exempt.
+if (missingReleaseSigningKeys.isNotEmpty() && !useDebugReleaseSigning) {
+    val requestsSignedRelease = gradle.startParameter.taskNames.any { taskName ->
+        taskName.contains("Release", ignoreCase = true) ||
+            taskName.contains("bundle", ignoreCase = true)
+    }
+    if (requestsSignedRelease) {
+        throw GradleException(
+            "Missing release signing configuration: ${missingReleaseSigningKeys.joinToString()}. " +
+                "Provide these via environment variables or local.properties. " +
+                "Hardcoded fallbacks were removed and will not be restored."
+        )
+    }
+}
 
 android {
     namespace = "com.nuvio.tv"
@@ -187,7 +213,10 @@ android {
             isMinifyEnabled = false
 
             buildConfigField("boolean", "IS_DEBUG_BUILD", "true")
-            buildConfigField("String", "SYNC_BACKEND_MANIFEST_URL", "\"${resolveProperty(devProperties, localProperties, "SYNC_BACKEND_MANIFEST_URL", "https://switch.nuvioapp.space/config.json")}\"")
+            // SECURITY: default is BLANK — a missing SYNC_BACKEND_MANIFEST_URL key must
+            // yield NotConfigured (SyncBackendConfig/Repository) so default builds fetch
+            // NOTHING from a third-party kill-switch host. Opt in explicitly via properties.
+            buildConfigField("String", "SYNC_BACKEND_MANIFEST_URL", "\"${resolveProperty(devProperties, localProperties, "SYNC_BACKEND_MANIFEST_URL", "")}\"")
 
             // Dev environment (from local.dev.properties)
             buildConfigField("String", "SUPABASE_URL", "\"${resolveProperty(devProperties, localProperties, "SUPABASE_URL")}\"")
@@ -242,7 +271,9 @@ android {
             }
 
             buildConfigField("boolean", "IS_DEBUG_BUILD", "false")
-            buildConfigField("String", "SYNC_BACKEND_MANIFEST_URL", "\"${localProperties.getProperty("SYNC_BACKEND_MANIFEST_URL", "https://switch.nuvioapp.space/config.json")}\"")
+            // SECURITY: default is BLANK — see the debug variant note. Missing key must
+            // never silently point releases at the third-party switch host.
+            buildConfigField("String", "SYNC_BACKEND_MANIFEST_URL", "\"${localProperties.getProperty("SYNC_BACKEND_MANIFEST_URL", "")?.trim() ?: ""}\"")
 
             // Production environment (from local.properties)
             buildConfigField("String", "SUPABASE_URL", "\"${resolveLocalProperty(localProperties, "SUPABASE_URL")}\"")
