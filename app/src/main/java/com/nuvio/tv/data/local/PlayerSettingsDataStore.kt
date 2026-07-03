@@ -284,8 +284,8 @@ data class PlayerSettings(
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.NONE,
 
     // Networking
-    val bufferEngineEnabled: Boolean = false,
-    val parallelNetworkEnabled: Boolean = false,
+    val bufferEngineEnabled: Boolean = true,
+    val parallelNetworkEnabled: Boolean = true,
     /** When true the device memory budget caps the buffer; when false Target Buffer Size drives it. */
     val bufferBudgetManaged: Boolean = DEFAULT_BUFFER_BUDGET_MANAGED,
     /** When true, target buffer slider max is raised to 2GB regardless of device memory. */
@@ -331,8 +331,8 @@ data class PlayerSettings(
         const val MIN_VOD_CACHE_SIZE_MB = 100
         const val MAX_VOD_CACHE_SIZE_MB = 65_536
         val DEFAULT_VOD_CACHE_SIZE_MODE: VodCacheSizeMode = VodCacheSizeMode.AUTO
-        const val DEFAULT_USE_PARALLEL_CONNECTIONS = false
-        const val DEFAULT_PARALLEL_CONNECTION_COUNT = 2
+        const val DEFAULT_USE_PARALLEL_CONNECTIONS = true
+        const val DEFAULT_PARALLEL_CONNECTION_COUNT = 3
         const val DEFAULT_PARALLEL_CHUNK_SIZE_MB = 16
         const val MIN_PARALLEL_CONNECTION_COUNT = 2
         const val MAX_PARALLEL_CONNECTION_COUNT = 4
@@ -900,8 +900,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 } ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE,
                 vodCacheSizeMb = (prefs.safe(vodCacheSizeMbKey) ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB).coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB),
                 useParallelConnections = prefs.safe(useParallelConnectionsKey) ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS,
-                bufferEngineEnabled = prefs.safe(bufferEngineEnabledKey) ?: false,
-                parallelNetworkEnabled = prefs.safe(parallelNetworkEnabledKey) ?: false,
+                bufferEngineEnabled = prefs.safe(bufferEngineEnabledKey) ?: true,
+                parallelNetworkEnabled = prefs.safe(parallelNetworkEnabledKey) ?: true,
                 allowLargeTargetBuffer = prefs.safe(allowLargeTargetBufferKey) ?: PlayerSettings.DEFAULT_ALLOW_LARGE_TARGET_BUFFER,
                 bufferBudgetManaged = prefs.safe(bufferBudgetManagedKey) ?: PlayerSettings.DEFAULT_BUFFER_BUDGET_MANAGED,
                 parallelConnectionCount = (prefs.safe(parallelConnectionCountKey) ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceIn(PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT, PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT),
