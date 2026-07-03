@@ -9,12 +9,10 @@ import android.content.Context
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,30 +26,24 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,12 +55,9 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
-import com.nuvio.tv.core.debrid.DebridDeviceAuthorization
-import com.nuvio.tv.core.debrid.DebridDeviceAuthorizationTokenResult
 import com.nuvio.tv.core.debrid.DebridProvider
 import com.nuvio.tv.core.debrid.DebridProviderAuthMethod
 import com.nuvio.tv.core.debrid.DebridProviders
-import com.nuvio.tv.core.qr.QrCodeGenerator
 import com.nuvio.tv.domain.model.DebridStreamAudioChannel
 import com.nuvio.tv.domain.model.DebridStreamAudioTag
 import com.nuvio.tv.domain.model.DebridStreamEncode
@@ -83,8 +72,6 @@ import com.nuvio.tv.domain.model.DebridStreamVisualTag
 import com.nuvio.tv.data.remote.api.DeviceProfileDto
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.screens.addon.QrCodeOverlay
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 
 @Composable
 fun DebridSettingsContent(
@@ -93,7 +80,6 @@ fun DebridSettingsContent(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var activeApiKeyDialog by remember { mutableStateOf<String?>(null) }
-    var activeDeviceAuthDialog by remember { mutableStateOf<String?>(null) }
     var activeStreamPicker by remember { mutableStateOf<DebridStreamPicker?>(null) }
     var showResolverPicker by remember { mutableStateOf(false) }
     var showPrepareCountDialog by remember { mutableStateOf(false) }
@@ -197,23 +183,14 @@ fun DebridSettingsContent(
                         item(key = "debrid_${provider.id}_api_key") {
                             SettingsActionRow(
                                 title = provider.displayName,
-                                subtitle = if (provider.authMethod == DebridProviderAuthMethod.DeviceCode) {
-                                    stringResource(R.string.debrid_provider_device_description, provider.displayName)
-                                } else {
-                                    stringResource(R.string.debrid_provider_description, provider.displayName)
-                                },
+                                subtitle = stringResource(R.string.debrid_provider_description, provider.displayName),
                                 value = providerCredentialStatus(
                                     provider = provider,
                                     credential = uiState.apiKeyFor(provider.id),
                                     notSetLabel = stringResource(R.string.debrid_not_set),
                                     connectedLabel = stringResource(R.string.debrid_connected)
                                 ),
-                                onClick = {
-                                    when (provider.authMethod) {
-                                        DebridProviderAuthMethod.DeviceCode -> activeDeviceAuthDialog = provider.id
-                                        DebridProviderAuthMethod.ApiKey -> activeApiKeyDialog = provider.id
-                                    }
-                                },
+                                onClick = { activeApiKeyDialog = provider.id },
                                 enabled = true
                             )
                         }
@@ -360,19 +337,6 @@ fun DebridSettingsContent(
                     activeApiKeyDialog = null
                 },
                 onDismiss = { activeApiKeyDialog = null }
-            )
-        }
-    }
-
-    activeDeviceAuthDialog?.let { providerId ->
-        DebridProviders.byId(providerId)?.let { provider ->
-            DebridDeviceAuthDialog(
-                provider = provider,
-                currentValue = uiState.apiKeyFor(provider.id),
-                viewModel = viewModel,
-                onConnected = { token -> viewModel.saveProviderCredential(provider.id, token) },
-                onDisconnect = { viewModel.saveProviderCredential(provider.id, "") },
-                onDismiss = { activeDeviceAuthDialog = null }
             )
         }
     }
@@ -1313,254 +1277,6 @@ private enum class DebridSortProfile {
     SMALLEST,
     AUDIO,
     LANGUAGE
-}
-
-@Composable
-private fun DebridDeviceAuthDialog(
-    provider: DebridProvider,
-    currentValue: String,
-    viewModel: DebridSettingsViewModel,
-    onConnected: (String) -> Unit,
-    onDisconnect: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val isConnected = currentValue.isNotBlank()
-    var restartNonce by remember(provider.id) { mutableStateOf(0) }
-    var session by remember(provider.id, restartNonce, isConnected) { mutableStateOf<DebridDeviceAuthorization?>(null) }
-    var isStarting by remember(provider.id, restartNonce, isConnected) { mutableStateOf(!isConnected) }
-    var isPolling by remember(provider.id, restartNonce, isConnected) { mutableStateOf(false) }
-    var statusMessage by remember(provider.id, restartNonce, isConnected) { mutableStateOf<String?>(null) }
-
-    val startingMessage = stringResource(R.string.debrid_device_auth_starting)
-    val waitingMessage = stringResource(R.string.debrid_device_auth_waiting)
-    val failedMessage = stringResource(R.string.debrid_device_auth_failed)
-    val missingConfigurationMessage = stringResource(R.string.debrid_device_auth_missing_configuration)
-    val expiredMessage = stringResource(R.string.debrid_device_auth_expired)
-
-    LaunchedEffect(provider.id, restartNonce, isConnected) {
-        if (isConnected) {
-            isStarting = false
-            isPolling = false
-            statusMessage = null
-            session = null
-            return@LaunchedEffect
-        }
-        isStarting = true
-        isPolling = false
-        statusMessage = null
-        val startResult = runCatching {
-            viewModel.startDeviceAuthorization(provider.id)
-        }.onFailure { error ->
-            if (error is CancellationException) throw error
-        }
-        session = startResult.getOrNull()
-        isStarting = false
-        statusMessage = if (session == null) {
-            startResult.exceptionOrNull()?.message?.takeIf { it.contains("PREMIUMIZE_CLIENT_ID") }
-                ?.let { missingConfigurationMessage }
-                ?: failedMessage
-        } else {
-            waitingMessage
-        }
-    }
-
-    LaunchedEffect(session?.deviceCode, restartNonce, isConnected) {
-        if (isConnected) return@LaunchedEffect
-        val activeSession = session ?: return@LaunchedEffect
-        while (true) {
-            delay(activeSession.intervalSeconds.coerceAtLeast(1) * 1_000L)
-            isPolling = true
-            val result = runCatching {
-                viewModel.redeemDeviceAuthorization(provider.id, activeSession.deviceCode)
-            }.getOrElse { error ->
-                if (error is CancellationException) throw error
-                if (error.isCancelledHttpRequest()) {
-                    DebridDeviceAuthorizationTokenResult.Pending
-                } else {
-                    DebridDeviceAuthorizationTokenResult.Failed(null)
-                }
-            }
-            isPolling = false
-            when (result) {
-                is DebridDeviceAuthorizationTokenResult.Authorized -> {
-                    onConnected(result.accessToken)
-                    onDismiss()
-                    return@LaunchedEffect
-                }
-                DebridDeviceAuthorizationTokenResult.Pending -> {
-                    statusMessage = waitingMessage
-                }
-                DebridDeviceAuthorizationTokenResult.Expired -> {
-                    statusMessage = expiredMessage
-                    return@LaunchedEffect
-                }
-                is DebridDeviceAuthorizationTokenResult.Failed -> {
-                    statusMessage = result.message.toDeviceAuthStatusMessage(failedMessage)
-                    return@LaunchedEffect
-                }
-                DebridDeviceAuthorizationTokenResult.Unsupported -> {
-                    statusMessage = failedMessage
-                    return@LaunchedEffect
-                }
-            }
-        }
-    }
-
-    NuvioDialog(
-        onDismiss = onDismiss,
-        title = stringResource(
-            if (isConnected) R.string.debrid_disconnect_provider else R.string.debrid_connect_provider,
-            provider.displayName
-        ),
-        width = 620.dp,
-        titleTextAlign = TextAlign.Center,
-        suppressFirstKeyUp = false
-    ) {
-        if (isConnected) {
-            Text(
-                text = stringResource(R.string.debrid_device_auth_connected, provider.displayName),
-                style = MaterialTheme.typography.bodyMedium,
-                color = NuvioTheme.colors.TextSecondary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-        } else if (isStarting) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CircularProgressIndicator(strokeWidth = NuvioTheme.spacing.xxs, modifier = Modifier.size(18.dp))
-                Text(
-                    text = startingMessage,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioTheme.colors.TextSecondary
-                )
-            }
-        } else {
-            session?.let { activeSession ->
-                val qrBitmap = remember(activeSession.friendlyVerificationUrl) {
-                    runCatching { QrCodeGenerator.generate(activeSession.friendlyVerificationUrl, 420, margin = 1) }.getOrNull()
-                }
-                Text(
-                    text = stringResource(R.string.debrid_device_auth_instructions),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioTheme.colors.TextSecondary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (qrBitmap != null) {
-                    Image(
-                        bitmap = qrBitmap.asImageBitmap(),
-                        contentDescription = stringResource(R.string.cd_qr_code),
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .size(196.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                }
-                DebridDeviceAuthCodes(
-                    userCode = activeSession.userCode,
-                    verificationUrl = activeSession.friendlyVerificationUrl,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            statusMessage?.let { message ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm, Alignment.CenterHorizontally),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isPolling) {
-                        CircularProgressIndicator(strokeWidth = NuvioTheme.spacing.xxs, modifier = Modifier.size(NuvioTheme.spacing.lg))
-                    }
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (message == failedMessage || message == expiredMessage || message == missingConfigurationMessage) {
-                            NuvioTheme.colors.Error
-                        } else {
-                            NuvioTheme.colors.TextSecondary
-                        },
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-
-        SettingsDialogActionRow(horizontalAlignment = Alignment.CenterHorizontally) {
-            SettingsDialogActionButton(
-                text = stringResource(R.string.action_cancel),
-                onClick = onDismiss
-            )
-            if (isConnected) {
-                SettingsDialogActionButton(
-                    text = stringResource(R.string.debrid_disconnect),
-                    onClick = {
-                        onDisconnect()
-                        onDismiss()
-                    },
-                    primary = true
-                )
-            }
-            if (!isConnected && !isStarting && session == null) {
-                SettingsDialogActionButton(
-                    text = stringResource(R.string.action_retry),
-                    onClick = { restartNonce += 1 }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DebridDeviceAuthCodes(
-    userCode: String,
-    verificationUrl: String,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
-    ) {
-        Text(
-            text = userCode,
-            style = MaterialTheme.typography.headlineSmall,
-            color = NuvioTheme.colors.TextPrimary,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center
-        )
-        Text(
-            text = verificationUrl,
-            style = MaterialTheme.typography.bodySmall,
-            color = NuvioTheme.colors.TextTertiary,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-private fun Throwable.isCancelledHttpRequest(): Boolean {
-    val text = listOfNotNull(message, toString())
-        .joinToString(" ")
-        .lowercase()
-    return "code=-999" in text ||
-        ("nsurlerrordomain" in text && ("cancelled" in text || "canceled" in text))
-}
-
-private fun String?.toDeviceAuthStatusMessage(fallback: String): String {
-    val value = this?.trim()?.takeIf { it.isNotBlank() } ?: return fallback
-    val lower = value.lowercase()
-    return if (
-        value.length > 180 ||
-        "exception in http request" in lower ||
-        "nsurlerrordomain" in lower ||
-        "userinfo=" in lower
-    ) {
-        fallback
-    } else {
-        value
-    }
 }
 
 @Composable

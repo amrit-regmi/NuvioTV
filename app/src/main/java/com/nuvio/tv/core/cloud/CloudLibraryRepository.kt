@@ -16,10 +16,9 @@ import kotlinx.coroutines.flow.first
 class CloudLibraryRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataStore: DebridSettingsDataStore,
-    torboxApi: TorboxCloudLibraryProviderApi,
-    premiumizeApi: PremiumizeCloudLibraryProviderApi
+    torboxApi: TorboxCloudLibraryProviderApi
 ) {
-    private val providerApis: List<CloudLibraryProviderApi> = listOf(torboxApi, premiumizeApi)
+    private val providerApis: List<CloudLibraryProviderApi> = listOf(torboxApi)
 
     suspend fun refresh(): CloudLibraryUiState {
         val settings = dataStore.settings.first()

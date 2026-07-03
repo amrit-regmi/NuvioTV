@@ -6,9 +6,6 @@ import com.nuvio.tv.data.remote.dto.TorboxCloudItemDto
 import com.nuvio.tv.data.remote.dto.TorboxCachedItemDto
 import com.nuvio.tv.data.remote.dto.TorboxCheckCachedRequestDto
 import com.nuvio.tv.data.remote.dto.TorboxCreateTorrentDataDto
-import com.nuvio.tv.data.remote.dto.TorboxDeviceAuthorizationDto
-import com.nuvio.tv.data.remote.dto.TorboxDeviceTokenDto
-import com.nuvio.tv.data.remote.dto.TorboxDeviceTokenRequestDto
 import com.nuvio.tv.data.remote.dto.TorboxEnvelopeDto
 import com.nuvio.tv.data.remote.dto.TorboxTorrentDataDto
 import com.nuvio.tv.data.remote.dto.TorboxTorrentFileDto
@@ -163,18 +160,6 @@ class TorboxDirectDebridResolverTest {
 
         override suspend fun getUser(authorization: String): Response<ResponseBody> {
             return Response.success("{}".toResponseBody("application/json".toMediaType()))
-        }
-
-        override suspend fun startDeviceAuthorization(
-            appName: String
-        ): Response<TorboxEnvelopeDto<TorboxDeviceAuthorizationDto>> {
-            return Response.success(TorboxEnvelopeDto(success = true, data = TorboxDeviceAuthorizationDto()))
-        }
-
-        override suspend fun redeemDeviceAuthorization(
-            body: TorboxDeviceTokenRequestDto
-        ): Response<TorboxEnvelopeDto<TorboxDeviceTokenDto>> {
-            return Response.success(TorboxEnvelopeDto(success = true, data = TorboxDeviceTokenDto()))
         }
 
         override suspend fun checkCached(

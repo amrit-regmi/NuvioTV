@@ -21,8 +21,6 @@ import javax.inject.Singleton
 class DirectDebridResolver @Inject constructor(
     private val dataStore: DebridSettingsDataStore,
     private val torboxResolver: TorboxDirectDebridResolver,
-    private val realDebridResolver: RealDebridDirectDebridResolver,
-    private val premiumizeResolver: PremiumizeDirectDebridResolver,
     private val localDebridService: LocalDebridService,
     private val sharedTorboxKeyService: SharedTorboxKeyService,
     private val authManager: com.nuvio.tv.core.auth.AuthManager
@@ -190,8 +188,6 @@ class DirectDebridResolver @Inject constructor(
         }
         return when (DebridProviders.byId(stream.clientResolve?.service)?.id) {
             DebridProviders.TORBOX_ID -> torboxResolver.resolve(stream, season, episode, forceFresh)
-            DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(stream, season, episode)
-            DebridProviders.REAL_DEBRID_ID -> realDebridResolver.resolve(stream, season, episode)
             else -> DirectDebridResolveResult.Error
         }
     }
@@ -291,7 +287,6 @@ class DirectDebridResolver @Inject constructor(
 
         return when (account.provider.id) {
             DebridProviders.TORBOX_ID -> torboxResolver.resolve(resolveStream, season, episode, forceFresh)
-            DebridProviders.PREMIUMIZE_ID -> premiumizeResolver.resolve(resolveStream, season, episode)
             else -> DirectDebridResolveResult.Error
         }
     }
