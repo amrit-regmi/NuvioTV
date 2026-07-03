@@ -379,7 +379,6 @@
     <string name="settings_integration">Integrations</string>
     <string name="settings_playback">Playback</string>
     <string name="settings_playback_subtitle">Player, subtitles, and auto-play</string>
-    <string name="settings_trakt_subtitle">Open Trakt connection screen</string>
     <string name="settings_about_subtitle">Version and policies</string>
     <string name="settings_network">Network speed</string>
     <string name="settings_network_subtitle">Latency and download diagnostics</string>
@@ -909,8 +908,6 @@
     <string name="mdblist_enable_subtitle">Fetch ratings from external providers in metadata detail screen</string>
     <string name="mdblist_api_key_title">API Key</string>
     <string name="mdblist_api_key_subtitle">Required to fetch ratings from MDBList</string>
-    <string name="mdblist_trakt_title">Trakt</string>
-    <string name="mdblist_trakt_subtitle">Show Trakt score</string>
     <string name="mdblist_imdb_title">IMDb</string>
     <string name="mdblist_imdb_subtitle">Show IMDb score (and hide default IMDb line when available)</string>
     <string name="mdblist_tmdb_title">TMDB</string>
@@ -1121,11 +1118,6 @@
 
     <string name="tmdb_language_dialog_title">TMDB Language</string>
 
-    <string name="trakt_description">Sync your watchlist, watch progress, continue watching, scrobbles, and personal lists with Trakt.</string>
-    <string name="trakt_connected_as">Connected as %1$s</string>
-    <string name="trakt_account_login">Account Login</string>
-    <string name="trakt_awaiting_instruction">Go to trakt.tv/activate and enter this code:</string>
-    <string name="trakt_waiting_approval">Waiting for approval…</string>
     <string name="qr_login_approved">Login approved. Finishing sign in…</string>
     <string name="qr_login_pending">Waiting for approval on your phone…</string>
     <string name="qr_login_expired">QR login expired. Generate a new code.</string>
@@ -1136,67 +1128,7 @@
     <string name="qr_login_signing_in">Signing you in…</string>
     <string name="qr_login_success">Signed in successfully</string>
     <string name="qr_login_exchange_failed">Could not complete QR sign in</string>
-    <string name="trakt_code_expires">Code expires in %1$s</string>
-    <string name="trakt_token_refreshes">Trakt access token refreshes in %1$s</string>
-    <string name="trakt_login_instruction">Press Login to start Trakt device authentication. A QR code will appear here.</string>
-    <string name="trakt_missing_credentials">Missing TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET in local.properties.</string>
-    <string name="trakt_watch_progress_title">Watch Progress</string>
-    <string name="trakt_watch_progress_subtitle">Choose which progress source powers resume and continue watching</string>
-    <string name="trakt_watch_progress_dialog_title">Watch Progress</string>
-    <string name="trakt_watch_progress_dialog_subtitle">Choose whether resume and continue watching should use Trakt or CineX Sync while Trakt scrobbling stays active.</string>
-    <string name="trakt_watch_progress_source_trakt">Trakt</string>
-    <string name="trakt_watch_progress_source_nuvio">CineX Sync</string>
-    <string name="trakt_library_source_title">Library Source</string>
-    <string name="trakt_library_source_subtitle">Choose which library to use for saving and viewing your collection</string>
-    <string name="trakt_library_source_dialog_title">Library Source</string>
-    <string name="trakt_library_source_dialog_subtitle">Choose where to save and manage your library items</string>
-    <string name="trakt_library_source_trakt">Trakt</string>
     <string name="trakt_library_source_nuvio">CineX Library</string>
-    <string name="trakt_library_source_trakt_selected">Trakt library selected</string>
-    <string name="trakt_library_source_nuvio_selected">CineX library selected</string>
-    <string name="trakt_setting_on">On</string>
-    <string name="trakt_setting_off">Off</string>
-    <string name="trakt_watch_progress_trakt_selected">Watch progress source set to Trakt</string>
-    <string name="trakt_watch_progress_nuvio_selected">Watch progress source set to CineX Sync</string>
-    <string name="trakt_continue_watching_window">Continue Watching Window</string>
-    <string name="trakt_continue_watching_subtitle">Trakt history considered for continue watching</string>
-    <string name="trakt_unaired_next_up">Unaired Next Up Episodes</string>
-    <string name="trakt_unaired_next_up_subtitle">Show upcoming episodes before they air</string>
-    <string name="trakt_unaired_shown">Shown</string>
-    <string name="trakt_unaired_hidden">Hidden</string>
-    <string name="trakt_unaired_now_shown">Unaired Next Up episodes are now shown</string>
-    <string name="trakt_unaired_now_hidden">Unaired Next Up episodes are now hidden</string>
-    <string name="trakt_comments_title">Comments</string>
-    <string name="trakt_comments_subtitle">Show Trakt reviews on metadata pages</string>
-    <string name="trakt_comments_dialog_title">Comments</string>
-    <string name="trakt_comments_dialog_subtitle">Choose whether metadata pages should show Trakt reviews when your account is connected.</string>
-    <string name="trakt_comments_now_shown">Trakt reviews on metadata pages are now shown</string>
-    <string name="trakt_comments_now_hidden">Trakt reviews on metadata pages are now hidden</string>
-    <string name="trakt_more_like_this_source_title">More Like This source</string>
-    <string name="trakt_more_like_this_source_subtitle">Choose where recommendations come from on detail pages</string>
-    <string name="trakt_more_like_this_source_dialog_title">More Like This source</string>
-    <string name="trakt_more_like_this_source_dialog_subtitle">Select the source for recommendations shown on detail pages.</string>
-    <string name="trakt_more_like_this_source_trakt">Trakt</string>
-    <string name="trakt_more_like_this_source_tmdb">TMDB</string>
-    <string name="trakt_cached_label">Cached</string>
-    <string name="trakt_stat_movies">Movies</string>
-    <string name="trakt_stat_shows">Shows</string>
-    <string name="trakt_stat_episodes">Episodes</string>
-    <string name="trakt_stat_watched_hours">Watched Hours</string>
-    <string name="trakt_disconnect">Disconnect</string>
-    <string name="trakt_disconnect_title">Disconnect Trakt?</string>
-    <string name="trakt_disconnect_subtitle">This will disconnect your Trakt account from CineX.</string>
-    <string name="trakt_login">Login</string>
-    <string name="trakt_retry">Retry</string>
-    <string name="trakt_back">Back</string>
-    <string name="trakt_cw_window_title">Continue Watching Window</string>
-    <string name="trakt_cw_window_subtitle">Choose how much Trakt activity should appear in continue watching.</string>
-    <string name="trakt_unaired_dialog_title">Unaired Next Up Episodes</string>
-    <string name="trakt_unaired_dialog_subtitle">Choose whether Continue Watching should include upcoming episodes before release.</string>
-    <string name="trakt_show_unaired">Show unaired episodes</string>
-    <string name="trakt_hide_unaired">Hide unaired episodes</string>
-    <string name="trakt_all_history">All history</string>
-    <string name="trakt_days_format">%1$d days</string>
 
     <string name="debug_title">Debug</string>
     <string name="debug_subtitle">Developer tools and feature flags (debug builds only)</string>
@@ -1668,7 +1600,6 @@
     <string name="library_delete_confirm">Delete</string>
     <string name="library_source_local">LOCAL</string>
     <string name="library_source_nuvio">CINEX</string>
-    <string name="library_source_trakt">TRAKT</string>
     <string name="library_source_saved">Saved</string>
     <string name="library_source_cloud">Cloud</string>
     <string name="library_watchlist">Watchlist</string>
@@ -1956,28 +1887,6 @@
 
     <!-- Trakt errors -->
 
-    <string name="trakt_error_code_expired">Device code expired. Start again.</string>
-    <string name="trakt_error_code_used">Device code already used. Start again.</string>
-    <string name="trakt_error_denied">Authorization denied on Trakt.</string>
-    <string name="trakt_error_missing_credentials">Missing TRAKT credentials</string>
-    <string name="trakt_error_network_retry">Network error, please try again</string>
-    <string name="trakt_error_network_will_retry">Network error, will retry</string>
-    <string name="trakt_error_rate_limited_minutes">Trakt is rate limiting requests. Try again in ~%1$d min</string>
-    <string name="trakt_error_failed_start_code">Failed to start Trakt auth (%1$d)</string>
-    <string name="trakt_error_no_active_device_code">No active Trakt device code</string>
-    <string name="trakt_error_invalid_device_code">Invalid device code</string>
-    <string name="trakt_error_token_polling_failed_code">Token polling failed (%1$d)</string>
-    <string name="trakt_error_public_request_failed">Trakt request failed</string>
-    <string name="trakt_error_list_not_found_or_private">Trakt list not found or not public</string>
-    <string name="trakt_error_rate_limit_reached">Trakt rate limit reached</string>
-    <string name="trakt_status_enter_activation_code">Enter code on trakt.tv/activate</string>
-    <string name="trakt_status_syncing">Syncing...</string>
-    <string name="trakt_status_sync_completed">Sync completed</string>
-    <string name="trakt_status_disconnected">Disconnected from Trakt</string>
-    <string name="trakt_status_cw_window_updated">Continue watching window updated</string>
-    <string name="trakt_status_rate_limited_slowing_polling">Rate limited, slowing down polling...</string>
-    <string name="trakt_user_fallback">Trakt user</string>
-    <string name="trakt_error_failed_start">Failed to start Trakt auth</string>
 
     <!-- General errors -->
     <string name="error_unknown">Unknown error</string>
@@ -2031,7 +1940,6 @@
     <string name="cd_unlink">Unlink</string>
     <string name="cd_nuvio_logo">CineX</string>
     <string name="cd_trakt_logo">Trakt Logo</string>
-    <string name="cd_trakt_qr">Trakt activation QR</string>
     <string name="cd_imdb">IMDb</string>
     <string name="cd_open_discover">Open discover</string>
     <string name="cd_voice_search">Voice search</string>
@@ -2134,11 +2042,8 @@
     <string name="collections_editor_edit_tmdb_source">Edit TMDB Source</string>
     <string name="collections_editor_tmdb_sources">TMDB Sources</string>
     <string name="collections_editor_trakt_sources">Trakt Lists</string>
-    <string name="collections_editor_edit_trakt_source">Edit Trakt List</string>
     <string name="collections_editor_trakt_list">Trakt list</string>
     <string name="collections_editor_trakt_search_results">Search results</string>
-    <string name="collections_editor_trakt_trending">Trending lists</string>
-    <string name="collections_editor_trakt_popular">Popular lists</string>
     <string name="collections_editor_trakt_direction">Direction</string>
     <string name="collections_editor_trakt_ascending">Ascending</string>
     <string name="collections_editor_trakt_descending">Descending</string>
@@ -2222,18 +2127,9 @@
     <string name="collections_editor_trakt_movie_list">Trakt Movie List</string>
     <string name="collections_editor_trakt_series_list">Trakt Series List</string>
     <string name="collections_editor_trakt_list_with_id">Trakt List %1$d</string>
-    <string name="collections_editor_trakt_public_list">Trakt public list</string>
-    <string name="collections_editor_trakt_items_count">%1$d items</string>
-    <string name="collections_editor_trakt_likes_count">%1$d likes</string>
     <string name="collections_editor_error_valid_tmdb_id_or_url">Enter a valid TMDB ID or URL</string>
     <string name="collections_editor_error_load_tmdb_source">Could not load TMDB source</string>
-    <string name="collections_editor_error_trakt_list_id_or_url">Enter a Trakt list ID or URL</string>
-    <string name="collections_editor_error_trakt_list_name_id_or_url">Enter a Trakt list name, URL, or ID</string>
     <string name="collections_editor_error_load_trakt_list">Could not load Trakt list</string>
-    <string name="collections_editor_error_load_trakt_lists">Could not load Trakt lists</string>
-    <string name="collections_editor_error_search_trakt_lists">Could not search Trakt lists</string>
-    <string name="collections_editor_error_trakt_list_not_found">Trakt list not found</string>
-    <string name="collections_editor_error_trakt_list_missing_numeric_id">Trakt list did not include a numeric ID</string>
     <string name="collections_editor_tmdb_placeholder_list">https://www.themoviedb.org/list/8504994 or 8504994</string>
     <string name="collections_editor_tmdb_placeholder_collection">10 for Star Wars Collection</string>
     <string name="collections_editor_tmdb_placeholder_company">Marvel Studios, 420, or company URL</string>
@@ -2291,8 +2187,6 @@
     <string name="collections_tab_combined">Combined</string>
     <string name="collection_editor_remove_cd">Remove</string>
     <string name="collection_editor_choice_both">Both</string>
-    <string name="collection_editor_resolved_trakt_list">Resolved Trakt list</string>
-    <string name="collection_editor_trakt_search_placeholder">Search title, Trakt URL, or list ID</string>
     <string name="collection_editor_trakt_name_placeholder">Weekend Watch, Award Winners</string>
     <string name="collection_editor_folder_count_one">%1$d item</string>
     <string name="collection_editor_folder_count_other">%1$d items</string>
@@ -2423,26 +2317,6 @@
     <string name="library_privacy_public">Public</string>
 
     <!-- Trakt errors -->
-    <string name="trakt_error_auth_required">Trakt authentication required</string>
-    <string name="trakt_library_error_request_failed">Trakt request failed</string>
-    <string name="trakt_library_error_create_list_failed">Failed to create list</string>
-    <string name="trakt_library_error_update_list_failed">Failed to update list</string>
-    <string name="trakt_library_error_delete_list_failed">Failed to delete list</string>
-    <string name="trakt_library_error_reorder_lists_failed">Failed to reorder lists</string>
-    <string name="trakt_library_error_fetch_watchlist_movies">Failed to fetch watchlist movies</string>
-    <string name="trakt_library_error_fetch_watchlist_shows">Failed to fetch watchlist shows</string>
-    <string name="trakt_library_error_fetch_personal_lists">Failed to fetch personal lists</string>
-    <string name="trakt_library_error_add_watchlist_failed">Failed to add to watchlist</string>
-    <string name="trakt_library_error_remove_watchlist_failed">Failed to remove from watchlist</string>
-    <string name="trakt_library_error_add_to_list_failed">Failed to add to list</string>
-    <string name="trakt_library_error_remove_from_list_failed">Failed to remove from list</string>
-    <string name="trakt_library_error_missing_compatible_ids">Missing compatible IDs for Trakt list operation</string>
-    <string name="trakt_library_error_auth_expired">Trakt authentication expired</string>
-    <string name="trakt_library_error_list_not_found">Trakt list not found</string>
-    <string name="trakt_library_error_list_limit_reached">Trakt list limit reached. Upgrade required.</string>
-    <string name="trakt_error_insufficient_ids_mark_watched">Insufficient Trakt IDs to mark watched</string>
-    <string name="trakt_error_request_failed">Trakt request failed</string>
-    <string name="trakt_error_mark_watched_failed">Failed to mark watched on Trakt (%1$d)</string>
 
     <!-- Detail / poster options errors -->
     <string name="detail_error_update_library_failed">Failed to update library</string>
@@ -2524,7 +2398,6 @@
     <string name="stream_error_fetch_failed">Failed to fetch streams</string>
 
     <!-- Trakt: paginated fetch + comments -->
-    <string name="trakt_library_error_paginated_fetch_failed">Trakt paginated fetch failed (%1$d)</string>
 
     <!-- Home: poster long-press list picker errors -->
     <string name="home_poster_lists_error_load_failed">Failed to load lists</string>
@@ -2535,9 +2408,6 @@
     <string name="profile_pin_lock_removed_for_profile">PIN lock removed for %1$s.</string>
 
     <!-- Trakt: Related / comments / list items error fallbacks -->
-    <string name="trakt_related_error_request_failed">Trakt related request failed</string>
-    <string name="trakt_comments_error_request_failed">Trakt comments request failed</string>
-    <string name="trakt_library_error_fetch_list_items">Failed to fetch list items</string>
 
     <!-- Trakt rating -->
     <string name="trakt_rating_label_1">Weak sauce!</string>
@@ -2554,12 +2424,6 @@
     <string name="trakt_rating_dislike">Dislike</string>
     <string name="trakt_rating_like">Like</string>
     <string name="trakt_rating_love">Love</string>
-    <string name="trakt_rating_rate">Rate</string>
-    <string name="trakt_rating_submit">Submit Rating</string>
-    <string name="trakt_rating_skip">Skip</string>
-    <string name="trakt_rating_saving">Saving…</string>
-    <string name="trakt_rating_error">Couldn\'t save rating</string>
-    <string name="trakt_rating_post_play_title">How was it?</string>
 
     <string name="watchlist_removed">Removed from watchlist</string>
     <string name="watchlist_added">Added to watchlist</string>
