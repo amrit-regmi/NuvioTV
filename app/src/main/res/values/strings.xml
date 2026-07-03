@@ -407,8 +407,6 @@
     <string name="essential_autoplay_next_episode">Auto-play next episode</string>
     <string name="essential_autoplay_next_episode_subtitle">Continue to the next episode after a stream finishes.</string>
     <string name="external_auto_next_loading">Loading next episode…</string>
-    <string name="essential_p2p_streams">P2P streams</string>
-    <string name="essential_p2p_streams_subtitle">Allow peer-to-peer stream sources.</string>
     <string name="essential_subtitle_language_subtitle">Preferred subtitle language.</string>
     <string name="essential_audio_language_subtitle">Preferred audio language.</string>
     <!-- Account / sign-in error messages -->
@@ -1322,18 +1320,7 @@
     <string name="stream_download_stop">Stop</string>
     <string name="stream_download_close">Close</string>
     <string name="stream_download_stream_now">Stream</string>
-    <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
-    <string name="p2p_consent_title">P2P Streaming</string>
-    <string name="p2p_consent_body">This stream uses peer-to-peer (P2P) technology. By enabling P2P, you acknowledge and agree that:\n\n\u2022 Your IP address will be visible to other peers in the network\n\u2022 You are solely responsible for the content you access\n\u2022 You confirm you have the legal right to stream this content in your jurisdiction\n\u2022 CineX does not host, distribute, or control any P2P content\n\u2022 CineX bears no liability for any legal consequences arising from your use of P2P streaming\n\nYou use this feature entirely at your own risk. P2P can be disabled anytime in Settings.</string>
-    <string name="p2p_consent_enable">Enable P2P</string>
-    <string name="p2p_consent_cancel">Cancel</string>
-    <string name="settings_p2p_title">P2P Streaming</string>
-    <string name="settings_p2p_subtitle">Allow peer-to-peer (torrent) streams</string>
-    <string name="settings_p2p_hide_stats_title">Hide torrent stats</string>
-    <string name="settings_p2p_hide_stats_subtitle">Hide buffer, seeds, peers and download speed during loading and playback</string>
-    <string name="p2p_download_title">Downloading P2P Engine</string>
-    <string name="p2p_download_subtitle">This is a one-time download required for P2P streaming.</string>
     <string name="stream_type_external">External</string>
     <string name="stream_player_picker_title">What player should be used?</string>
     <string name="stream_player_internal">Internal</string>
@@ -1901,7 +1888,6 @@
     <string name="home_error_no_catalog_addons">No catalog addons installed</string>
 
     <!-- Player errors -->
-    <string name="player_error_failed_start_torrent">Failed to start torrent: %1$s</string>
 
     <!-- Playback subtitle settings -->
     <string name="sub_mode_overlay_canvas_sub">HDR support with canvas rendering. May block UI thread.</string>
@@ -2251,12 +2237,7 @@
     <!-- Playback settings sections -->
     <string name="playback_player_internal_desc">Use CineX\'s built-in player</string>
 
-    <!-- Player runtime: torrent overlay + tracks -->
-    <string name="player_torrent_peer_info">%1$d seeds · %2$d peers</string>
-    <string name="player_torrent_buffered_status">%1$s buffered · %2$s · %3$s</string>
-    <string name="player_torrent_status">%1$s · %2$s</string>
-    <string name="player_torrent_stats">%1$d peers · %2$d seeds · %3$d%%</string>
-    <string name="player_torrent_connecting_peers">Connecting to peers…</string>
+    <!-- Player runtime: tracks -->
     <string name="player_track_audio_fallback">Audio %1$d</string>
     <string name="player_track_subtitle_fallback">Subtitle %1$d</string>
 
@@ -2272,7 +2253,6 @@
     <string name="player_error_initialize_failed">Failed to initialize player</string>
     <string name="player_error_mpv_surface_failed">Failed to initialize libmpv surface</string>
     <string name="player_error_mpv_playback_failed">Failed to initialize libmpv playback</string>
-    <string name="player_error_torrent">Torrent error: %1$s</string>
     <string name="player_error_playback_fallback">Playback error</string>
     <!-- Subtitle timing recovery -->
     <string name="subtitle_timing_file_no_lines">No subtitle lines were found in this file.</string>
@@ -2367,14 +2347,8 @@
     <string name="network_fast_error_token_missing">fast.com: token not found in bundle</string>
 
     <!-- Torrent service / TorrServer binary errors -->
-    <string name="torrent_error_add_failed">Failed to add torrent</string>
-    <string name="torrent_error_binary_missing">TorrServer binary not found at %1$s</string>
-    <string name="torrent_error_process_died">TorrServer process died on startup (exit code %1$d)</string>
-    <string name="torrent_error_start_timeout">TorrServer failed to start within %1$ds</string>
 
     <!-- Player runtime: stream / external link errors -->
-    <string name="player_torrent_starting_engine">Starting P2P engine…</string>
-    <string name="player_torrent_rebuffer_status">%1$s buffered</string>
     <string name="player_stream_error_invalid_external_url">Invalid external URL</string>
     <string name="player_stream_error_open_external_link_failed">Unable to open external link</string>
     <string name="player_stream_error_invalid_url">Invalid stream URL</string>
@@ -2624,9 +2598,6 @@
     <string name="unit_size_kb">%1$s KB</string>
     <string name="unit_size_mb">%1$s MB</string>
     <string name="unit_size_gb">%1$s GB</string>
-    <string name="unit_speed_b_s">%1$d B/s</string>
-    <string name="unit_speed_kb_s">%1$s KB/s</string>
-    <string name="unit_speed_mb_s">%1$s MB/s</string>
 
     <!-- Misc fallbacks -->
     <string name="playback_estimated_memory_usage">Estimated memory usage: %1$d / %2$d MB</string>

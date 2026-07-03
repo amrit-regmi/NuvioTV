@@ -21,8 +21,6 @@ import com.nuvio.tv.data.local.MpvHardwareDecodeMode
 import com.nuvio.tv.data.local.SubtitleOrganizationMode
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
-import com.nuvio.tv.core.torrent.TorrentSettings
-import com.nuvio.tv.core.torrent.TorrentSettingsData
 import com.nuvio.tv.data.local.VodCacheSizeMode
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
@@ -42,7 +40,6 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val addonRepository: AddonRepository,
     private val pluginManager: PluginManager,
-    private val torrentSettings: TorrentSettings,
     private val recommendationRepository: RecommendationRepository,
     private val authManager: AuthManager,
     private val profileManager: ProfileManager
@@ -81,11 +78,6 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
     val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
-    val torrentSettingsFlow: Flow<TorrentSettingsData> = torrentSettings.settings
-
-    fun setP2pEnabled(enabled: Boolean) = torrentSettings.setP2pEnabled(enabled)
-    fun setHideTorrentStats(enabled: Boolean) = torrentSettings.setHideTorrentStats(enabled)
-
     val lastPlaybackDiagnostics: Flow<LastPlaybackDiagnostics> = playerSettingsDataStore.lastPlaybackDiagnostics
     val installedAddonNames: Flow<List<String>> = addonRepository.getInstalledAddons().map { addons ->
         addons

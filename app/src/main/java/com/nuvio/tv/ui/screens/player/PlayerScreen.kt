@@ -701,7 +701,7 @@ fun PlayerScreen(
             backdropUrl = uiState.backdrop,
             logoUrl = uiState.logo,
             title = uiState.title,
-            message = uiState.loadingMessage.takeIf { uiState.showPlayerLoadingStatus || uiState.isTorrentStream },
+            message = uiState.loadingMessage.takeIf { uiState.showPlayerLoadingStatus },
             progress = uiState.loadingProgress,
             modifier = Modifier
                 .fillMaxSize()
@@ -734,29 +734,12 @@ fun PlayerScreen(
                 .zIndex(2.6f)
         )
 
-        // Torrent stats overlay (top-right corner)
-        TorrentOverlay(
-            visible = uiState.isTorrentStream && uiState.showTorrentStats && !uiState.hideTorrentStats && uiState.error == null,
-            downloadSpeed = uiState.torrentDownloadSpeed,
-            uploadSpeed = uiState.torrentUploadSpeed,
-            peers = uiState.torrentPeers,
-            seeds = uiState.torrentSeeds,
-            totalProgress = uiState.torrentTotalProgress,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = NuvioTheme.spacing.lg, end = NuvioTheme.spacing.lg)
-                .zIndex(2.7f)
-        )
-
         // Buffering indicator — isolated in its own composable scope so that
         // isBuffering state changes only recompose this small subtree instead
         // of the entire PlayerScreen.
         PlayerBufferingIndicator(
             isBuffering = uiState.isBuffering,
-            showLoadingOverlay = uiState.showLoadingOverlay,
-            isTorrentStream = uiState.isTorrentStream,
-            torrentBufferingMessage = uiState.torrentBufferingMessage,
-            torrentBufferingProgress = uiState.torrentBufferingProgress
+            showLoadingOverlay = uiState.showLoadingOverlay
         )
 
         // Error state
@@ -2792,10 +2775,7 @@ private fun formatSubtitleDelay(delayMs: Int): String {
 @Composable
 private fun PlayerBufferingIndicator(
     isBuffering: Boolean,
-    showLoadingOverlay: Boolean,
-    isTorrentStream: Boolean,
-    torrentBufferingMessage: String?,
-    torrentBufferingProgress: Float
+    showLoadingOverlay: Boolean
 ) {
     if (!isBuffering || showLoadingOverlay) return
 
@@ -2803,43 +2783,6 @@ private fun PlayerBufferingIndicator(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        if (isTorrentStream && torrentBufferingMessage != null) {
-            // Torrent rebuffer: spinner + download stats + progress bar
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                LoadingIndicator()
-                Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
-                Text(
-                    text = torrentBufferingMessage,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.8f)
-                )
-                if (torrentBufferingProgress > 0f) {
-                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
-                    Box(
-                        modifier = Modifier
-                            .width(200.dp)
-                            .height(3.dp)
-                            .background(
-                                color = Color.White.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(NuvioTheme.radii.xxs)
-                            )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(torrentBufferingProgress.coerceIn(0f, 1f))
-                                .height(3.dp)
-                                .background(
-                                    color = Color.White.copy(alpha = 0.85f),
-                                    shape = RoundedCornerShape(NuvioTheme.radii.xxs)
-                                )
-                        )
-                    }
-                }
-            }
-        } else {
-            LoadingIndicator()
-        }
+        LoadingIndicator()
     }
 }

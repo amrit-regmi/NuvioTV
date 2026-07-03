@@ -211,36 +211,6 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                     duration = playerDuration.coerceAtLeast(0L),
                     bufferedPosition = player.bufferedPosition.coerceAtLeast(displayPosition)
                 )
-                // Update torrent rebuffer progress from ExoPlayer's buffer state
-                if (isTorrentStream && _uiState.value.isBuffering && hasRenderedFirstFrame) {
-                    val bufferedAheadMs = (player.bufferedPosition - pos).coerceAtLeast(0)
-                    val bufferedSec = bufferedAheadMs / 1000f
-                    val statsHidden = _uiState.value.hideTorrentStats
-                    val message = if (statsHidden) {
-                        null
-                    } else {
-                        val speed = formatTorrentSpeed(context, _uiState.value.torrentDownloadSpeed)
-                        val peerInfo = context.getString(
-                            R.string.player_torrent_peer_info,
-                            _uiState.value.torrentSeeds,
-                            _uiState.value.torrentPeers
-                        )
-                        val bufLabel = String.format("%.0fs", bufferedSec)
-                        context.getString(
-                            R.string.player_torrent_buffered_status,
-                            bufLabel,
-                            peerInfo,
-                            speed
-                        )
-                    }
-                    val progress = (bufferedSec / 10f).coerceIn(0f, 1f)
-                    _uiState.update {
-                        it.copy(
-                            torrentBufferingMessage = message,
-                            torrentBufferingProgress = progress
-                        )
-                    }
-                }
                 updateActiveSkipInterval(pos)
                 evaluatePostPlayOverlayVisibility(
                     positionMs = pos,
@@ -976,36 +946,11 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     showSubtitleDelayOverlay = false
                 )
             }
-            if (isTorrentStream && currentInfoHash != null) {
-                releasePlayer()
-                stopTorrentStream()
-                launchTorrentSourceStream(
-                    stream = com.nuvio.tv.domain.model.Stream(
-                        name = _uiState.value.currentStreamName,
-                        title = null,
-                        description = null,
-                        url = null,
-                        ytId = null,
-                        infoHash = currentInfoHash,
-                        fileIdx = currentFileIdx,
-                        externalUrl = null,
-                        behaviorHints = null,
-                        addonName = currentAddonName ?: "",
-                        addonLogo = currentAddonLogo
-                    ),
-                    infoHash = currentInfoHash!!,
-                    loadSavedProgress = true
-                )
-            } else {
-                releasePlayer()
-                initializePlayer(currentStreamUrl, currentHeaders)
-            }
+            releasePlayer()
+            initializePlayer(currentStreamUrl, currentHeaders)
         }
         PlayerEvent.OnParentalGuideHide -> {
             _uiState.update { it.copy(showParentalGuide = false) }
-        }
-        PlayerEvent.OnToggleTorrentStats -> {
-            _uiState.update { it.copy(showTorrentStats = !it.showTorrentStats) }
         }
         is PlayerEvent.OnShowDisplayModeInfo -> {
             _uiState.update {
@@ -1189,10 +1134,3 @@ internal fun PlayerRuntimeController.buildStreamInfoData(): StreamInfoData {
     )
 }
 
-private fun formatTorrentSpeed(context: android.content.Context, bytesPerSec: Long): String {
-    return when {
-        bytesPerSec >= 1_048_576 -> context.getString(R.string.unit_speed_mb_s, String.format("%.1f", bytesPerSec / 1_048_576.0))
-        bytesPerSec >= 1_024 -> context.getString(R.string.unit_speed_kb_s, String.format("%.0f", bytesPerSec / 1_024.0))
-        else -> context.getString(R.string.unit_speed_b_s, bytesPerSec)
-    }
-}

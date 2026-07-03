@@ -576,13 +576,11 @@ fun NuvioNavHost(
                     }
                 },
                 onStreamSelected = { playbackInfo ->
+                    // No local torrent engine: only streams with a direct HTTP URL are
+                    // playable. infoHash/fileIdx are never forwarded to the player.
                     val streamUrl = playbackInfo.url
-                        ?: if (playbackInfo.isTorrent) "torrent://${playbackInfo.infoHash}" else null
-                    // When both url and infoHash are present (debrid cached torrent),
-                    // prefer the HTTP url and don't pass infoHash — avoids starting
-                    // TorrServer for a stream that's already available via HTTP.
-                    val effectiveInfoHash = if (playbackInfo.url != null) null else playbackInfo.infoHash
-                    val effectiveFileIdx = if (playbackInfo.url != null) null else playbackInfo.fileIdx
+                    val effectiveInfoHash: String? = null
+                    val effectiveFileIdx: Int? = null
                     streamUrl?.let { url ->
                         navController.navigate(
                             Screen.Player.createRoute(
@@ -621,10 +619,10 @@ fun NuvioNavHost(
                     }
                 },
                 onAutoPlayResolved = { playbackInfo ->
+                    // No local torrent engine: only direct HTTP URLs are playable.
                     val autoPlayUrl = playbackInfo.url
-                        ?: if (playbackInfo.isTorrent) "torrent://${playbackInfo.infoHash}" else null
-                    val effectiveInfoHash = if (playbackInfo.url != null) null else playbackInfo.infoHash
-                    val effectiveFileIdx = if (playbackInfo.url != null) null else playbackInfo.fileIdx
+                    val effectiveInfoHash: String? = null
+                    val effectiveFileIdx: Int? = null
                     autoPlayUrl?.let { url ->
                         navController.navigate(
                             Screen.Player.createRoute(

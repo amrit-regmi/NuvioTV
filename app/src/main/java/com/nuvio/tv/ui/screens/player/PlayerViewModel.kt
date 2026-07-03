@@ -11,8 +11,6 @@ import com.nuvio.tv.core.player.PlayerPreWarmer
 import com.nuvio.tv.core.stream.StreamWarmer
 import com.nuvio.tv.core.subtitle.SubtitleWarmer
 import com.nuvio.tv.core.plugin.PluginManager
-import com.nuvio.tv.core.torrent.TorrentService
-import com.nuvio.tv.core.torrent.TorrentSettings
 import com.nuvio.tv.data.local.AudioDelayRouteDataStore
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.DeviceLocalPlayerPreferences
@@ -53,8 +51,6 @@ class PlayerViewModel @Inject constructor(
     private val watchedItemsPreferences: com.nuvio.tv.data.local.WatchedItemsPreferences,
     private val trackPreferenceDataStore: com.nuvio.tv.data.local.TrackPreferenceDataStore,
     private val audioDelayRouteDataStore: AudioDelayRouteDataStore,
-    private val torrentService: TorrentService,
-    private val torrentSettings: TorrentSettings,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
@@ -95,8 +91,6 @@ class PlayerViewModel @Inject constructor(
         watchedItemsPreferences = watchedItemsPreferences,
         trackPreferenceDataStore = trackPreferenceDataStore,
         audioDelayRouteDataStore = audioDelayRouteDataStore,
-        torrentService = torrentService,
-        torrentSettings = torrentSettings,
         tmdbService = tmdbService,
         tmdbMetadataService = tmdbMetadataService,
         tmdbSettingsDataStore = tmdbSettingsDataStore,

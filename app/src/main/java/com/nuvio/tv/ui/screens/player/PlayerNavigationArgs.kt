@@ -1,7 +1,6 @@
 package com.nuvio.tv.ui.screens.player
 
 import androidx.lifecycle.SavedStateHandle
-import org.json.JSONArray
 import java.net.URLDecoder
 
 internal data class PlayerNavigationArgs(
@@ -36,20 +35,6 @@ internal data class PlayerNavigationArgs(
     val rememberedAudioLanguage: String?,
     val rememberedAudioName: String?
 ) {
-    val torrentTrackers: List<String>
-        get() {
-            val json = sourcesJson ?: return emptyList()
-            return try {
-                val arr = JSONArray(json)
-                (0 until arr.length())
-                    .mapNotNull { arr.optString(it) }
-                    .filter { it.startsWith("tracker:") }
-                    .map { it.removePrefix("tracker:") }
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
-
     companion object {
         fun from(savedStateHandle: SavedStateHandle): PlayerNavigationArgs {
             fun decodedOrNull(key: String): String? {
