@@ -452,17 +452,9 @@ class PlayerSettingsDataStore @Inject constructor(
     private fun store(profileId: Int = profileManager.activeProfileId.value) =
         factory.get(profileId, FEATURE)
 
-    /**
-     * Type-tolerant read. A settings-sync import (ProfileSettingsSyncService) shares the
-     * same "player_settings" DataStore and can write a value under the wrong type (e.g. an
-     * int-typed subtitle/stream key encoded as a String in the remote blob). A typed read
-     * via `prefs[intKey]` then throws ClassCastException inside the read-flow .map { } and
-     * crashes the app. Reading via .safe() swallows that mismatch so the existing
-     * `?: default` fallback kicks in; correctly-typed values behave identically.
-     */
-    private inline fun <reified T> androidx.datastore.preferences.core.Preferences.safe(
-        key: androidx.datastore.preferences.core.Preferences.Key<T>
-    ): T? = this.asMap()[key] as? T
+    // Type-tolerant reads via the shared Preferences.safe() extension
+    // (PreferencesSafeRead.kt in this package) — see its KDoc for the
+    // remote-blob wrong-type crash it prevents.
 
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -594,10 +586,10 @@ class PlayerSettingsDataStore @Inject constructor(
 
     private suspend fun migrateProfile(profileId: Int) {
         factory.get(profileId, FEATURE).edit { prefs ->
-                val loadControlMigrated = prefs[migrationLoadControlDefaultsAlignedDoneKey] ?: false
+                val loadControlMigrated = prefs.safe(migrationLoadControlDefaultsAlignedDoneKey) ?: false
                 if (!loadControlMigrated) {
-                    val currentMin = prefs[minBufferMsKey]
-                    val currentMax = prefs[maxBufferMsKey]
+                    val currentMin = prefs.safe(minBufferMsKey)
+                    val currentMax = prefs.safe(maxBufferMsKey)
                     val legacyDefaultsDetected = (currentMin == null && currentMax == null) || (currentMin == 15_000 && currentMax == 25_000)
                     if (legacyDefaultsDetected) {
                         prefs[minBufferMsKey] = BufferSettings.DEFAULT_MIN_BUFFER_MS
@@ -606,13 +598,13 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[migrationLoadControlDefaultsAlignedDoneKey] = true
                 }
 
-                val loadControlRetuned = prefs[migrationLoadControlDefaultsRetunedDoneKey] ?: false
+                val loadControlRetuned = prefs.safe(migrationLoadControlDefaultsRetunedDoneKey) ?: false
                 if (!loadControlRetuned) {
-                    val currentMin = prefs[minBufferMsKey]
-                    val currentMax = prefs[maxBufferMsKey]
-                    val currentPlayback = prefs[bufferForPlaybackMsKey]
-                    val currentPlaybackAfterRebuffer = prefs[bufferForPlaybackAfterRebufferMsKey]
-                    val currentTargetBuffer = prefs[targetBufferSizeMbKey]
+                    val currentMin = prefs.safe(minBufferMsKey)
+                    val currentMax = prefs.safe(maxBufferMsKey)
+                    val currentPlayback = prefs.safe(bufferForPlaybackMsKey)
+                    val currentPlaybackAfterRebuffer = prefs.safe(bufferForPlaybackAfterRebufferMsKey)
+                    val currentTargetBuffer = prefs.safe(targetBufferSizeMbKey)
 
                     val previousDefaultsDetected = currentMin == 50_000 && currentMax == 50_000 && currentPlayback == 2_500 && currentPlaybackAfterRebuffer == 5_000 && currentTargetBuffer == 0
                     val olderDefaultsDetected = currentMin == 15_000 && currentMax == 25_000
@@ -627,15 +619,15 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[migrationLoadControlDefaultsRetunedDoneKey] = true
                 }
 
-                val minBufferRetuned = prefs[migrationLoadControlMinBufferRetunedDoneKey] ?: false
+                val minBufferRetuned = prefs.safe(migrationLoadControlMinBufferRetunedDoneKey) ?: false
                 if (!minBufferRetuned) {
-                    val currentMin = prefs[minBufferMsKey]
-                    val currentMax = prefs[maxBufferMsKey]
-                    val currentPlayback = prefs[bufferForPlaybackMsKey]
-                    val currentPlaybackAfterRebuffer = prefs[bufferForPlaybackAfterRebufferMsKey]
-                    val currentTargetBuffer = prefs[targetBufferSizeMbKey]
-                    val currentBackBuffer = prefs[backBufferDurationMsKey]
-                    val currentRetainBackBuffer = prefs[retainBackBufferFromKeyframeKey]
+                    val currentMin = prefs.safe(minBufferMsKey)
+                    val currentMax = prefs.safe(maxBufferMsKey)
+                    val currentPlayback = prefs.safe(bufferForPlaybackMsKey)
+                    val currentPlaybackAfterRebuffer = prefs.safe(bufferForPlaybackAfterRebufferMsKey)
+                    val currentTargetBuffer = prefs.safe(targetBufferSizeMbKey)
+                    val currentBackBuffer = prefs.safe(backBufferDurationMsKey)
+                    val currentRetainBackBuffer = prefs.safe(retainBackBufferFromKeyframeKey)
 
                     val previousRetunedDefaultsDetected = currentMin == 50_000 && currentMax == 50_000 && currentPlayback == BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_MS && currentPlaybackAfterRebuffer == BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS && currentTargetBuffer == BufferSettings.DEFAULT_TARGET_BUFFER_SIZE_MB && (currentBackBuffer == null || currentBackBuffer == BufferSettings.DEFAULT_BACK_BUFFER_DURATION_MS) && (currentRetainBackBuffer == null || !currentRetainBackBuffer)
 
@@ -645,18 +637,18 @@ class PlayerSettingsDataStore @Inject constructor(
 
                 // VOD cache split: previously the disk cache was implicitly on with the
                 // parallel-network section. Now it has its own toggle, defaulting to on.
-                val vodCacheSplitMigrated = prefs[migrationVodCacheSplitDoneKey] ?: false
+                val vodCacheSplitMigrated = prefs.safe(migrationVodCacheSplitDoneKey) ?: false
                 if (!vodCacheSplitMigrated) {
-                    if (prefs[vodCacheEnabledKey] == null) {
+                    if (prefs.safe(vodCacheEnabledKey) == null) {
                         prefs[vodCacheEnabledKey] = PlayerSettings.DEFAULT_VOD_CACHE_ENABLED
                     }
                     prefs[migrationVodCacheSplitDoneKey] = true
                 }
 
                 // Back buffer bump from prior 10s default.
-                val backBufferBumped = prefs[migrationBackBufferDurationBumpedDoneKey] ?: false
+                val backBufferBumped = prefs.safe(migrationBackBufferDurationBumpedDoneKey) ?: false
                 if (!backBufferBumped) {
-                    val currentBackBuffer = prefs[backBufferDurationMsKey]
+                    val currentBackBuffer = prefs.safe(backBufferDurationMsKey)
                     if (currentBackBuffer == null || currentBackBuffer == 10_000) {
                         prefs[backBufferDurationMsKey] = BufferSettings.DEFAULT_BACK_BUFFER_DURATION_MS
                     }
@@ -664,9 +656,9 @@ class PlayerSettingsDataStore @Inject constructor(
                 }
 
                 // Max buffer bump from prior 30s default.
-                val maxBufferBumped = prefs[migrationMaxBufferBumpedDoneKey] ?: false
+                val maxBufferBumped = prefs.safe(migrationMaxBufferBumpedDoneKey) ?: false
                 if (!maxBufferBumped) {
-                    val currentMax = prefs[maxBufferMsKey]
+                    val currentMax = prefs.safe(maxBufferMsKey)
                     if (currentMax == null || currentMax == 30_000) {
                         prefs[maxBufferMsKey] = BufferSettings.DEFAULT_MAX_BUFFER_MS
                     }
@@ -674,9 +666,9 @@ class PlayerSettingsDataStore @Inject constructor(
                 }
 
                 // Target buffer bump from prior 100MB default.
-                val targetBufferBumped = prefs[migrationTargetBufferSizeBumpedDoneKey] ?: false
+                val targetBufferBumped = prefs.safe(migrationTargetBufferSizeBumpedDoneKey) ?: false
                 if (!targetBufferBumped) {
-                    val currentTarget = prefs[targetBufferSizeMbKey]
+                    val currentTarget = prefs.safe(targetBufferSizeMbKey)
                     if (currentTarget == null || currentTarget == 100) {
                         prefs[targetBufferSizeMbKey] = BufferSettings.DEFAULT_TARGET_BUFFER_SIZE_MB
                     }
@@ -684,9 +676,9 @@ class PlayerSettingsDataStore @Inject constructor(
                 }
 
                 // After-rebuffer threshold lowered from prior 5s default for faster resume.
-                val afterRebufferLowered = prefs[migrationAfterRebufferLoweredDoneKey] ?: false
+                val afterRebufferLowered = prefs.safe(migrationAfterRebufferLoweredDoneKey) ?: false
                 if (!afterRebufferLowered) {
-                    val currentAfter = prefs[bufferForPlaybackAfterRebufferMsKey]
+                    val currentAfter = prefs.safe(bufferForPlaybackAfterRebufferMsKey)
                     if (currentAfter == null || currentAfter == 5_000) {
                         prefs[bufferForPlaybackAfterRebufferMsKey] = BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
                     }
@@ -694,9 +686,9 @@ class PlayerSettingsDataStore @Inject constructor(
                 }
 
                 // Back buffer reduced from interim 30s due to heap pressure on high-bitrate content.
-                val backBufferReduced = prefs[migrationBackBufferDurationReducedDoneKey] ?: false
+                val backBufferReduced = prefs.safe(migrationBackBufferDurationReducedDoneKey) ?: false
                 if (!backBufferReduced) {
-                    val currentBack = prefs[backBufferDurationMsKey]
+                    val currentBack = prefs.safe(backBufferDurationMsKey)
                     if (currentBack == null || currentBack == 30_000) {
                         prefs[backBufferDurationMsKey] = BufferSettings.DEFAULT_BACK_BUFFER_DURATION_MS
                     }
@@ -704,29 +696,29 @@ class PlayerSettingsDataStore @Inject constructor(
                 }
 
                 // Corrects users from a 125 interim build back to the 150 default.
-                val targetBufferCorrected = prefs[migrationTargetBufferSizeReducedDoneKey] ?: false
+                val targetBufferCorrected = prefs.safe(migrationTargetBufferSizeReducedDoneKey) ?: false
                 if (!targetBufferCorrected) {
-                    val currentTarget = prefs[targetBufferSizeMbKey]
+                    val currentTarget = prefs.safe(targetBufferSizeMbKey)
                     if (currentTarget == 125) {
                         prefs[targetBufferSizeMbKey] = BufferSettings.DEFAULT_TARGET_BUFFER_SIZE_MB
                     }
                     prefs[migrationTargetBufferSizeReducedDoneKey] = true
                 }
 
-                val min = prefs[minBufferMsKey]
-                val max = prefs[maxBufferMsKey]
+                val min = prefs.safe(minBufferMsKey)
+                val max = prefs.safe(maxBufferMsKey)
                 if (min != null && max != null && max < min) prefs[maxBufferMsKey] = min
 
-                prefs[vodCacheSizeMbKey]?.let { current ->
+                prefs.safe(vodCacheSizeMbKey)?.let { current ->
                     val normalized = current.coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB)
                     if (normalized != current) prefs[vodCacheSizeMbKey] = normalized
                 }
-                prefs[vodCacheSizeModeKey]?.let { raw ->
+                prefs.safe(vodCacheSizeModeKey)?.let { raw ->
                     val normalized = runCatching { VodCacheSizeMode.valueOf(raw) }.getOrDefault(PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE).name
                     if (normalized != raw) prefs[vodCacheSizeModeKey] = normalized
                 }
 
-                val preferredAudioLanguage = prefs[preferredAudioLanguageKey]
+                val preferredAudioLanguage = prefs.safe(preferredAudioLanguageKey)
                 if (preferredAudioLanguage != null) {
                     val normalizedPreferredAudioLanguage = normalizeSelectableLanguageCode(preferredAudioLanguage)
                     if (normalizedPreferredAudioLanguage != preferredAudioLanguage) {
@@ -734,7 +726,7 @@ class PlayerSettingsDataStore @Inject constructor(
                     }
                 }
 
-                val secondaryPreferredAudioLanguage = prefs[secondaryPreferredAudioLanguageKey]
+                val secondaryPreferredAudioLanguage = prefs.safe(secondaryPreferredAudioLanguageKey)
                 if (secondaryPreferredAudioLanguage != null) {
                     val normalizedSecondaryPreferredAudioLanguage = normalizeSecondaryAudioLanguageCode(secondaryPreferredAudioLanguage)
                     if (normalizedSecondaryPreferredAudioLanguage != secondaryPreferredAudioLanguage) {
@@ -743,7 +735,7 @@ class PlayerSettingsDataStore @Inject constructor(
                     }
                 }
 
-            val preferredSubtitleLanguage = prefs[subtitlePreferredLanguageKey]
+            val preferredSubtitleLanguage = prefs.safe(subtitlePreferredLanguageKey)
             if (preferredSubtitleLanguage != null) {
                 val normalizedPreferredSubtitleLanguage =
                     normalizeSelectableLanguageCode(preferredSubtitleLanguage)
@@ -752,7 +744,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 }
             }
 
-            val secondarySubtitleLanguage = prefs[subtitleSecondaryLanguageKey]
+            val secondarySubtitleLanguage = prefs.safe(subtitleSecondaryLanguageKey)
             if (secondarySubtitleLanguage != null) {
                 val normalizedSecondarySubtitleLanguage =
                     normalizeSelectableLanguageCode(secondarySubtitleLanguage)
@@ -1121,7 +1113,7 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun setAutoSkipSegmentTypeEnabled(segmentType: AutoSkipSegmentType, enabled: Boolean) {
         store().edit { prefs ->
-            val current = prefs[autoSkipSegmentTypesKey]
+            val current = prefs.safe(autoSkipSegmentTypesKey)
                 ?.mapNotNull(AutoSkipSegmentType::fromStoredValue)
                 ?.toSet()
                 ?: emptySet()
@@ -1404,7 +1396,7 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun setSubtitleShowOnlyPreferredLanguages(enabled: Boolean) {
         store().edit { prefs ->
-            val currentStartupMode = parseAddonSubtitleStartupMode(prefs[addonSubtitleStartupModeKey])
+            val currentStartupMode = parseAddonSubtitleStartupMode(prefs.safe(addonSubtitleStartupModeKey))
             prefs[subtitleShowOnlyPreferredLanguagesKey] = enabled
             if (enabled) {
                 if (currentStartupMode == AddonSubtitleStartupMode.ALL_SUBTITLES) {
@@ -1414,7 +1406,7 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[addonSubtitleStartupModeAutoPreferredKey] = false
                 }
             } else {
-                val wasAutoPreferred = prefs[addonSubtitleStartupModeAutoPreferredKey] ?: false
+                val wasAutoPreferred = prefs.safe(addonSubtitleStartupModeAutoPreferredKey) ?: false
                 if (wasAutoPreferred && currentStartupMode == AddonSubtitleStartupMode.PREFERRED_ONLY) {
                     prefs[addonSubtitleStartupModeKey] = AddonSubtitleStartupMode.ALL_SUBTITLES.name
                 }
@@ -1429,13 +1421,13 @@ class PlayerSettingsDataStore @Inject constructor(
         store().edit { prefs ->
             val newMin = ms.coerceIn(5_000, 120_000)
             prefs[minBufferMsKey] = newMin
-            val currentMax = prefs[maxBufferMsKey] ?: BufferSettings.DEFAULT_MAX_BUFFER_MS
+            val currentMax = prefs.safe(maxBufferMsKey) ?: BufferSettings.DEFAULT_MAX_BUFFER_MS
             if (currentMax < newMin) prefs[maxBufferMsKey] = newMin
         }
     }
     suspend fun setBufferMaxBufferMs(ms: Int) {
         store().edit { prefs ->
-            val currentMin = prefs[minBufferMsKey] ?: BufferSettings.DEFAULT_MIN_BUFFER_MS
+            val currentMin = prefs.safe(minBufferMsKey) ?: BufferSettings.DEFAULT_MIN_BUFFER_MS
             prefs[maxBufferMsKey] = ms.coerceIn(currentMin, 120_000)
         }
     }

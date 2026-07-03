@@ -62,10 +62,10 @@ class TrackPreferenceDataStore @Inject constructor(
 
     suspend fun load(contentId: String): PersistedTrackPreference? {
         val prefs = store().data.first()
-        val subType = prefs[key(SUB_TYPE, contentId)]
-        val audioLang = prefs[key(AUDIO_LANG, contentId)]
-        val audioName = prefs[key(AUDIO_NAME, contentId)]
-        val audioTrackId = prefs[key(AUDIO_TRACK_ID, contentId)]
+        val subType = prefs.safe(key(SUB_TYPE, contentId))
+        val audioLang = prefs.safe(key(AUDIO_LANG, contentId))
+        val audioName = prefs.safe(key(AUDIO_NAME, contentId))
+        val audioTrackId = prefs.safe(key(AUDIO_TRACK_ID, contentId))
         if (
             subType == null &&
             audioLang == null &&
@@ -74,13 +74,13 @@ class TrackPreferenceDataStore @Inject constructor(
         ) return null
         return PersistedTrackPreference(
             subtitleType = subType,
-            subtitleLanguage = prefs[key(SUB_LANG, contentId)],
-            subtitleName = prefs[key(SUB_NAME, contentId)],
-            subtitleTrackId = prefs[key(SUB_TRACK_ID, contentId)],
-            subtitleIsForced = prefs[key(SUB_IS_FORCED, contentId)]?.toBooleanStrictOrNull(),
-            addonSubtitleId = prefs[key(SUB_ADDON_ID, contentId)],
-            addonSubtitleUrl = prefs[key(SUB_ADDON_URL, contentId)],
-            addonSubtitleAddonName = prefs[key(SUB_ADDON_NAME, contentId)],
+            subtitleLanguage = prefs.safe(key(SUB_LANG, contentId)),
+            subtitleName = prefs.safe(key(SUB_NAME, contentId)),
+            subtitleTrackId = prefs.safe(key(SUB_TRACK_ID, contentId)),
+            subtitleIsForced = prefs.safe(key(SUB_IS_FORCED, contentId))?.toBooleanStrictOrNull(),
+            addonSubtitleId = prefs.safe(key(SUB_ADDON_ID, contentId)),
+            addonSubtitleUrl = prefs.safe(key(SUB_ADDON_URL, contentId)),
+            addonSubtitleAddonName = prefs.safe(key(SUB_ADDON_NAME, contentId)),
             audioLanguage = audioLang,
             audioName = audioName,
             audioTrackId = audioTrackId
@@ -102,7 +102,7 @@ class TrackPreferenceDataStore @Inject constructor(
     }
 
     suspend fun loadSubtitleDelayMs(videoId: String): Int? {
-        return store().data.first()[intKey(SUB_DELAY_MS, videoId)]
+        return store().data.first().safe(intKey(SUB_DELAY_MS, videoId))
     }
 }
 

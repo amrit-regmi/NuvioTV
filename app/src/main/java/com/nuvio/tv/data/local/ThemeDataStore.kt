@@ -31,7 +31,7 @@ class ThemeDataStore @Inject constructor(
 
     val selectedTheme: Flow<AppTheme> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
-            val themeName = prefs[themeKey] ?: AppTheme.WHITE.name
+            val themeName = prefs.safe(themeKey) ?: AppTheme.WHITE.name
             try {
                 AppTheme.valueOf(themeName)
             } catch (e: IllegalArgumentException) {
@@ -42,7 +42,7 @@ class ThemeDataStore @Inject constructor(
 
     val selectedFont: Flow<AppFont> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
-            val fontName = prefs[fontKey] ?: AppFont.INTER.name
+            val fontName = prefs.safe(fontKey) ?: AppFont.INTER.name
             try {
                 AppFont.valueOf(fontName)
             } catch (e: IllegalArgumentException) {
@@ -53,13 +53,13 @@ class ThemeDataStore @Inject constructor(
 
     val amoledMode: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
-            prefs[amoledModeKey] ?: false
+            prefs.safe(amoledModeKey) ?: false
         }
     }
 
     val amoledSurfacesMode: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
-            prefs[amoledSurfacesModeKey] ?: false
+            prefs.safe(amoledSurfacesModeKey) ?: false
         }
     }
 

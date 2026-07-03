@@ -62,56 +62,56 @@ class DebridSettingsDataStore @Inject constructor(
     val settings: Flow<DebridSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
             val storedStreamSortMode = enumValueOrDefault(
-                prefs[streamSortModeKey],
+                prefs.safe(streamSortModeKey),
                 DebridStreamSortMode.DEFAULT
             )
-            val streamPreferences = parseStreamPreferences(prefs[streamPreferencesKey])
+            val streamPreferences = parseStreamPreferences(prefs.safe(streamPreferencesKey))
                 ?: legacyStreamPreferences(
-                    maxResults = prefs[streamMaxResultsKey] ?: 0,
+                    maxResults = prefs.safe(streamMaxResultsKey) ?: 0,
                     sortMode = storedStreamSortMode,
-                    minimumQuality = enumValueOrDefault(prefs[streamMinimumQualityKey], DebridStreamMinimumQuality.ANY),
-                    dolbyVisionFilter = enumValueOrDefault(prefs[streamDolbyVisionFilterKey], DebridStreamFeatureFilter.ANY),
-                    hdrFilter = enumValueOrDefault(prefs[streamHdrFilterKey], DebridStreamFeatureFilter.ANY),
-                    codecFilter = enumValueOrDefault(prefs[streamCodecFilterKey], DebridStreamCodecFilter.ANY)
+                    minimumQuality = enumValueOrDefault(prefs.safe(streamMinimumQualityKey), DebridStreamMinimumQuality.ANY),
+                    dolbyVisionFilter = enumValueOrDefault(prefs.safe(streamDolbyVisionFilterKey), DebridStreamFeatureFilter.ANY),
+                    hdrFilter = enumValueOrDefault(prefs.safe(streamHdrFilterKey), DebridStreamFeatureFilter.ANY),
+                    codecFilter = enumValueOrDefault(prefs.safe(streamCodecFilterKey), DebridStreamCodecFilter.ANY)
                 )
             val streamSortMode = legacyModeForSortCriteria(streamPreferences.sortCriteria)
             DebridSettings(
-                enabled = prefs[enabledKey] ?: false,
-                cloudLibraryEnabled = prefs[cloudLibraryEnabledKey] ?: true,
-                torboxApiKey = prefs[torboxApiKeyKey] ?: "",
-                premiumizeApiKey = prefs[premiumizeApiKeyKey] ?: "",
-                realDebridApiKey = prefs[realDebridApiKeyKey] ?: "",
+                enabled = prefs.safe(enabledKey) ?: false,
+                cloudLibraryEnabled = prefs.safe(cloudLibraryEnabledKey) ?: true,
+                torboxApiKey = prefs.safe(torboxApiKeyKey) ?: "",
+                premiumizeApiKey = prefs.safe(premiumizeApiKeyKey) ?: "",
+                realDebridApiKey = prefs.safe(realDebridApiKeyKey) ?: "",
                 preferredResolverProviderId = preferredResolverProviderId(
-                    stored = prefs[preferredResolverProviderIdKey],
-                    torboxApiKey = prefs[torboxApiKeyKey] ?: "",
-                    premiumizeApiKey = prefs[premiumizeApiKeyKey] ?: "",
-                    realDebridApiKey = prefs[realDebridApiKeyKey] ?: ""
+                    stored = prefs.safe(preferredResolverProviderIdKey),
+                    torboxApiKey = prefs.safe(torboxApiKeyKey) ?: "",
+                    premiumizeApiKey = prefs.safe(premiumizeApiKeyKey) ?: "",
+                    realDebridApiKey = prefs.safe(realDebridApiKeyKey) ?: ""
                 ),
                 instantPlaybackPreparationLimit = normalizeDebridInstantPlaybackPreparationLimit(
-                    prefs[instantPlaybackPreparationLimitKey] ?: 0
+                    prefs.safe(instantPlaybackPreparationLimitKey) ?: 0
                 ),
-                streamMaxResults = normalizeDebridStreamMaxResults(prefs[streamMaxResultsKey] ?: 0),
+                streamMaxResults = normalizeDebridStreamMaxResults(prefs.safe(streamMaxResultsKey) ?: 0),
                 streamSortMode = streamSortMode,
                 streamMinimumQuality = enumValueOrDefault(
-                    prefs[streamMinimumQualityKey],
+                    prefs.safe(streamMinimumQualityKey),
                     DebridStreamMinimumQuality.ANY
                 ),
                 streamDolbyVisionFilter = enumValueOrDefault(
-                    prefs[streamDolbyVisionFilterKey],
+                    prefs.safe(streamDolbyVisionFilterKey),
                     DebridStreamFeatureFilter.ANY
                 ),
                 streamHdrFilter = enumValueOrDefault(
-                    prefs[streamHdrFilterKey],
+                    prefs.safe(streamHdrFilterKey),
                     DebridStreamFeatureFilter.ANY
                 ),
                 streamCodecFilter = enumValueOrDefault(
-                    prefs[streamCodecFilterKey],
+                    prefs.safe(streamCodecFilterKey),
                     DebridStreamCodecFilter.ANY
                 ),
                 streamPreferences = streamPreferences,
-                streamNameTemplate = prefs[streamNameTemplateKey]
+                streamNameTemplate = prefs.safe(streamNameTemplateKey)
                     ?: DebridStreamFormatterDefaults.NAME_TEMPLATE,
-                streamDescriptionTemplate = prefs[streamDescriptionTemplateKey]
+                streamDescriptionTemplate = prefs.safe(streamDescriptionTemplateKey)
                     ?: DebridStreamFormatterDefaults.DESCRIPTION_TEMPLATE
             )
         }
@@ -139,10 +139,10 @@ class DebridSettingsDataStore @Inject constructor(
                 prefs[enabledKey] = false
             }
             val preferred = preferredResolverProviderId(
-                stored = prefs[preferredResolverProviderIdKey],
-                torboxApiKey = prefs[torboxApiKeyKey] ?: "",
-                premiumizeApiKey = prefs[premiumizeApiKeyKey] ?: "",
-                realDebridApiKey = prefs[realDebridApiKeyKey] ?: ""
+                stored = prefs.safe(preferredResolverProviderIdKey),
+                torboxApiKey = prefs.safe(torboxApiKeyKey) ?: "",
+                premiumizeApiKey = prefs.safe(premiumizeApiKeyKey) ?: "",
+                realDebridApiKey = prefs.safe(realDebridApiKeyKey) ?: ""
             )
             prefs[preferredResolverProviderIdKey] = preferred
         }
@@ -170,7 +170,7 @@ class DebridSettingsDataStore @Inject constructor(
         store().edit {
             val normalized = normalizeDebridStreamMaxResults(maxResults)
             it[streamMaxResultsKey] = normalized
-            it[streamPreferencesKey] = gson.toJson(currentStreamPreferences(it[streamPreferencesKey]).copy(maxResults = normalized))
+            it[streamPreferencesKey] = gson.toJson(currentStreamPreferences(it.safe(streamPreferencesKey)).copy(maxResults = normalized))
         }
     }
 
@@ -178,7 +178,7 @@ class DebridSettingsDataStore @Inject constructor(
         store().edit {
             it[streamSortModeKey] = mode.name
             it[streamPreferencesKey] = gson.toJson(
-                currentStreamPreferences(it[streamPreferencesKey]).copy(sortCriteria = sortCriteriaForLegacyMode(mode))
+                currentStreamPreferences(it.safe(streamPreferencesKey)).copy(sortCriteria = sortCriteriaForLegacyMode(mode))
             )
         }
     }
@@ -187,7 +187,7 @@ class DebridSettingsDataStore @Inject constructor(
         store().edit {
             it[streamMinimumQualityKey] = quality.name
             it[streamPreferencesKey] = gson.toJson(
-                currentStreamPreferences(it[streamPreferencesKey]).copy(requiredResolutions = resolutionsForMinimumQuality(quality))
+                currentStreamPreferences(it.safe(streamPreferencesKey)).copy(requiredResolutions = resolutionsForMinimumQuality(quality))
             )
         }
     }
@@ -195,7 +195,7 @@ class DebridSettingsDataStore @Inject constructor(
     suspend fun setStreamDolbyVisionFilter(filter: DebridStreamFeatureFilter) {
         store().edit {
             it[streamDolbyVisionFilterKey] = filter.name
-            val current = currentStreamPreferences(it[streamPreferencesKey])
+            val current = currentStreamPreferences(it.safe(streamPreferencesKey))
             it[streamPreferencesKey] = gson.toJson(
                 when (filter) {
                     DebridStreamFeatureFilter.ANY -> current.copy(
@@ -219,7 +219,7 @@ class DebridSettingsDataStore @Inject constructor(
         store().edit {
             it[streamHdrFilterKey] = filter.name
             val hdrTags = listOf(DebridStreamVisualTag.HDR, DebridStreamVisualTag.HDR10, DebridStreamVisualTag.HDR10_PLUS, DebridStreamVisualTag.HLG, DebridStreamVisualTag.HDR_ONLY, DebridStreamVisualTag.HDR_DV)
-            val current = currentStreamPreferences(it[streamPreferencesKey])
+            val current = currentStreamPreferences(it.safe(streamPreferencesKey))
             it[streamPreferencesKey] = gson.toJson(
                 when (filter) {
                     DebridStreamFeatureFilter.ANY -> current.copy(
@@ -243,7 +243,7 @@ class DebridSettingsDataStore @Inject constructor(
         store().edit {
             it[streamCodecFilterKey] = filter.name
             it[streamPreferencesKey] = gson.toJson(
-                currentStreamPreferences(it[streamPreferencesKey]).copy(
+                currentStreamPreferences(it.safe(streamPreferencesKey)).copy(
                     requiredEncodes = when (filter) {
                         DebridStreamCodecFilter.ANY -> emptyList()
                         DebridStreamCodecFilter.H264 -> listOf(DebridStreamEncode.AVC)
@@ -295,7 +295,7 @@ class DebridSettingsDataStore @Inject constructor(
     ): Boolean {
         return DebridProviders.visible().any { provider ->
             val key = providerKey(provider.id) ?: return@any false
-            provider.id != updatedProviderId && !prefs[key].isNullOrBlank()
+            provider.id != updatedProviderId && !prefs.safe(key).isNullOrBlank()
         }
     }
 
