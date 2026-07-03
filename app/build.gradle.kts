@@ -347,6 +347,12 @@ android {
         }
     }
 
+    androidResources {
+        // English-only resources: drops the 30+ translated locale variants from
+        // the APK (the app UI is effectively English-only for this fork).
+        localeFilters += listOf("en")
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -417,7 +423,6 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.profileinstaller)
-    implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation(composeBom)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
@@ -467,8 +472,6 @@ dependencies {
     // stock Maven.
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.exoplayer.dash)
-    implementation(libs.media3.exoplayer.smoothstreaming)
-    implementation(libs.media3.exoplayer.rtsp)
     implementation(libs.media3.datasource)
     implementation(libs.media3.datasource.okhttp)
     implementation(libs.media3.decoder)
@@ -522,8 +525,9 @@ dependencies {
         exclude(group = "info.debatty", module = "java-string-similarity")
     }
 
-    // Markdown rendering
-    implementation(libs.markdown.renderer.m3)
+    // Markdown rendering — used only by the full-flavor in-app updater UI
+    // (UpdatePromptDialog), so keep it out of the playstore flavor.
+    add("fullImplementation", libs.markdown.renderer.m3)
 
     add("fullImplementation", libs.crypto.js)
     // QR code + local server for addon management
