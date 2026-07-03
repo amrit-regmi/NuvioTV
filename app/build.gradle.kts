@@ -126,8 +126,8 @@ android {
         applicationId = "com.nuvio.tv"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1036
-        versionName = "1.0.3"
+        versionCode = 1037
+        versionName = "1.0.4"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -485,6 +485,9 @@ dependencies {
     implementation(libs.media3.common)
     implementation(libs.media3.container)
     implementation(libs.media3.extractor)
+
+    // REQUIRED at runtime by the custom media3-ui prebuilt (PlayerView uses RecyclerView); local AARs carry no transitive deps — do not remove as "unused"
+    implementation("androidx.recyclerview:recyclerview:1.4.0")
 
     // Local AAR libraries from forked ExoPlayer (matching Just Player setup):
     // - lib-exoplayer-release.aar    — Custom forked ExoPlayer core (replaces media3-exoplayer)
