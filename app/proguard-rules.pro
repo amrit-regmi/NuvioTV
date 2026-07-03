@@ -96,6 +96,11 @@
 -keep class androidx.media3.decoder.** { *; }
 -keep class androidx.media3.exoplayer.** { *; }
 -keep class androidx.media3.ui.** { *; }
+# The prebuilt media3-ui AAR (lib-ui-release.aar) references RecyclerView by its
+# original name at runtime (PlayerView.<init> uses RecyclerView$Adapter). Our own
+# source never names it, so R8 would obfuscate/rename it and break the prebuilt
+# lookup → NoClassDefFoundError RecyclerView$Adapter. Keep original names.
+-keep class androidx.recyclerview.widget.** { *; }
 -keep class com.google.android.exoplayer2.** { *; }
 -keep interface com.google.android.exoplayer2.** { *; }
 -keep class com.google.android.exoplayer2.ext.** { *; }
