@@ -1,6 +1,7 @@
 package com.nuvio.tv.updater
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.BuildConfig
@@ -97,6 +98,21 @@ class UpdateViewModel @Inject constructor(
     fun downloadUpdate() {
         val update = _uiState.value.update ?: return
 
+        // SECURITY: never download an update APK from a non-https URL or a host
+        // outside GitHub (github.com / *.github.com / *.githubusercontent.com).
+        if (!UpdateAssetUrlValidator.isTrusted(update.assetUrl)) {
+            Log.e(TAG, "Rejected update download (non-https or untrusted host): ${update.assetUrl}")
+            _uiState.update {
+                it.copy(
+                    isDownloading = false,
+                    downloadProgress = null,
+                    downloadedApkPath = null,
+                    errorMessage = context.getString(R.string.update_error_download_failed)
+                )
+            }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isDownloading = true, downloadProgress = 0f, errorMessage = null) }
 
@@ -162,5 +178,9 @@ class UpdateViewModel @Inject constructor(
         ApkInstaller.buildUnknownSourcesSettingsIntent(context)?.let { intent ->
             context.startActivity(intent)
         }
+    }
+
+    private companion object {
+        const val TAG = "UpdateViewModel"
     }
 }
