@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SECURITY: expose only the specific cache subdirectories that are actually
+     shared via FileProvider, never the whole cache:
+     - updates/   — downloaded APKs (UpdateViewModel -> ApkInstaller)
+     - subtitles/ — cached subtitle files for external players (SubtitleFileCache) -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path
-        name="cache"
-        path="." />
-    <external-cache-path
-        name="external_cache"
-        path="." />
+        name="updates"
+        path="updates/" />
+    <cache-path
+        name="subtitles"
+        path="subtitles/" />
 </paths>
