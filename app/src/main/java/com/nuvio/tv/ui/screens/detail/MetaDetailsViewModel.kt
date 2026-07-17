@@ -19,6 +19,7 @@ import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.ListMembershipChanges
+import com.nuvio.tv.domain.model.MDBListRatingsResult
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaTrailer
 import com.nuvio.tv.domain.model.NextToWatch
@@ -1204,19 +1205,46 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private suspend fun loadMDBListRatings(meta: Meta) {
-        val ratingsResult = runCatching {
-            mdbListRepository.getRatingsForMeta(
-                meta = meta,
-                fallbackItemId = itemId,
-                fallbackItemType = itemType
-            )
-        }.getOrNull()
+        // The aggregated (multi-source) ratings row is fetched from OUR backend
+        // (/catalog-addon/ratings/{imdb}.json) which REQUIRES the Supabase bearer. This runs
+        // once per detail-open, in parallel with enrichment; on a cold open the token/session
+        // can still be settling (or a single Tor-miss / transient 5xx can drop the call), in
+        // which case getRatingsForMeta returns null and — with negative-caching disabled (#142)
+        // — the row would otherwise stay blank for the WHOLE time the user is on this screen,
+        // leaving only the meta.imdbRating badge. So retry a few times with short backoff, and
+        // NEVER overwrite an already-populated result with a later null.
+        val attempts = 4
+        val backoffMs = longArrayOf(400L, 900L, 1800L)
+        var lastResult: MDBListRatingsResult? = null
+        for (attempt in 0 until attempts) {
+            val ratingsResult = runCatching {
+                mdbListRepository.getRatingsForMeta(
+                    meta = meta,
+                    fallbackItemId = itemId,
+                    fallbackItemType = itemType
+                )
+            }.getOrNull()
 
-        _uiState.update { state ->
-            state.copy(
-                mdbListRatings = ratingsResult?.ratings,
-                showMdbListImdb = ratingsResult?.hasImdbRating == true
-            )
+            if (ratingsResult != null) {
+                lastResult = ratingsResult
+                _uiState.update { state ->
+                    state.copy(
+                        mdbListRatings = ratingsResult.ratings,
+                        showMdbListImdb = ratingsResult.hasImdbRating
+                    )
+                }
+                return
+            }
+
+            if (attempt < backoffMs.size) delay(backoffMs[attempt])
+        }
+
+        // Exhausted retries with no ratings — leave the (reset) empty state so we degrade to the
+        // meta imdb badge. Only clear if we never had a result to begin with.
+        if (lastResult == null) {
+            _uiState.update { state ->
+                state.copy(mdbListRatings = null, showMdbListImdb = false)
+            }
         }
     }
 

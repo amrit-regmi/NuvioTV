@@ -334,10 +334,16 @@ class CatalogOrderViewModel @Inject constructor(
             else -> listOf(entry.type.trim().lowercase())
         }
         return when (entry.kind.trim().lowercase()) {
-            "reco" -> types.mapNotNull { t ->
+            // A reco reason+type can emit MULTIPLE rows (e.g. 2× because_watched Movies). The
+            // reorder UI must surface EVERY one of them so it renders identically to the home
+            // (single source of truth). Match the reason_type on an EXACT segment boundary —
+            // key form is `reco_engine_{rawType}_{reason_type}_{index}` — so `also_liked` never
+            // prefix-collides with a sibling reason like `also_liked_by`.
+            "reco" -> types.flatMap { t ->
                 val rawType = if (t == "series") "series" else "movie"
-                recoKeySet.firstOrNull {
-                    it.startsWith("reco_engine_${rawType}_${entry.id}")
+                val prefix = "reco_engine_${rawType}_${entry.id}_"
+                recoKeySet.filter { key ->
+                    key.startsWith(prefix) && key.removePrefix(prefix).toIntOrNull() != null
                 }
             }
             "addon" -> {

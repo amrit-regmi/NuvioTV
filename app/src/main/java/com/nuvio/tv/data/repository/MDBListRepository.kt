@@ -1,12 +1,9 @@
 package com.nuvio.tv.data.repository
 
 import android.util.Log
-import com.nuvio.tv.core.tmdb.TmdbService
-import com.nuvio.tv.data.local.MDBListSettingsDataStore
 import com.nuvio.tv.data.remote.api.CatalogAddonApi
 import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.MDBListRatingsResult
-import com.nuvio.tv.domain.model.MDBListSettings
 import com.nuvio.tv.domain.model.Meta
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,14 +24,13 @@ import javax.inject.Singleton
  * Bearer token. The backend ratings table may be EMPTY (e.g. server-side MDBLIST_API_KEY
  * not yet set) → the app degrades gracefully (no extra ratings, never errors).
  *
- * The per-provider visibility toggles (settings) apply locally, and TmdbService
- * resolves a tmdb/meta id to an imdb id (the backend key).
+ * Ratings are ALWAYS on. The imdb id is resolved EXCLUSIVELY from the ids OUR backend
+ * already provides (meta.imdbId / meta.id / fallbackItemId) — NO external calls, no
+ * client-side TMDB conversion, no per-provider visibility filtering (all sources shown).
  */
 @Singleton
 class MDBListRepository @Inject constructor(
-    private val api: CatalogAddonApi,
-    private val settingsDataStore: MDBListSettingsDataStore,
-    private val tmdbService: TmdbService
+    private val api: CatalogAddonApi
 ) {
     private data class CacheEntry(
         val result: MDBListRatingsResult?,
@@ -48,11 +44,9 @@ class MDBListRepository @Inject constructor(
     private val inFlightMutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Lightweight helper for home screen enrichment - fetches only the IMDb rating. */
+    /** Lightweight helper for home screen enrichment - fetches only the IMDb rating.
+     *  Ratings are always on and resolved exclusively from OUR backend. */
     suspend fun getImdbRatingForItem(itemId: String, itemType: String): Double? {
-        val settings = settingsDataStore.settings.first()
-        if (!settings.enabled) return null
-
         val mediaType = normalizeMediaType(itemType)
         val imdbId = resolveImdbId(
             meta = Meta(
@@ -92,18 +86,12 @@ class MDBListRepository @Inject constructor(
         fallbackItemId: String,
         fallbackItemType: String
     ): MDBListRatingsResult? {
-        val settings = settingsDataStore.settings.first()
-        if (!settings.enabled) return null
-
-        val enabledProviders = enabledProviders(settings)
-        if (enabledProviders.isEmpty()) return null
-
+        // Ratings are ALWAYS on and resolved EXCLUSIVELY from OUR backend. The defunct
+        // remote per-provider toggles no longer gate/filter anything — return all sources.
         val mediaType = normalizeMediaType(meta.apiType.ifBlank { fallbackItemType })
         val imdbId = resolveImdbId(meta, fallbackItemId, fallbackItemType, mediaType) ?: return null
 
-        val full = getCachedOrFetch(imdbId) ?: return null
-        // Apply per-provider visibility toggles locally.
-        return filterToEnabled(full, enabledProviders)
+        return getCachedOrFetch(imdbId)
     }
 
     /** Fetches the full rating set for an imdb id (all sources) and caches it. */
@@ -118,12 +106,21 @@ class MDBListRepository @Inject constructor(
         val deferred = inFlightMutex.withLock {
             inFlight[cacheKey] ?: scope.async {
                 try {
+                    // Only cache genuine outcomes (a valid response, incl. empty). Transient
+                    // failures — 401 (token not yet ready / session-restore race), 5xx, network
+                    // errors — throw out of fetchRatings so we do NOT negative-cache them for the
+                    // 30-min TTL. Otherwise a single early 401 would blank ratings for half an hour
+                    // even after the Supabase session is valid. On failure we return null WITHOUT
+                    // writing the cache, so the next detail-open retries.
                     fetchRatings(imdbId).also { result ->
                         cache[cacheKey] = CacheEntry(
                             result = result,
                             expiresAtMs = System.currentTimeMillis() + cacheTtlMs
                         )
                     }
+                } catch (e: Exception) {
+                    Log.w(tag, "ratings fetch errored for $imdbId — not caching (will retry)", e)
+                    null
                 } finally {
                     inFlightMutex.withLock { inFlight.remove(cacheKey) }
                 }
@@ -132,126 +129,88 @@ class MDBListRepository @Inject constructor(
         return deferred.await()
     }
 
+    /**
+     * Fetches the full rating set. Returns a result (possibly a valid-but-empty null when the
+     * backend genuinely has no ratings) on success; THROWS on transient failures (non-2xx incl.
+     * 401, or network exception) so the caller can avoid negative-caching them.
+     */
     private suspend fun fetchRatings(imdbId: String): MDBListRatingsResult? {
-        return try {
-            val response = api.getRatings(imdbId)
-            if (!response.isSuccessful) {
-                Log.w(tag, "ratings failed for $imdbId (${response.code()})")
-                return null
-            }
-            val items = response.body()?.ratings ?: emptyList()
-            if (items.isEmpty()) return null
-
-            var trakt: Double? = null
-            var imdb: Double? = null
-            var tmdb: Double? = null
-            var letterboxd: Double? = null
-            var tomatoes: Double? = null
-            var audience: Double? = null
-            var metacritic: Double? = null
-
-            for (item in items) {
-                val value = item.value ?: continue
-                when (item.source?.trim()?.lowercase()) {
-                    "trakt" -> trakt = value
-                    "imdb" -> imdb = value
-                    "tmdb" -> tmdb = value
-                    "letterboxd" -> letterboxd = value
-                    "tomatoes", "rottentomatoes", "rotten_tomatoes", "tomatometer" -> tomatoes = value
-                    "audience", "rt_audience", "tomatoesaudience" -> audience = value
-                    "metacritic", "metascore" -> metacritic = value
-                    else -> { /* unknown source — ignore */ }
-                }
-            }
-
-            val ratings = MDBListRatings(
-                trakt = trakt,
-                imdb = imdb,
-                tmdb = tmdb,
-                letterboxd = letterboxd,
-                tomatoes = tomatoes,
-                audience = audience,
-                metacritic = metacritic
-            )
-            if (ratings.isEmpty()) return null
-
-            MDBListRatingsResult(ratings = ratings, hasImdbRating = ratings.imdb != null)
-        } catch (e: Exception) {
-            Log.w(tag, "Error fetching ratings for $imdbId", e)
-            null
+        val response = api.getRatings(imdbId)
+        if (!response.isSuccessful) {
+            val code = response.code()
+            // 401 here = the Supabase user Bearer wasn't attached/accepted for the
+            // /catalog-addon/ratings call (RecoAuthInterceptor injects it host-scoped, same as
+            // /reco + /image). Surface it loudly and treat as transient (throw → no cache).
+            Log.w(tag, "ratings HTTP $code for $imdbId (transient; not cached)")
+            throw java.io.IOException("ratings HTTP $code for $imdbId")
         }
+        return parseRatings(response.body()?.ratings ?: emptyList())
     }
 
-    /** Keeps only the rating sources whose visibility toggle is enabled. */
-    private fun filterToEnabled(
-        full: MDBListRatingsResult,
-        enabled: Set<ProviderType>
+    /** Maps the backend ratings list into our model. Returns null when there is nothing to show. */
+    private fun parseRatings(
+        items: List<com.nuvio.tv.data.remote.api.CatalogRatingItemDto>
     ): MDBListRatingsResult? {
-        val r = full.ratings
-        val filtered = MDBListRatings(
-            trakt = r.trakt.takeIf { ProviderType.TRAKT in enabled },
-            imdb = r.imdb.takeIf { ProviderType.IMDB in enabled },
-            tmdb = r.tmdb.takeIf { ProviderType.TMDB in enabled },
-            letterboxd = r.letterboxd.takeIf { ProviderType.LETTERBOXD in enabled },
-            tomatoes = r.tomatoes.takeIf { ProviderType.TOMATOES in enabled },
-            audience = r.audience.takeIf { ProviderType.AUDIENCE in enabled },
-            metacritic = r.metacritic.takeIf { ProviderType.METACRITIC in enabled }
+        if (items.isEmpty()) return null
+
+        var trakt: Double? = null
+        var imdb: Double? = null
+        var tmdb: Double? = null
+        var letterboxd: Double? = null
+        var tomatoes: Double? = null
+        var audience: Double? = null
+        var metacritic: Double? = null
+
+        for (item in items) {
+            val value = item.value ?: continue
+            when (item.source?.trim()?.lowercase()) {
+                "trakt" -> trakt = value
+                "imdb" -> imdb = value
+                "tmdb" -> tmdb = value
+                "letterboxd" -> letterboxd = value
+                "tomatoes", "rottentomatoes", "rotten_tomatoes", "tomatometer" -> tomatoes = value
+                "audience", "rt_audience", "tomatoesaudience" -> audience = value
+                "metacritic", "metascore" -> metacritic = value
+                else -> { /* unknown source — ignore */ }
+            }
+        }
+
+        val ratings = MDBListRatings(
+            trakt = trakt,
+            imdb = imdb,
+            tmdb = tmdb,
+            letterboxd = letterboxd,
+            tomatoes = tomatoes,
+            audience = audience,
+            metacritic = metacritic
         )
-        if (filtered.isEmpty()) return null
-        return MDBListRatingsResult(ratings = filtered, hasImdbRating = filtered.imdb != null)
+        if (ratings.isEmpty()) return null
+
+        return MDBListRatingsResult(ratings = ratings, hasImdbRating = ratings.imdb != null)
     }
 
-    private enum class ProviderType { TRAKT, IMDB, TMDB, LETTERBOXD, TOMATOES, AUDIENCE, METACRITIC }
-
-    private fun enabledProviders(settings: MDBListSettings): Set<ProviderType> = buildSet {
-        if (settings.showTrakt) add(ProviderType.TRAKT)
-        if (settings.showImdb) add(ProviderType.IMDB)
-        if (settings.showTmdb) add(ProviderType.TMDB)
-        if (settings.showLetterboxd) add(ProviderType.LETTERBOXD)
-        if (settings.showTomatoes) add(ProviderType.TOMATOES)
-        if (settings.showAudience) add(ProviderType.AUDIENCE)
-        if (settings.showMetacritic) add(ProviderType.METACRITIC)
-    }
-
-    private suspend fun resolveImdbId(
+    /**
+     * Resolves an imdb id EXCLUSIVELY from ids OUR backend already provides
+     * (meta.imdbId / meta.id / fallbackItemId — all verified to carry `tt...`).
+     * Makes NO external calls (no client-side TMDB external_ids conversion). If no
+     * imdb id is present, returns null and ratings degrade gracefully.
+     */
+    private fun resolveImdbId(
         meta: Meta,
         fallbackItemId: String,
         fallbackItemType: String,
         mediaType: String
     ): String? {
+        extractImdbId(meta.imdbId)?.let { return it }
         extractImdbId(meta.id)?.let { return it }
         extractImdbId(fallbackItemId)?.let { return it }
-
-        val tmdbId = extractTmdbId(meta.id)
-            ?: extractTmdbId(fallbackItemId)
-            ?: meta.id.trim().takeIf { it.all(Char::isDigit) }?.toIntOrNull()
-            ?: fallbackItemId.trim().takeIf { it.all(Char::isDigit) }?.toIntOrNull()
-
-        if (tmdbId != null) {
-            val mapped = tmdbService.tmdbToImdb(tmdbId, fallbackItemType)
-            if (!mapped.isNullOrBlank()) return mapped
-        }
-
-        val lookupType = if (fallbackItemType.isNotBlank()) fallbackItemType else mediaType
-        val converted = tmdbService.ensureTmdbId(meta.id, lookupType)?.toIntOrNull()?.let { tmdbNumericId ->
-            tmdbService.tmdbToImdb(tmdbNumericId, lookupType)
-        }
-        return converted?.takeIf { it.startsWith("tt") }
+        return null
     }
 
     private fun extractImdbId(rawId: String?): String? {
         if (rawId.isNullOrBlank()) return null
         val regex = Regex("tt\\d+")
         return regex.find(rawId)?.value
-    }
-
-    private fun extractTmdbId(rawId: String?): Int? {
-        if (rawId.isNullOrBlank()) return null
-        val trimmed = rawId.trim()
-        if (trimmed.startsWith("tmdb:", ignoreCase = true)) {
-            return trimmed.substringAfter(':').substringBefore(':').toIntOrNull()
-        }
-        return null
     }
 
     private fun normalizeMediaType(rawType: String): String {

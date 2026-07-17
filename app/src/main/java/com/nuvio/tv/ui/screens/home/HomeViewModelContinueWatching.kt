@@ -2133,7 +2133,6 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
     metaCache: MutableMap<String, CwMetaSummary?>,
     debug: CwDebugSession? = null
 ): CwMetaSummary? {
-    val startedAtMs = SystemClock.elapsedRealtime()
     val cacheKey = "${progress.contentType}:${progress.contentId}"
     synchronized(metaCache) {
         if (metaCache.containsKey(cacheKey)) {
@@ -2154,97 +2153,19 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
         }
     }
 
-    val idCandidates = buildList {
-        add(progress.contentId)
-        if (progress.contentId.startsWith("tmdb:")) add(progress.contentId.substringAfter(':'))
-    }.distinct()
-
-    val typeCandidates = listOf(progress.contentType, "series", "tv").distinct()
-    val useAllAddons = externalMetaPrefetchEnabled
-    val resolved = run {
-        var summary: CwMetaSummary? = null
-        var attempts = 0
-        for (type in typeCandidates) {
-            for (candidateId in idCandidates) {
-                attempts += 1
-                val attemptStartedAtMs = SystemClock.elapsedRealtime()
-                val result = withTimeoutOrNull(6_000L) {
-                    if (useAllAddons) {
-                        metaRepository.getMetaFromAllAddons(
-                            type = type,
-                            id = candidateId
-                        ).first { it !is NetworkResult.Loading }
-                    } else {
-                        metaRepository.getMetaFromPrimaryAddon(
-                            type = type,
-                            id = candidateId
-                        ).first { it !is NetworkResult.Loading }
-                    }
-                }
-                val attemptElapsedMs = SystemClock.elapsedRealtime() - attemptStartedAtMs
-                if (result == null) {
-                    debug?.recordMetaTimeout()
-                    debug?.recordMetaAttempt(
-                        progress = progress,
-                        type = type,
-                        candidateId = candidateId,
-                        elapsedMs = attemptElapsedMs,
-                        outcome = "timeout"
-                    )
-                    continue
-                }
-                when (result) {
-                    is NetworkResult.Success<*> -> {
-                        debug?.recordMetaAttempt(
-                            progress = progress,
-                            type = type,
-                            candidateId = candidateId,
-                            elapsedMs = attemptElapsedMs,
-                            outcome = "success"
-                        )
-                    }
-                    is NetworkResult.Error -> {
-                        debug?.recordMetaError()
-                        debug?.recordMetaAttempt(
-                            progress = progress,
-                            type = type,
-                            candidateId = candidateId,
-                            elapsedMs = attemptElapsedMs,
-                            outcome = "error:${result.code ?: "unknown"}"
-                        )
-                    }
-                    NetworkResult.Loading -> Unit
-                }
-                summary = ((result as? NetworkResult.Success<*>)?.data as? Meta)?.toCwSummary()
-                if (summary != null) break
-            }
-            if (summary != null) break
+    // De-dupe the network fetch across CW pipeline cycles. The fetch runs in
+    // viewModelScope — a sibling of the pipeline's collectLatest child coroutine,
+    // not a descendant of it — so cancelling/restarting the pipeline (e.g. a
+    // watch-progress heartbeat tick for a DIFFERENT item during playback) does not
+    // cancel a slow first-time fetch already in flight for this contentId. The next
+    // pipeline cycle just re-attaches to the same Deferred instead of restarting it.
+    val deferred = cwMetaInFlightRequests.computeIfAbsent(cacheKey) {
+        viewModelScope.async(Dispatchers.IO) {
+            resolveMetaForProgressNetwork(progress, debug)
         }
-        // Fallback: if primary addon failed, try all addons before giving up.
-        if (summary == null && !useAllAddons) {
-            for (type in typeCandidates) {
-                for (candidateId in idCandidates) {
-                    attempts += 1
-                    val fallbackResult = withTimeoutOrNull(6_000L) {
-                        metaRepository.getMetaFromAllAddons(
-                            type = type,
-                            id = candidateId
-                        ).first { it !is NetworkResult.Loading }
-                    }
-                    summary = ((fallbackResult as? NetworkResult.Success<*>)?.data as? Meta)?.toCwSummary()
-                    if (summary != null) break
-                }
-                if (summary != null) break
-            }
-        }
-        debug?.recordMetaResolveFinished(
-            progress = progress,
-            elapsedMs = SystemClock.elapsedRealtime() - startedAtMs,
-            success = summary != null,
-            attempts = attempts
-        )
-        summary
     }
+    deferred.invokeOnCompletion { cwMetaInFlightRequests.remove(cacheKey, deferred) }
+    val resolved = deferred.await()
 
     synchronized(metaCache) {
         metaCache[cacheKey] = resolved
@@ -2255,6 +2176,107 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
         }
     }
     return resolved
+}
+
+/**
+ * Performs the actual addon network round trip(s) to resolve meta for [progress].
+ * Split out of [resolveMetaForProgress] so it can run as a standalone [viewModelScope]
+ * job that survives cancellation of the caller (see [HomeViewModel.cwMetaInFlightRequests]).
+ */
+private suspend fun HomeViewModel.resolveMetaForProgressNetwork(
+    progress: WatchProgress,
+    debug: CwDebugSession? = null
+): CwMetaSummary? {
+    val startedAtMs = SystemClock.elapsedRealtime()
+    val idCandidates = buildList {
+        add(progress.contentId)
+        if (progress.contentId.startsWith("tmdb:")) add(progress.contentId.substringAfter(':'))
+    }.distinct()
+
+    val typeCandidates = listOf(progress.contentType, "series", "tv").distinct()
+    val useAllAddons = externalMetaPrefetchEnabled
+    var summary: CwMetaSummary? = null
+    var attempts = 0
+    for (type in typeCandidates) {
+        for (candidateId in idCandidates) {
+            attempts += 1
+            val attemptStartedAtMs = SystemClock.elapsedRealtime()
+            val result = withTimeoutOrNull(6_000L) {
+                if (useAllAddons) {
+                    metaRepository.getMetaFromAllAddons(
+                        type = type,
+                        id = candidateId
+                    ).first { it !is NetworkResult.Loading }
+                } else {
+                    metaRepository.getMetaFromPrimaryAddon(
+                        type = type,
+                        id = candidateId
+                    ).first { it !is NetworkResult.Loading }
+                }
+            }
+            val attemptElapsedMs = SystemClock.elapsedRealtime() - attemptStartedAtMs
+            if (result == null) {
+                debug?.recordMetaTimeout()
+                debug?.recordMetaAttempt(
+                    progress = progress,
+                    type = type,
+                    candidateId = candidateId,
+                    elapsedMs = attemptElapsedMs,
+                    outcome = "timeout"
+                )
+                continue
+            }
+            when (result) {
+                is NetworkResult.Success<*> -> {
+                    debug?.recordMetaAttempt(
+                        progress = progress,
+                        type = type,
+                        candidateId = candidateId,
+                        elapsedMs = attemptElapsedMs,
+                        outcome = "success"
+                    )
+                }
+                is NetworkResult.Error -> {
+                    debug?.recordMetaError()
+                    debug?.recordMetaAttempt(
+                        progress = progress,
+                        type = type,
+                        candidateId = candidateId,
+                        elapsedMs = attemptElapsedMs,
+                        outcome = "error:${result.code ?: "unknown"}"
+                    )
+                }
+                NetworkResult.Loading -> Unit
+            }
+            summary = ((result as? NetworkResult.Success<*>)?.data as? Meta)?.toCwSummary()
+            if (summary != null) break
+        }
+        if (summary != null) break
+    }
+    // Fallback: if primary addon failed, try all addons before giving up.
+    if (summary == null && !useAllAddons) {
+        for (type in typeCandidates) {
+            for (candidateId in idCandidates) {
+                attempts += 1
+                val fallbackResult = withTimeoutOrNull(6_000L) {
+                    metaRepository.getMetaFromAllAddons(
+                        type = type,
+                        id = candidateId
+                    ).first { it !is NetworkResult.Loading }
+                }
+                summary = ((fallbackResult as? NetworkResult.Success<*>)?.data as? Meta)?.toCwSummary()
+                if (summary != null) break
+            }
+            if (summary != null) break
+        }
+    }
+    debug?.recordMetaResolveFinished(
+        progress = progress,
+        elapsedMs = SystemClock.elapsedRealtime() - startedAtMs,
+        success = summary != null,
+        attempts = attempts
+    )
+    return summary
 }
 
 /**
@@ -2662,7 +2684,7 @@ private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
 
     if (!isSeriesTypeCW(progress.contentType)) {
         val startedAtMs = SystemClock.elapsedRealtime()
-        val mdbEnabled = currentMdbListSettings.enabled
+        // Ratings are ALWAYS on, resolved exclusively from OUR backend (no defunct toggle gate).
         val (movieMeta, mdbImdbRating) = coroutineScope {
             val movieDeferred = async {
                 runCatching {
@@ -2673,10 +2695,10 @@ private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
                     )
                 }.getOrNull()
             }
-            val mdbDeferred = if (mdbEnabled) async {
+            val mdbDeferred = async {
                 runCatching { mdbListRepository.getImdbRatingForItem(progress.contentId, progress.contentType) }.getOrNull()
-            } else null
-            movieDeferred.await() to mdbDeferred?.await()
+            }
+            movieDeferred.await() to mdbDeferred.await()
         }
         debug?.recordTmdbCall(
             kind = "in-progress-movie-enrichment",
@@ -2701,7 +2723,7 @@ private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
     }
 
     val episodeStartedAtMs = SystemClock.elapsedRealtime()
-    val mdbEnabled = currentMdbListSettings.enabled
+    // Ratings are ALWAYS on, resolved exclusively from OUR backend (no defunct toggle gate).
 
     val (episodeMeta, showMeta, mdbImdbRating) = coroutineScope {
         val episodeDeferred = async {
@@ -2722,10 +2744,10 @@ private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
                 )
             }.getOrNull()
         }
-        val mdbDeferred = if (mdbEnabled) async {
+        val mdbDeferred = async {
             runCatching { mdbListRepository.getImdbRatingForItem(progress.contentId, progress.contentType) }.getOrNull()
-        } else null
-        Triple(episodeDeferred.await(), showDeferred.await(), mdbDeferred?.await())
+        }
+        Triple(episodeDeferred.await(), showDeferred.await(), mdbDeferred.await())
     }
 
     debug?.recordTmdbCall(

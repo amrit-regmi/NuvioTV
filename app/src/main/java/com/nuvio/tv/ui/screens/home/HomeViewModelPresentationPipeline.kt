@@ -425,7 +425,32 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
     }
 }
 
+/**
+ * Always-on backend IMDb rating for the focused card. Ratings come EXCLUSIVELY from OUR
+ * backend (same path as detail screen) and are NOT gated by the defunct MDBList toggle.
+ * Runs independently of the TMDB/external-meta focus job so it still fires when TMDB is off
+ * or already enriched. Lightweight: one-shot per id (ratingEnrichedIds), backed by the repo's
+ * 30-min cache, and skipped when the card already carries a rating — so no per-card storms.
+ */
+internal fun HomeViewModel.enrichItemRatingOnFocus(item: MetaPreview) {
+    if (item.imdbRating != null) return
+    if (!ratingEnrichedIds.add(item.id)) return
+    viewModelScope.launch(Dispatchers.IO) {
+        val rating = runCatching {
+            mdbListRepository.getImdbRatingForItem(item.id, item.apiType)
+        }.getOrNull()
+        if (rating != null) {
+            updateCatalogItemImdbRating(item.id, rating.toFloat())
+        } else {
+            // Allow a later retry (e.g. transient 401 before session ready).
+            ratingEnrichedIds.remove(item.id)
+        }
+    }
+}
+
 internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
+    // Backend rating is always-on and independent of the TMDB enrichment gating below.
+    enrichItemRatingOnFocus(item)
     if (startupGracePeriodActive) {
         deferredEnrichItem = item
         return
@@ -793,8 +818,7 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
     settings: TmdbSettings
 ): List<MetaPreview> {
     if (items.isEmpty()) return items
-    val mdbSettings = currentMdbListSettings
-    val mdbEnabled = mdbSettings.enabled
+    // Ratings are ALWAYS on, resolved exclusively from OUR backend (no defunct toggle gate).
 
     return coroutineScope {
         items.map { item ->
@@ -811,12 +835,12 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                             language = settings.language
                         )
                     }
-                    val mdbDeferred = if (mdbEnabled) async {
+                    val mdbDeferred = async {
                         runCatching { mdbListRepository.getImdbRatingForItem(item.id, item.apiType) }.getOrNull()
-                    } else null
+                    }
 
                     val enrichment = tmdbDeferred.await() ?: return@async item
-                    val mdbImdbRating = mdbDeferred?.await()
+                    val mdbImdbRating = mdbDeferred.await()
 
                     var enriched = item
 

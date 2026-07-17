@@ -42,6 +42,7 @@ import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -247,8 +248,18 @@ class HomeViewModel @Inject constructor(
     internal var externalMetaPrefetchJob: Job? = null
     internal var pendingExternalMetaPrefetchItemId: String? = null
     internal val prefetchedTmdbIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    // Ids for which the always-on backend IMDb rating has already been fetched onto the card.
+    internal val ratingEnrichedIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
     internal val cwMetaCache = Collections.synchronizedMap(mutableMapOf<String, CwMetaSummary?>())
     internal val cwMetaNegativeCacheTimestamps = ConcurrentHashMap<String, Long>()
+    /**
+     * In-flight per-content-id meta network fetches, keyed the same as [cwMetaCache].
+     * Launched in [viewModelScope] (not the CW pipeline's collectLatest child scope) so a
+     * fresh watch-progress emission (e.g. a position tick for a DIFFERENT item while playback
+     * is active) can cancel/restart the pipeline without killing a slow first-time fetch for
+     * this item. Later pipeline cycles re-attach to the same Deferred instead of restarting it.
+     */
+    internal val cwMetaInFlightRequests = ConcurrentHashMap<String, Deferred<CwMetaSummary?>>()
     /** Ultra-light cache for badge evaluation: contentId → set of aired (season, episode) pairs. */
     internal val cwBadgeEpisodeCache = Collections.synchronizedMap(mutableMapOf<String, Set<Pair<Int, Int>>?>())
     /** Per-series earliest upcoming season release date (epochMs) for smart TTL scheduling. */

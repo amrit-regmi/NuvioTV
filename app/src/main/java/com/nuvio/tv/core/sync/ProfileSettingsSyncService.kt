@@ -167,7 +167,6 @@ class ProfileSettingsSyncService @Inject constructor(
         StreamBadgeSettingsDataStore.FEATURE,
         "trailer_settings",
         "tmdb_settings",
-        "mdblist_settings",
         "trakt_settings",
         "debrid_settings",
         "track_preference"

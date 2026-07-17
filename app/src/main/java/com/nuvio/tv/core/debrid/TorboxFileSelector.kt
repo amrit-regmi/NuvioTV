@@ -32,6 +32,11 @@ class TorboxFileSelector @Inject constructor() {
             }?.let { return it }
         }
 
+        // Episodic content: name-matching failed above. Do NOT fall back to fileIdx or the
+        // largest file, which can silently serve the wrong episode/season (e.g. a season-1 file
+        // for an S3E3 request). Surface Stale instead so the resolver re-resolves correctly.
+        if (episodePatterns.isNotEmpty()) return null
+
         resolve.fileIdx?.let { fileIdx ->
             files.getOrNull(fileIdx)?.takeIf { it.isPlayableVideo() }?.let { return it }
             if (fileIdx > 0) {
