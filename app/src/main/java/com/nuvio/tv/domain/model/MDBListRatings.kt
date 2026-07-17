@@ -11,6 +11,10 @@ data class MDBListRatings(
 ) {
     fun isEmpty(): Boolean = trakt == null && imdb == null && tmdb == null &&
         letterboxd == null && tomatoes == null && audience == null && metacritic == null
+
+    /** Number of individual rating sources present (matches what MDBListRatingsRow renders). */
+    fun count(): Int = listOf(trakt, imdb, tmdb, letterboxd, tomatoes, audience, metacritic)
+        .count { it != null }
 }
 
 data class MDBListRatingsResult(
