@@ -174,13 +174,64 @@ class UpdateViewModel @Inject constructor(
         ApkInstaller.launchInstall(context, apkFile)
     }
 
+    /**
+     * Re-query the OS "install unknown apps" grant FRESH and poll for it, because the
+     * appop that backs canRequestPackageInstalls() propagates ASYNCHRONOUSLY on Android TV
+     * (BRAVIA): right after the user returns from Settings the value can still read false
+     * for a short window even though the grant is really ON.
+     *
+     * Called on ON_RESUME and from the manual "I've enabled it" button. If the grant
+     * becomes true within the poll window, dismiss the unknown-sources dialog and launch
+     * the install; otherwise keep the dialog up.
+     */
+    fun recheckInstallPermissionAndProceed() {
+        // Only meaningful while we're actually waiting on the unknown-sources grant.
+        if (!_uiState.value.showUnknownSourcesDialog) return
+
+        val apkPath = _uiState.value.downloadedApkPath ?: return
+        val apkFile = File(apkPath)
+        if (!apkFile.exists()) {
+            _uiState.update { it.copy(errorMessage = context.getString(R.string.update_error_apk_missing)) }
+            return
+        }
+
+        viewModelScope.launch {
+            // Poll ~1.5-2s total so the appop has time to propagate on TV.
+            repeat(PERMISSION_POLL_ATTEMPTS) { attempt ->
+                if (ApkInstaller.canRequestPackageInstalls(context)) {
+                    _uiState.update { it.copy(showUnknownSourcesDialog = false) }
+                    ApkInstaller.launchInstall(context, apkFile)
+                    return@launch
+                }
+                if (attempt < PERMISSION_POLL_ATTEMPTS - 1) {
+                    kotlinx.coroutines.delay(PERMISSION_POLL_INTERVAL_MS)
+                }
+            }
+            // Still not granted: leave the unknown-sources dialog in place.
+            Log.d(TAG, "Install permission still not granted after poll window")
+        }
+    }
+
     fun openUnknownSourcesSettings() {
-        ApkInstaller.buildUnknownSourcesSettingsIntent(context)?.let { intent ->
-            context.startActivity(intent)
+        val intent = ApkInstaller.buildUnknownSourcesSettingsIntent(context)
+        if (intent != null) {
+            try {
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to open unknown-sources settings", e)
+                _uiState.update { it.copy(errorMessage = context.getString(R.string.update_error_open_settings)) }
+            }
+        } else {
+            _uiState.update { it.copy(errorMessage = context.getString(R.string.update_error_open_settings)) }
         }
     }
 
     private companion object {
         const val TAG = "UpdateViewModel"
+
+        // Poll the install-permission appop ~1.6s total (8 x 200ms) to absorb the
+        // asynchronous grant propagation on Android TV / BRAVIA.
+        const val PERMISSION_POLL_ATTEMPTS = 8
+        const val PERMISSION_POLL_INTERVAL_MS = 200L
     }
 }

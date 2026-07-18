@@ -105,6 +105,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.nuvio.tv.ui.components.MDBListRatingsRow
 import com.nuvio.tv.ui.components.TraktTenStarRow
 import com.nuvio.tv.ui.util.rememberLongPressKeyTracker
 import java.util.Locale
@@ -1097,86 +1098,6 @@ private fun normalizeCountryLabel(raw: String): String {
         }
 }
 
-@Composable
-private fun MDBListRatingsRow(ratings: MDBListRatings) {
-    val context = LocalContext.current
-    val items = remember(ratings) {
-        listOf(
-            Triple("trakt", com.nuvio.tv.R.raw.mdblist_trakt, ratings.trakt),
-            Triple("imdb", com.nuvio.tv.R.raw.imdb_logo_2016, ratings.imdb),
-            Triple("tmdb", com.nuvio.tv.R.raw.mdblist_tmdb, ratings.tmdb),
-            Triple("letterboxd", com.nuvio.tv.R.raw.mdblist_letterboxd, ratings.letterboxd),
-            Triple("tomatoes", com.nuvio.tv.R.raw.mdblist_tomatoes, ratings.tomatoes)
-        ).filter { it.third != null }
-    }
-
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        items.forEach { (provider, logoRes, rating) ->
-            val resolvedRating = rating ?: return@forEach
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val model = remember(context, logoRes) {
-                    ImageRequest.Builder(context)
-                        .data(logoRes)
-                        .build()
-                }
-                AsyncImage(
-                    model = model,
-                    contentDescription = null,
-                    modifier = Modifier.size(NuvioTheme.spacing.xl),
-                    contentScale = ContentScale.Fit
-                )
-                Text(
-                    text = formatMDBListRating(provider, resolvedRating),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = NuvioTheme.extendedColors.textSecondary
-                )
-            }
-        }
-
-        ratings.audience?.let { rating ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Image(
-                    painter = painterResource(id = com.nuvio.tv.R.drawable.mdblist_audience),
-                    contentDescription = null,
-                    modifier = Modifier.size(NuvioTheme.spacing.xl)
-                )
-                Text(
-                    text = formatMDBListRating("audience", rating),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = NuvioTheme.extendedColors.textSecondary
-                )
-            }
-        }
-
-        ratings.metacritic?.let { rating ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Image(
-                    painter = painterResource(id = com.nuvio.tv.R.drawable.mdblist_metacritic),
-                    contentDescription = null,
-                    modifier = Modifier.size(NuvioTheme.spacing.xl)
-                )
-                Text(
-                    text = formatMDBListRating("metacritic", rating),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = NuvioTheme.extendedColors.textSecondary
-                )
-            }
-        }
-    }
-}
-
 private fun isSelectKey(keyCode: Int): Boolean {
     return keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
         keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
@@ -1186,16 +1107,6 @@ private fun isSelectKey(keyCode: Int): Boolean {
 private fun isSelectOrMenuKey(keyCode: Int): Boolean {
     return isSelectKey(keyCode) || keyCode == AndroidKeyEvent.KEYCODE_MENU
 }
-
-private fun formatMDBListRating(provider: String, rating: Double): String {
-    return when (provider) {
-        "imdb", "tmdb", "letterboxd" -> String.format("%.1f", rating)
-        else -> {
-            if (rating % 1.0 == 0.0) rating.toInt().toString() else String.format("%.1f", rating)
-        }
-    }
-}
-
 
 private fun formatYearRange(releaseInfo: String?): String? {
     if (releaseInfo.isNullOrBlank()) return null

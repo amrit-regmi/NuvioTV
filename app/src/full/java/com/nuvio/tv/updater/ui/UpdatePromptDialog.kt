@@ -92,7 +92,8 @@ fun UpdatePromptDialog(
     onDownload: () -> Unit,
     onInstall: () -> Unit,
     onIgnore: () -> Unit,
-    onOpenUnknownSources: () -> Unit
+    onOpenUnknownSources: () -> Unit,
+    onRecheckInstallPermission: () -> Unit
 ) {
     if (!state.showDialog) return
 
@@ -124,7 +125,10 @@ fun UpdatePromptDialog(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 if (state.showUnknownSourcesDialog) {
-                    onInstall()
+                    // Returning from the Settings screen: do NOT blindly re-run the install
+                    // path (that re-reads a stale canRequestPackageInstalls() on TV). Instead
+                    // re-query the grant FRESH with a short poll so the appop can propagate.
+                    onRecheckInstallPermission()
                 }
             }
         }
@@ -450,6 +454,22 @@ fun UpdatePromptDialog(
                             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                         ) {
                             Text(stringResource(R.string.update_open_settings))
+                        }
+
+                        // Manual affirmative fallback: user confirms they enabled the grant,
+                        // triggering the same fresh re-check + proceed as the resume auto-retry,
+                        // so they aren't solely dependent on ON_RESUME firing on TV.
+                        Button(
+                            onClick = onRecheckInstallPermission,
+                            colors = ButtonDefaults.colors(
+                                containerColor = NuvioColors.Background,
+                                contentColor = NuvioColors.TextPrimary,
+                                focusedContainerColor = NuvioColors.FocusBackground,
+                                focusedContentColor = NuvioColors.Primary
+                            ),
+                            shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                        ) {
+                            Text(stringResource(R.string.update_enabled_install))
                         }
                     } else if (state.downloadedApkPath != null) {
                         Button(

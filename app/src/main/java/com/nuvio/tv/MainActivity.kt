@@ -883,7 +883,8 @@ class MainActivity : ComponentActivity() {
                             onDownload = { updateViewModel.downloadUpdate() },
                             onInstall = { updateViewModel.installUpdateOrRequestPermission() },
                             onIgnore = { updateViewModel.ignoreThisVersion() },
-                            onOpenUnknownSources = { updateViewModel.openUnknownSourcesSettings() }
+                            onOpenUnknownSources = { updateViewModel.openUnknownSourcesSettings() },
+                            onRecheckInstallPermission = { updateViewModel.recheckInstallPermissionAndProceed() }
                         )
                     }
 

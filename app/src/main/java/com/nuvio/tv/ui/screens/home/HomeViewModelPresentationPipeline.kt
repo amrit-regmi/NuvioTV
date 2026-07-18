@@ -433,14 +433,22 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
  * 30-min cache, and skipped when the card already carries a rating — so no per-card storms.
  */
 internal fun HomeViewModel.enrichItemRatingOnFocus(item: MetaPreview) {
-    if (item.imdbRating != null) return
+    // Fetch the FULL aggregated set (IMDb + Trakt/TMDB/Letterboxd/Tomatoes/Metacritic…) for the
+    // hero — same source as the detail screen. We still fetch even when the card already carries
+    // an IMDb rating, because the hero wants the full multi-source row, not just IMDb.
     if (!ratingEnrichedIds.add(item.id)) return
     viewModelScope.launch(Dispatchers.IO) {
-        val rating = runCatching {
-            mdbListRepository.getImdbRatingForItem(item.id, item.apiType)
+        val ratings = runCatching {
+            mdbListRepository.getRatingsForItem(item.id, item.apiType, item.imdbId)
         }.getOrNull()
-        if (rating != null) {
-            updateCatalogItemImdbRating(item.id, rating.toFloat())
+        if (ratings != null && !ratings.isEmpty()) {
+            // Store the aggregated set for the hero row.
+            _enrichedRatings.update { it + (item.id to ratings) }
+            // Also backfill the card's inline IMDb rating (poster overlay / single-rating badge)
+            // when it was missing.
+            if (item.imdbRating == null) {
+                ratings.imdb?.let { updateCatalogItemImdbRating(item.id, it.toFloat()) }
+            }
         } else {
             // Allow a later retry (e.g. transient 401 before session ready).
             ratingEnrichedIds.remove(item.id)

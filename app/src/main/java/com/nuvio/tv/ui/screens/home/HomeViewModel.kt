@@ -33,6 +33,7 @@ import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.data.repository.MDBListRepository
+import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.MDBListSettings
 import com.nuvio.tv.domain.model.TmdbSettings
 import com.nuvio.tv.domain.repository.AddonRepository
@@ -184,6 +185,12 @@ class HomeViewModel @Inject constructor(
 
     internal val _enrichedPreviews = MutableStateFlow<Map<String, MetaPreview>>(emptyMap())
     val enrichedPreviews: StateFlow<Map<String, MetaPreview>> = _enrichedPreviews.asStateFlow()
+
+    /** Full aggregated rating set (IMDb + Trakt/TMDB/Letterboxd/Tomatoes/Metacritic…) fetched
+     *  on focus for the hero, keyed by item id. Populated lazily by enrichItemRatingOnFocus;
+     *  the hero renders the shared MDBListRatingsRow from this. */
+    internal val _enrichedRatings = MutableStateFlow<Map<String, MDBListRatings>>(emptyMap())
+    val enrichedRatings: StateFlow<Map<String, MDBListRatings>> = _enrichedRatings.asStateFlow()
 
     /** Items for which enrichment was attempted but produced no enriched data. */
     internal val _failedEnrichmentIds = MutableStateFlow<Set<String>>(emptySet())
