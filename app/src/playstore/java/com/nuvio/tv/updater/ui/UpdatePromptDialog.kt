@@ -10,5 +10,6 @@ fun UpdatePromptDialog(
     onDownload: () -> Unit,
     onInstall: () -> Unit,
     onIgnore: () -> Unit,
-    onOpenUnknownSources: () -> Unit
+    onOpenUnknownSources: () -> Unit,
+    onRecheckInstallPermission: () -> Unit
 ) = Unit

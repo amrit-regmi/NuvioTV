@@ -14,6 +14,7 @@ import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import com.nuvio.tv.ui.util.localizedContentType
 import com.nuvio.tv.ui.util.computeAirDateBadgeText
 import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.components.formatContinueWatchingProgressLabel
 import com.nuvio.tv.ui.util.StableList
@@ -47,6 +48,10 @@ data class HeroPreview(
     val runtimeText: String? = null,
     val secondaryHighlightText: String? = null,
     val imdbText: String?,
+    /** Full aggregated rating set (all sources) for the hero, filled on focus. Null until the
+     *  async backend fetch resolves; when present with ≥2 sources the hero renders the shared
+     *  MDBListRatingsRow instead of the inline IMDb-only badge. */
+    val ratings: MDBListRatings? = null,
     val ageRatingText: String? = null,
     val statusText: String? = null,
     val countryText: String? = null,

@@ -95,6 +95,7 @@ fun ModernHomeContent(
     enrichingItemId: String? = null,
     lastEnrichedPreview: MetaPreview? = null,
     enrichedPreviews: Map<String, MetaPreview> = emptyMap(),
+    enrichedRatings: Map<String, com.nuvio.tv.domain.model.MDBListRatings> = emptyMap(),
     failedEnrichmentIds: Set<String> = emptySet(),
     trailerPreviewUrls: Map<String, String> = emptyMap(),
     trailerPreviewAudioUrls: Map<String, String> = emptyMap(),
@@ -579,7 +580,7 @@ fun ModernHomeContent(
                 }
             }
 
-            val resolvedHeroState = remember(activeCarouselItemState, enrichedPreviews, enrichingItemId, heroItem, uiState.heroEnrichmentEnabled, failedEnrichmentIds) {
+            val resolvedHeroState = remember(activeCarouselItemState, enrichedPreviews, enrichedRatings, enrichingItemId, heroItem, uiState.heroEnrichmentEnabled, failedEnrichmentIds) {
                 derivedStateOf {
                     val activeCarouselItem = activeCarouselItemState.value
                     val activeItemId = activeCarouselItem?.metaPreview?.id
@@ -611,13 +612,21 @@ fun ModernHomeContent(
                         )
                     } else null
 
-                    val resolvedHero = when {
+                    val baseResolvedHero = when {
                         activeCarouselItem == null -> null
                         enrichmentActive -> activeCarouselItem.heroPreview
                         enrichedHero != null -> enrichedHero
                         else -> activeCarouselItem.heroPreview
                     }
-                    
+                    // Thread the aggregated rating set (fetched on focus) into the hero so it can
+                    // render the shared MDBListRatingsRow. Async: null until the fetch resolves.
+                    val aggregatedRatings = activeItemId?.let { enrichedRatings[it] }
+                    val resolvedHero = if (baseResolvedHero != null && aggregatedRatings != null) {
+                        baseResolvedHero.copy(ratings = aggregatedRatings)
+                    } else {
+                        baseResolvedHero
+                    }
+
                     // Only use the real enrichmentActive flag from the ViewModel.
                     // Additionally, if enrichment is enabled but no enriched data exists yet
                     // for this item, treat as pending to avoid showing un-enriched addon data.

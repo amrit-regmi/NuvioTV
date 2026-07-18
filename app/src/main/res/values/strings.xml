@@ -1837,6 +1837,7 @@
     <string name="update_up_to_date">System is up to date. Latest changes:</string>
     <string name="update_close">Close</string>
     <string name="update_open_settings">Open Settings</string>
+    <string name="update_enabled_install">I\'ve enabled it — Install</string>
     <string name="update_install">Install</string>
     <string name="update_ignore">Ignore</string>
 
@@ -1844,6 +1845,7 @@
     <string name="update_error_check_failed">Update check failed</string>
     <string name="update_error_download_failed">Download failed</string>
     <string name="update_error_apk_missing">Downloaded file is missing</string>
+    <string name="update_error_open_settings">Couldn\'t open settings. Enable "install unknown apps" for CineX manually.</string>
 
     <!-- Profile PIN errors -->
     <string name="profile_pin_save_error">Could not save PIN. Try again.</string>

@@ -81,6 +81,20 @@ class MDBListRepository @Inject constructor(
         return getCachedOrFetch(imdbId)?.ratings?.imdb
     }
 
+    /** Home-screen hero enrichment: fetches the FULL aggregated rating set (all sources) for a
+     *  focused card, resolving the imdb id from ids OUR backend already provides (itemImdbId /
+     *  itemId). Backed by the same 30-min cache + in-flight dedup as the detail screen. */
+    suspend fun getRatingsForItem(
+        itemId: String,
+        itemType: String,
+        itemImdbId: String? = null
+    ): MDBListRatings? {
+        val imdbId = extractImdbId(itemImdbId)
+            ?: extractImdbId(itemId)
+            ?: return null
+        return getCachedOrFetch(imdbId)?.ratings
+    }
+
     suspend fun getRatingsForMeta(
         meta: Meta,
         fallbackItemId: String,

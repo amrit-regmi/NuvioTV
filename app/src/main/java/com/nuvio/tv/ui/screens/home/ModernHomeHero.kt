@@ -59,6 +59,7 @@ import coil3.request.transitionFactory
 import com.nuvio.tv.R
 import kotlinx.coroutines.delay
 import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
+import com.nuvio.tv.ui.components.MDBListRatingsRow
 import com.nuvio.tv.ui.components.TrailerPlayer
 import androidx.compose.ui.res.stringResource
 
@@ -439,9 +440,17 @@ private fun HeroTitleContent(
         val statusBadge = secondaryMeta.status
         val secondaryDetails = secondaryMeta.details
         val hasSecondaryBadge = ageRatingBadge != null || statusBadge != null
-        val showImdbInPrimary = !preview.isSeries && !hasSecondaryBadge && !preview.imdbText.isNullOrBlank()
+        // Aggregated ratings (fetched on focus). Mirrors the details hero placement:
+        //   ≥2 sources → the full MDBListRatingsRow on its OWN line below the meta rows.
+        //   0–1 source → keep the existing inline IMDb badge (async: shows immediately, the
+        //   aggregated row swaps in once the fetch resolves — no layout jank).
+        val aggregatedRatings = preview.ratings
+        val showAggregatedRatingsRow = aggregatedRatings != null && aggregatedRatings.count() >= 2
+        val showImdbInPrimary = !showAggregatedRatingsRow &&
+            !preview.isSeries && !hasSecondaryBadge && !preview.imdbText.isNullOrBlank()
         val showImdbInPrimaryWithHighlight = showImdbInPrimary && secondaryHighlightText == null
-        val showImdbInSecondary = !preview.imdbText.isNullOrBlank() &&
+        val showImdbInSecondary = !showAggregatedRatingsRow &&
+            !preview.imdbText.isNullOrBlank() &&
             (preview.isSeries || hasSecondaryBadge || secondaryHighlightText != null)
 
         Row(
@@ -590,6 +599,18 @@ private fun HeroTitleContent(
                         HeroMetaDivider(metaScale)
                     }
                 }
+            }
+        }
+
+        // Aggregated ratings on their OWN row, directly below the meta rows — mirrors the
+        // details hero. Only shown when ≥2 sources are present; a single/IMDb-only rating
+        // stays inline above via HeroImdbMeta.
+        if (showAggregatedRatingsRow && aggregatedRatings != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = metaAlpha },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MDBListRatingsRow(ratings = aggregatedRatings)
             }
         }
 

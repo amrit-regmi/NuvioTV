@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!--
+            Status callback receiver for the in-app updater's PackageInstaller session.
+            Only present in the `full` flavor (where the updater code lives). Not exported.
+        -->
+        <receiver
+            android:name=".updater.InstallResultReceiver"
+            android:exported="false" />
+    </application>
+
+</manifest>
