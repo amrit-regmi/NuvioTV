@@ -10,8 +10,6 @@ import com.nuvio.tv.data.remote.api.GitHubReleaseApi
 import com.nuvio.tv.data.remote.api.TrailerApi
 import com.nuvio.tv.data.remote.api.ImdbTapframeApi
 import com.nuvio.tv.data.remote.api.ParentalGuideApi
-import com.nuvio.tv.data.remote.api.PremiumizeApi
-import com.nuvio.tv.data.remote.api.RealDebridApi
 import com.nuvio.tv.data.remote.api.SeriesGraphApi
 import com.nuvio.tv.data.remote.api.TmdbApi
 import com.nuvio.tv.data.remote.api.TorboxApi
@@ -236,42 +234,6 @@ object NetworkModule {
     @Singleton
     fun provideCatalogAddonApi(@Named("catalogAddon") retrofit: Retrofit): CatalogAddonApi =
         retrofit.create(CatalogAddonApi::class.java)
-
-    @Provides
-    @Singleton
-    @Named("realdebrid")
-    fun provideRealDebridRetrofit(
-        @Named("directDebrid") okHttpClient: OkHttpClient,
-        moshi: Moshi
-    ): Retrofit =
-        Retrofit.Builder()
-            .baseUrl("https://api.real-debrid.com/rest/1.0/")
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-
-    @Provides
-    @Singleton
-    fun provideRealDebridApi(@Named("realdebrid") retrofit: Retrofit): RealDebridApi =
-        retrofit.create(RealDebridApi::class.java)
-
-    @Provides
-    @Singleton
-    @Named("premiumize")
-    fun providePremiumizeRetrofit(
-        @Named("directDebrid") okHttpClient: OkHttpClient,
-        moshi: Moshi
-    ): Retrofit =
-        Retrofit.Builder()
-            .baseUrl("https://www.premiumize.me/")
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-
-    @Provides
-    @Singleton
-    fun providePremiumizeApi(@Named("premiumize") retrofit: Retrofit): PremiumizeApi =
-        retrofit.create(PremiumizeApi::class.java)
 
     @Provides
     @Singleton

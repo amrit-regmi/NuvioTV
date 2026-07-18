@@ -42,21 +42,21 @@ class TmdbSettingsDataStore @Inject constructor(
     val settings: Flow<TmdbSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
             TmdbSettings(
-                enabled = if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") false else (prefs[enabledKey] ?: false),
-                modernHomeEnabled = prefs[modernHomeEnabledKey] ?: false,
-                enrichContinueWatching = prefs[enrichContinueWatchingKey] ?: true,
-                language = prefs[languageKey] ?: "en",
-                useArtwork = prefs[useArtworkKey] ?: true,
-                useBasicInfo = prefs[useBasicInfoKey] ?: true,
-                useDetails = prefs[useDetailsKey] ?: true,
-                useReleaseDates = prefs[useReleaseDatesKey] ?: true,
-                useCredits = prefs[useCreditsKey] ?: true,
-                useProductions = prefs[useProductionsKey] ?: true,
-                useNetworks = prefs[useNetworksKey] ?: true,
-                useEpisodes = prefs[useEpisodesKey] ?: true,
-                useTrailers = prefs[useTrailersKey] ?: true,
-                useMoreLikeThis = prefs[useMoreLikeThisKey] ?: true,
-                useCollections = prefs[useCollectionsKey] ?: true
+                enabled = if (com.nuvio.tv.BuildConfig.RECO_MODE == "private") false else (prefs.safe(enabledKey) ?: false),
+                modernHomeEnabled = prefs.safe(modernHomeEnabledKey) ?: false,
+                enrichContinueWatching = prefs.safe(enrichContinueWatchingKey) ?: true,
+                language = prefs.safe(languageKey) ?: "en",
+                useArtwork = prefs.safe(useArtworkKey) ?: true,
+                useBasicInfo = prefs.safe(useBasicInfoKey) ?: true,
+                useDetails = prefs.safe(useDetailsKey) ?: true,
+                useReleaseDates = prefs.safe(useReleaseDatesKey) ?: true,
+                useCredits = prefs.safe(useCreditsKey) ?: true,
+                useProductions = prefs.safe(useProductionsKey) ?: true,
+                useNetworks = prefs.safe(useNetworksKey) ?: true,
+                useEpisodes = prefs.safe(useEpisodesKey) ?: true,
+                useTrailers = prefs.safe(useTrailersKey) ?: true,
+                useMoreLikeThis = prefs.safe(useMoreLikeThisKey) ?: true,
+                useCollections = prefs.safe(useCollectionsKey) ?: true
             )
         }
     }

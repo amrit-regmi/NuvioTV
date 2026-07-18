@@ -98,7 +98,6 @@ import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
 import com.nuvio.tv.ui.components.SourceStatusFilterChip
-import com.nuvio.tv.ui.components.P2pConsentDialog
 import com.nuvio.tv.ui.components.StreamBadgeChips
 import com.nuvio.tv.ui.components.StreamsSkeletonList
 import com.nuvio.tv.ui.screens.player.LoadingOverlay
@@ -134,9 +133,6 @@ fun StreamScreen(
     var pendingRestoreOnResume by rememberSaveable { mutableStateOf(false) }
     var showPlayerChoiceDialog by remember { mutableStateOf(false) }
     var pendingPlaybackInfo by remember { mutableStateOf<StreamPlaybackInfo?>(null) }
-    var showP2pConsentDialog by remember { mutableStateOf(false) }
-    var pendingTorrentPlaybackInfo by remember { mutableStateOf<StreamPlaybackInfo?>(null) }
-    val p2pEnabled by viewModel.p2pEnabled.collectAsStateWithLifecycle(initialValue = false)
     val streamBadgeSettings by viewModel.streamBadgeSettings.collectAsStateWithLifecycle(
         initialValue = StreamBadgeSettings()
     )
@@ -147,7 +143,7 @@ fun StreamScreen(
     val scope = rememberCoroutineScope()
 
     fun launchExternalPlayer(playbackInfo: StreamPlaybackInfo) {
-        val url = playbackInfo.url ?: if (playbackInfo.isTorrent) "torrent://${playbackInfo.infoHash}" else return
+        val url = playbackInfo.url ?: return
         scope.coroutineLaunch {
             viewModel.launchExternalPlayer(
                 playbackInfo = playbackInfo,
@@ -184,17 +180,12 @@ fun StreamScreen(
         if (openExternalInBrowser(playbackInfo)) {
             return
         }
-        if (playbackInfo.isTorrent && !p2pEnabled) {
-            pendingTorrentPlaybackInfo = playbackInfo
-            showP2pConsentDialog = true
-            return
-        }
         when (playerPreference) {
             PlayerPreference.INTERNAL -> {
                 launchInternalPlayer(playbackInfo)
             }
             PlayerPreference.EXTERNAL -> {
-                if (playbackInfo.url != null || playbackInfo.isTorrent) {
+                if (playbackInfo.url != null) {
                     launchExternalPlayer(playbackInfo)
                 }
             }
@@ -210,18 +201,11 @@ fun StreamScreen(
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
             return
         }
-        // Always check P2P consent for torrents, even in direct auto-play flow
-        if (playbackInfo.isTorrent && !p2pEnabled) {
-            pendingTorrentPlaybackInfo = playbackInfo
-            showP2pConsentDialog = true
-            return
-        }
         if (uiState.isDirectAutoPlayFlow) {
             // Respect player preference even in direct autoplay flow
             when (playerPreference) {
                 PlayerPreference.EXTERNAL -> {
-                    val url = playbackInfo.url ?: if (playbackInfo.isTorrent) "torrent://${playbackInfo.infoHash}" else null
-                    url?.let { urlString ->
+                    playbackInfo.url?.let { urlString ->
                         scope.coroutineLaunch {
                             viewModel.launchExternalPlayer(
                                 playbackInfo = playbackInfo,
@@ -271,11 +255,13 @@ fun StreamScreen(
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
             return@LaunchedEffect
         }
-        // Torrent streams have url == null but carry an infoHash; navigation
-        // builds a torrent:// sentinel URL downstream.
-        if (playbackInfo.url != null || (playbackInfo.isTorrent && playbackInfo.infoHash != null)) {
+        if (playbackInfo.url != null) {
             viewModel.awaitStreamLinkCacheSave()
             routeAutoPlay(playbackInfo)
+        } else {
+            // URL-less stream (e.g. unresolved torrent) — not playable; fall back
+            // to the manual stream list.
+            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
         }
     }
 
@@ -313,18 +299,11 @@ fun StreamScreen(
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
             return@LaunchedEffect
         }
-        if (playbackInfo.url != null || (playbackInfo.isTorrent && playbackInfo.infoHash != null)) {
-            // Torrent cached links still need P2P consent
-            if (playbackInfo.isTorrent && !p2pEnabled) {
-                pendingTorrentPlaybackInfo = playbackInfo
-                showP2pConsentDialog = true
-                return@LaunchedEffect
-            }
+        if (playbackInfo.url != null) {
             // Respect player preference for cached links too
             when (playerPreference) {
                 PlayerPreference.EXTERNAL -> {
-                    val url = playbackInfo.url ?: if (playbackInfo.isTorrent) "torrent://${playbackInfo.infoHash}" else null
-                    url?.let { urlString ->
+                    playbackInfo.url?.let { urlString ->
                         Log.d("StreamScreen", "autoPlayPlaybackInfo EXTERNAL: launching player, will pop after 800ms")
                         viewModel.launchExternalPlayer(
                             playbackInfo = playbackInfo,
@@ -501,7 +480,7 @@ fun StreamScreen(
                 onExternalSelected = {
                     showPlayerChoiceDialog = false
                     pendingPlaybackInfo?.let { info ->
-                        if (info.url != null || info.isTorrent) {
+                        if (info.url != null) {
                             launchExternalPlayer(info)
                         }
                     }
@@ -510,24 +489,6 @@ fun StreamScreen(
                 onDismiss = {
                     showPlayerChoiceDialog = false
                     pendingPlaybackInfo = null
-                }
-            )
-        }
-
-        if (showP2pConsentDialog && pendingTorrentPlaybackInfo != null) {
-            P2pConsentDialog(
-                onEnableP2p = {
-                    viewModel.enableP2p()
-                    showP2pConsentDialog = false
-                    val info = pendingTorrentPlaybackInfo!!
-                    pendingTorrentPlaybackInfo = null
-                    routePlayback(info)
-                },
-                onDismiss = {
-                    showP2pConsentDialog = false
-                    pendingTorrentPlaybackInfo = null
-                    // Cancelled P2P consent — fall back to manual stream selection
-                    viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
                 }
             )
         }

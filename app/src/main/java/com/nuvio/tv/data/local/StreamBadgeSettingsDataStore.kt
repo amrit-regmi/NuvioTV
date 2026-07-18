@@ -56,10 +56,10 @@ class StreamBadgeSettingsDataStore @Inject constructor(
         factory.get(pid, FEATURE).data.onStart { migrateProfile(pid) }
     }.map { prefs ->
         StreamBadgeSettings(
-            rules = parseStreamBadgeRules(prefs[streamBadgeRulesKey]) ?: StreamBadgeRules(),
-            showFileSizeBadges = prefs[showFileSizeBadgesKey] ?: true,
-            showAddonLogo = prefs[showAddonLogoKey] ?: true,
-            badgePlacement = prefs[streamBadgePlacementKey].toStreamBadgePlacement()
+            rules = parseStreamBadgeRules(prefs.safe(streamBadgeRulesKey)) ?: StreamBadgeRules(),
+            showFileSizeBadges = prefs.safe(showFileSizeBadgesKey) ?: true,
+            showAddonLogo = prefs.safe(showAddonLogoKey) ?: true,
+            badgePlacement = prefs.safe(streamBadgePlacementKey).toStreamBadgePlacement()
         )
     }
 
@@ -102,11 +102,11 @@ class StreamBadgeSettingsDataStore @Inject constructor(
 
     private suspend fun migrateProfile(profileId: Int) {
         val currentPrefs = store(profileId).data.first()
-        if (currentPrefs[streamBadgeRulesKey] != null) return
+        if (currentPrefs.safe(streamBadgeRulesKey) != null) return
         val legacyPrefs = legacyDebridStore(profileId).data.first()
-        val legacyRules = parseStreamBadgeRules(legacyPrefs[legacyDebridStreamBadgeRulesKey]) ?: return
+        val legacyRules = parseStreamBadgeRules(legacyPrefs.safe(legacyDebridStreamBadgeRulesKey)) ?: return
         store(profileId).edit {
-            if (it[streamBadgeRulesKey] == null) {
+            if (it.safe(streamBadgeRulesKey) == null) {
                 it[streamBadgeRulesKey] = json.encodeToString(legacyRules.normalized())
             }
         }

@@ -82,7 +82,6 @@ import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.StreamStatus
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.NextToWatch
-import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -565,11 +564,6 @@ fun HeroContentSection(
                         Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
                     }
 
-                    if (mdbListRatings?.isEmpty() == false) {
-                        MDBListRatingsRow(ratings = mdbListRatings)
-                        Spacer(modifier = Modifier.height(14.dp))
-                    }
-
                     // Always show series/movie description, not episode description
                     if (meta.description != null) {
                         Text(
@@ -583,11 +577,27 @@ fun HeroContentSection(
                         )
                     }
 
+                    // Unify ALL ratings into one place, deduping imdb: fold the inline
+                    // meta.imdbRating into the aggregated (/catalog-addon/ratings) set,
+                    // preferring the aggregated imdb value when present. MetaInfoRow decides
+                    // placement — a SINGLE rating stays inline on the genre/year row; TWO OR
+                    // MORE ratings get their own row directly below the genre/year row.
+                    val unifiedRatings = remember(mdbListRatings, meta.imdbRating, hideMetaInfoImdb) {
+                        val base = mdbListRatings ?: MDBListRatings()
+                        val metaImdb = if (hideMetaInfoImdb) null else meta.imdbRating?.toDouble()
+                        val merged = if (base.imdb == null && metaImdb != null) {
+                            base.copy(imdb = metaImdb)
+                        } else {
+                            base
+                        }
+                        merged.takeIf { !it.isEmpty() }
+                    }
+
                     MetaInfoRow(
                         meta = meta,
-                        hideImdbRating = hideMetaInfoImdb,
                         showFullReleaseDate = showFullReleaseDate,
-                        tmdbRating = tmdbRating
+                        tmdbRating = tmdbRating,
+                        ratings = unifiedRatings
                     )
                 }
             }
@@ -844,9 +854,9 @@ private fun ActionIconButton(
 @Composable
 private fun MetaInfoRow(
     meta: Meta,
-    hideImdbRating: Boolean,
     showFullReleaseDate: Boolean = true,
-    tmdbRating: Float? = null
+    tmdbRating: Float? = null,
+    ratings: MDBListRatings? = null
 ) {
     val context = LocalContext.current
     val genresText = remember(meta.genres) { meta.genres.joinToString(" • ") }
@@ -861,9 +871,13 @@ private fun MetaInfoRow(
             formatYearRange(meta.releaseInfo)
         }
     }
-    val imdbRating = if (hideImdbRating) null else meta.imdbRating
-    val shouldShowImdbRating = imdbRating != null
-    val shouldShowTmdbRating = tmdbRating != null
+    // Unified ratings. When there is a SINGLE rating total it renders inline on the
+    // genre/year row; when there are TWO OR MORE it renders on its OWN row below.
+    val ratingCount = remember(ratings) { ratings?.count() ?: 0 }
+    val showRatingsInline = ratingCount == 1
+    val showRatingsOwnRow = ratingCount >= 2
+    // tmdb badge is only a fallback when there are no aggregated/meta ratings at all.
+    val shouldShowTmdbRating = tmdbRating != null && ratingCount == 0
     val tmdbModel = remember(context) {
         ImageRequest.Builder(context)
             .data(com.nuvio.tv.R.raw.mdblist_tmdb)
@@ -918,7 +932,7 @@ private fun MetaInfoRow(
                     style = MaterialTheme.typography.labelLarge,
                     color = NuvioTheme.extendedColors.textSecondary
                 )
-                if (yearText != null || shouldShowImdbRating || shouldShowTmdbRating) {
+                if (yearText != null || showRatingsInline || shouldShowTmdbRating) {
                     MetaInfoDivider()
                 }
             }
@@ -929,31 +943,17 @@ private fun MetaInfoRow(
                     style = MaterialTheme.typography.labelLarge,
                     color = NuvioTheme.extendedColors.textSecondary
                 )
-                if (shouldShowImdbRating || shouldShowTmdbRating) {
+                if (showRatingsInline || shouldShowTmdbRating) {
                     MetaInfoDivider()
                 }
             }
 
-            imdbRating?.let { rating ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)
-                ) {
-                    ImdbRatingSourceLabel(
-                        logoModifier = Modifier.size(30.dp),
-                        textStyle = MaterialTheme.typography.labelLarge,
-                        textColor = NuvioTheme.extendedColors.textSecondary
-                    )
-                    val ratingText = remember(rating) { String.format("%.1f", rating) }
-                    Text(
-                        text = ratingText,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = NuvioTheme.extendedColors.textSecondary
-                    )
-                }
+            // Single rating → inline on the genre/year row.
+            if (showRatingsInline && ratings != null) {
+                MDBListRatingsRow(ratings = ratings)
             }
 
-            tmdbRating?.let { rating ->
+            if (shouldShowTmdbRating) tmdbRating?.let { rating ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)
@@ -972,6 +972,11 @@ private fun MetaInfoRow(
                     )
                 }
             }
+        }
+
+        // Two or more ratings → their OWN row, directly below the genre/year row.
+        if (showRatingsOwnRow && ratings != null) {
+            MDBListRatingsRow(ratings = ratings)
         }
 
         // Secondary row: Runtime, Age Rating, Status, Country, Language

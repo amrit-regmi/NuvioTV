@@ -1,6 +1,5 @@
 package com.nuvio.tv.core.debrid
 
-import com.nuvio.tv.data.remote.dto.RealDebridTorrentFileDto
 import com.nuvio.tv.data.remote.dto.TorboxTorrentFileDto
 import com.nuvio.tv.domain.model.StreamClientResolve
 import org.junit.Assert.assertEquals
@@ -75,23 +74,6 @@ class DebridFileSelectorParityTest {
         )
 
         assertEquals(85, selected?.id)
-    }
-
-    @Test
-    fun `real debrid selector matches episode pattern before largest file`() {
-        val files = listOf(
-            RealDebridTorrentFileDto(id = 1, path = "/Show.S01E01.mkv", bytes = 1_000),
-            RealDebridTorrentFileDto(id = 2, path = "/Show.S01E02.mkv", bytes = 2_000)
-        )
-
-        val selected = RealDebridFileSelector().selectFile(
-            files = files,
-            resolve = resolve(season = 1, episode = 1),
-            season = null,
-            episode = null
-        )
-
-        assertEquals(1, selected?.id)
     }
 
     private fun torboxFile(id: Int, name: String, size: Long): TorboxTorrentFileDto =

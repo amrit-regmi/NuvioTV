@@ -704,6 +704,8 @@ private fun Stream.resolvedUrlCacheKey(): String? {
         resolve.service.orEmpty().lowercase(),
         resolve.infoHash.orEmpty().lowercase(),
         resolve.fileIdx?.toString().orEmpty(),
-        resolve.torrentId?.toString().orEmpty()
+        resolve.torrentId?.toString().orEmpty(),
+        resolve.season?.toString().orEmpty(),
+        resolve.episode?.toString().orEmpty()
     ).joinToString("|")
 }

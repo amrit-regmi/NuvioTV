@@ -96,7 +96,7 @@ class LayoutPreferenceDataStore @Inject constructor(
         }
 
     val selectedLayout: Flow<HomeLayout> = profileFlow { prefs ->
-        val layoutName = prefs[layoutKey] ?: HomeLayout.MODERN.name
+        val layoutName = prefs.safe(layoutKey) ?: HomeLayout.MODERN.name
         try {
             HomeLayout.valueOf(layoutName)
         } catch (e: IllegalArgumentException) {
@@ -105,15 +105,15 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val hasChosenLayout: Flow<Boolean> = profileFlow { prefs ->
-        prefs[hasChosenKey] ?: false
+        prefs.safe(hasChosenKey) ?: false
     }
 
     val heroCatalogSelections: Flow<List<String>> = profileFlow { prefs ->
-        val multiSelection = parseCatalogKeys(prefs[heroCatalogKeysKey])
+        val multiSelection = parseCatalogKeys(prefs.safe(heroCatalogKeysKey))
         if (multiSelection.isNotEmpty()) {
             multiSelection
         } else {
-            prefs[heroCatalogKey]
+            prefs.safe(heroCatalogKey)
                 ?.trim()
                 ?.takeIf { it.isNotEmpty() }
                 ?.let(::listOf)
@@ -130,7 +130,7 @@ class LayoutPreferenceDataStore @Inject constructor(
         val usePrimary = profile != null && !profile.isPrimary && profile.usesPrimaryAddons
         val effectivePid = if (usePrimary) 1 else pid
         factory.get(effectivePid, FEATURE).data.map { prefs ->
-            parseCatalogKeys(prefs[homeCatalogOrderKeysKey])
+            parseCatalogKeys(prefs.safe(homeCatalogOrderKeysKey))
         }
     }
 
@@ -139,12 +139,12 @@ class LayoutPreferenceDataStore @Inject constructor(
         val usePrimary = profile != null && !profile.isPrimary && profile.usesPrimaryAddons
         val effectivePid = if (usePrimary) 1 else pid
         factory.get(effectivePid, FEATURE).data.map { prefs ->
-            parseCatalogKeys(prefs[disabledHomeCatalogKeysKey])
+            parseCatalogKeys(prefs.safe(disabledHomeCatalogKeysKey))
         }
     }
 
     val recoRowDescriptors: Flow<List<RecoRowDescriptor>> = profileFlow { prefs ->
-        parseRecoDescriptors(prefs[recoRowDescriptorsJsonKey])
+        parseRecoDescriptors(prefs.safe(recoRowDescriptorsJsonKey))
     }
 
     val customCatalogTitles: Flow<Map<String, String>> = profileManager.activeProfileId.flatMapLatest { pid ->
@@ -152,50 +152,50 @@ class LayoutPreferenceDataStore @Inject constructor(
         val usePrimary = profile != null && !profile.isPrimary && profile.usesPrimaryAddons
         val effectivePid = if (usePrimary) 1 else pid
         factory.get(effectivePid, FEATURE).data.map { prefs ->
-            parseCustomTitles(prefs[customCatalogTitlesKey])
+            parseCustomTitles(prefs.safe(customCatalogTitlesKey))
         }
     }
 
     val sidebarCollapsedByDefault: Flow<Boolean> = profileFlow { prefs ->
         val modernSidebarEnabled =
-            prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
+            prefs.safe(modernSidebarEnabledKey) ?: prefs.safe(legacyModernSidebarEnabledKey) ?: false
         if (modernSidebarEnabled) {
             false
         } else {
-            prefs[sidebarCollapsedKey] ?: false
+            prefs.safe(sidebarCollapsedKey) ?: false
         }
     }
 
     val modernSidebarEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
+        prefs.safe(modernSidebarEnabledKey) ?: prefs.safe(legacyModernSidebarEnabledKey) ?: false
     }
 
     val modernSidebarBlurEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[modernSidebarBlurEnabledKey] ?: false
+        prefs.safe(modernSidebarBlurEnabledKey) ?: false
     }
 
     val modernLandscapePostersEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[modernLandscapePostersEnabledKey] ?: false
+        prefs.safe(modernLandscapePostersEnabledKey) ?: false
     }
 
     val modernHeroFullScreenBackdropEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[modernHeroFullScreenBackdropKey] ?: false
+        prefs.safe(modernHeroFullScreenBackdropKey) ?: false
     }
 
     val heroSectionEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[heroSectionEnabledKey] ?: true
+        prefs.safe(heroSectionEnabledKey) ?: true
     }
 
     val discoverLocation: Flow<DiscoverLocation> = profileFlow { prefs ->
-        val stored = prefs[discoverLocationKey] ?: DiscoverLocation.IN_SEARCH.name
+        val stored = prefs.safe(discoverLocationKey) ?: DiscoverLocation.IN_SEARCH.name
         runCatching { DiscoverLocation.valueOf(stored) }
             .getOrDefault(DiscoverLocation.IN_SEARCH)
     }
 
     val lastNonOffDiscoverLocation: Flow<DiscoverLocation> = profileFlow { prefs ->
-        val stored = prefs[lastNonOffDiscoverLocationKey]
+        val stored = prefs.safe(lastNonOffDiscoverLocationKey)
             ?.takeIf { it != DiscoverLocation.OFF.name }
-        val fallback = prefs[discoverLocationKey]
+        val fallback = prefs.safe(discoverLocationKey)
             ?.takeIf { it != DiscoverLocation.OFF.name }
         val source = stored ?: fallback ?: DiscoverLocation.IN_SEARCH.name
         runCatching { DiscoverLocation.valueOf(source) }
@@ -203,119 +203,119 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val posterLabelsEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[posterLabelsEnabledKey] ?: true
+        prefs.safe(posterLabelsEnabledKey) ?: true
     }
 
     val catalogAddonNameEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[catalogAddonNameEnabledKey] ?: true
+        prefs.safe(catalogAddonNameEnabledKey) ?: true
     }
 
     val catalogTypeSuffixEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[catalogTypeSuffixEnabledKey] ?: true
+        prefs.safe(catalogTypeSuffixEnabledKey) ?: true
     }
 
     val classicFocusGradientEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[classicFocusGradientEnabledKey] ?: false
+        prefs.safe(classicFocusGradientEnabledKey) ?: false
     }
 
     val focusedPosterBackdropExpandEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[focusedPosterBackdropExpandEnabledKey] ?: true
+        prefs.safe(focusedPosterBackdropExpandEnabledKey) ?: true
     }
 
     val focusedPosterBackdropExpandDelaySeconds: Flow<Int> = profileFlow { prefs ->
-        (prefs[focusedPosterBackdropExpandDelaySecondsKey]
+        (prefs.safe(focusedPosterBackdropExpandDelaySecondsKey)
             ?: DEFAULT_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS)
             .coerceAtLeast(MIN_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS)
     }
 
     val focusedPosterBackdropTrailerEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[focusedPosterBackdropTrailerEnabledKey] ?: false
+        prefs.safe(focusedPosterBackdropTrailerEnabledKey) ?: false
     }
 
     val focusedPosterBackdropTrailerMuted: Flow<Boolean> = profileFlow { prefs ->
-        prefs[focusedPosterBackdropTrailerMutedKey] ?: true
+        prefs.safe(focusedPosterBackdropTrailerMutedKey) ?: true
     }
 
     val focusedPosterBackdropTrailerPlaybackTarget: Flow<FocusedPosterTrailerPlaybackTarget> =
         profileFlow { prefs ->
-            val stored = prefs[focusedPosterBackdropTrailerPlaybackTargetKey]
+            val stored = prefs.safe(focusedPosterBackdropTrailerPlaybackTargetKey)
                 ?: FocusedPosterTrailerPlaybackTarget.HERO_MEDIA.name
             runCatching { FocusedPosterTrailerPlaybackTarget.valueOf(stored) }
                 .getOrDefault(FocusedPosterTrailerPlaybackTarget.HERO_MEDIA)
         }
 
     val posterCardWidthDp: Flow<Int> = profileFlow { prefs ->
-        prefs[posterCardWidthDpKey] ?: DEFAULT_POSTER_CARD_WIDTH_DP
+        prefs.safe(posterCardWidthDpKey) ?: DEFAULT_POSTER_CARD_WIDTH_DP
     }
 
     val posterCardHeightDp: Flow<Int> = profileFlow { prefs ->
-        prefs[posterCardHeightDpKey] ?: DEFAULT_POSTER_CARD_HEIGHT_DP
+        prefs.safe(posterCardHeightDpKey) ?: DEFAULT_POSTER_CARD_HEIGHT_DP
     }
 
     val posterCardCornerRadiusDp: Flow<Int> = profileFlow { prefs ->
-        prefs[posterCardCornerRadiusDpKey] ?: DEFAULT_POSTER_CARD_CORNER_RADIUS_DP
+        prefs.safe(posterCardCornerRadiusDpKey) ?: DEFAULT_POSTER_CARD_CORNER_RADIUS_DP
     }
 
     val blurUnwatchedEpisodes: Flow<Boolean> = profileFlow { prefs ->
-        prefs[blurUnwatchedEpisodesKey] ?: false
+        prefs.safe(blurUnwatchedEpisodesKey) ?: false
     }
 
     val useEpisodeThumbnailsInCw: Flow<Boolean> = profileFlow { prefs ->
-        prefs[useEpisodeThumbnailsInCwKey] ?: true
+        prefs.safe(useEpisodeThumbnailsInCwKey) ?: true
     }
 
     val showUnairedNextUp: Flow<Boolean> = profileFlow { prefs ->
-        prefs[showUnairedNextUpKey] ?: true
+        prefs.safe(showUnairedNextUpKey) ?: true
     }
 
     val nextUpFromFurthestEpisode: Flow<Boolean> = profileFlow { prefs ->
-        prefs[nextUpFromFurthestEpisodeKey] ?: true
+        prefs.safe(nextUpFromFurthestEpisodeKey) ?: true
     }
 
     val blurContinueWatchingNextUp: Flow<Boolean> = profileFlow { prefs ->
-        prefs[blurContinueWatchingNextUpKey] ?: false
+        prefs.safe(blurContinueWatchingNextUpKey) ?: false
     }
 
     val continueWatchingSortMode: Flow<ContinueWatchingSortMode> = profileFlow { prefs ->
-        val stored = prefs[continueWatchingSortModeKey] ?: ContinueWatchingSortMode.DEFAULT.name
+        val stored = prefs.safe(continueWatchingSortModeKey) ?: ContinueWatchingSortMode.DEFAULT.name
         runCatching { ContinueWatchingSortMode.valueOf(stored) }
             .getOrDefault(ContinueWatchingSortMode.DEFAULT)
     }
 
     val detailPageTrailerButtonEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[detailPageTrailerButtonEnabledKey] ?: true
+        prefs.safe(detailPageTrailerButtonEnabledKey) ?: true
     }
 
     val preferExternalMetaAddonDetail: Flow<Boolean> = profileFlow { prefs ->
-        prefs[preferExternalMetaAddonDetailKey] ?: (BuildConfig.RECO_MODE != "private")
+        prefs.safe(preferExternalMetaAddonDetailKey) ?: (BuildConfig.RECO_MODE != "private")
     }
 
     val hideUnreleasedContent: Flow<Boolean> = profileFlow { prefs ->
-        prefs[hideUnreleasedContentKey] ?: false
+        prefs.safe(hideUnreleasedContentKey) ?: false
     }
 
     val showFullReleaseDate: Flow<Boolean> = profileFlow { prefs ->
-        prefs[showFullReleaseDateKey] ?: true
+        prefs.safe(showFullReleaseDateKey) ?: true
     }
 
     val memoryOnlyVerticalScroll: Flow<Boolean> = profileFlow { prefs ->
-        prefs[memoryOnlyVerticalScrollKey] ?: true
+        prefs.safe(memoryOnlyVerticalScrollKey) ?: true
     }
 
     val smoothBringIntoViewEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[smoothBringIntoViewEnabledKey] ?: true
+        prefs.safe(smoothBringIntoViewEnabledKey) ?: true
     }
 
     val fastHorizontalNavigationEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[fastHorizontalNavigationEnabledKey] ?: false
+        prefs.safe(fastHorizontalNavigationEnabledKey) ?: false
     }
 
     val followAddonsOrder: Flow<Boolean> = profileFlow { prefs ->
-        prefs[followAddonsOrderKey] ?: false
+        prefs.safe(followAddonsOrderKey) ?: false
     }
 
     val composeHighlighterEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[composeHighlighterEnabledKey] ?: false
+        prefs.safe(composeHighlighterEnabledKey) ?: false
     }
 
     suspend fun setMemoryOnlyVerticalScroll(enabled: Boolean) {
@@ -350,12 +350,12 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     suspend fun setLayout(layout: HomeLayout) {
         store().edit { prefs ->
-            val hadChosenLayout = prefs[hasChosenKey] ?: false
+            val hadChosenLayout = prefs.safe(hasChosenKey) ?: false
             prefs[layoutKey] = layout.name
             if (
                 layout == HomeLayout.MODERN &&
                 !hadChosenLayout &&
-                prefs[focusedPosterBackdropTrailerPlaybackTargetKey] == null
+                prefs.safe(focusedPosterBackdropTrailerPlaybackTargetKey) == null
             ) {
                 prefs[focusedPosterBackdropTrailerPlaybackTargetKey] =
                     FocusedPosterTrailerPlaybackTarget.HERO_MEDIA.name
@@ -416,7 +416,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setSidebarCollapsedByDefault(collapsed: Boolean) {
         store().edit { prefs ->
             val modernSidebarEnabled =
-                prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
+                prefs.safe(modernSidebarEnabledKey) ?: prefs.safe(legacyModernSidebarEnabledKey) ?: false
             prefs[sidebarCollapsedKey] = if (modernSidebarEnabled) false else collapsed
         }
     }
@@ -710,10 +710,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     private fun readHomeCatalogSettingsState(prefs: Preferences): LocalHomeCatalogSettingsState {
         return LocalHomeCatalogSettingsState(
-            orderKeys = parseCatalogKeys(prefs[homeCatalogOrderKeysKey]),
-            disabledKeys = parseCatalogKeys(prefs[disabledHomeCatalogKeysKey]).toSet(),
-            customTitles = parseCustomTitles(prefs[customCatalogTitlesKey]),
-            hideUnreleasedContent = prefs[hideUnreleasedContentKey] ?: false
+            orderKeys = parseCatalogKeys(prefs.safe(homeCatalogOrderKeysKey)),
+            disabledKeys = parseCatalogKeys(prefs.safe(disabledHomeCatalogKeysKey)).toSet(),
+            customTitles = parseCustomTitles(prefs.safe(customCatalogTitlesKey)),
+            hideUnreleasedContent = prefs.safe(hideUnreleasedContentKey) ?: false
         )
     }
 }

@@ -4,10 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
-import com.nuvio.tv.core.debrid.DebridDeviceAuthorization
-import com.nuvio.tv.core.debrid.DebridDeviceAuthorizationTokenResult
 import com.nuvio.tv.core.debrid.DebridProviderCapability
 import com.nuvio.tv.core.debrid.DebridProviders
 import com.nuvio.tv.core.debrid.supports
@@ -20,11 +17,6 @@ import com.nuvio.tv.data.local.DeviceProfileDataStore
 import com.nuvio.tv.data.remote.api.CatalogAddonApi
 import com.nuvio.tv.data.remote.api.DeviceProfileDto
 import com.nuvio.tv.data.remote.api.DeviceProfileUpdateDto
-import com.nuvio.tv.data.remote.dto.PremiumizeDeviceTokenDto
-import com.nuvio.tv.data.remote.dto.TorboxDeviceTokenDto
-import com.nuvio.tv.data.remote.dto.TorboxDeviceTokenRequestDto
-import com.nuvio.tv.data.remote.dto.TorboxEnvelopeDto
-import com.nuvio.tv.data.remote.api.PremiumizeApi
 import com.nuvio.tv.data.remote.api.TorboxApi
 import com.nuvio.tv.domain.model.DEBRID_PREPARE_INSTANT_PLAYBACK_DEFAULT_LIMIT
 import com.nuvio.tv.domain.model.DebridSettings
@@ -51,7 +43,6 @@ class DebridSettingsViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val dataStore: DebridSettingsDataStore,
     private val torboxApi: TorboxApi,
-    private val premiumizeApi: PremiumizeApi,
     private val deviceProfileDataStore: DeviceProfileDataStore,
     private val catalogAddonApi: CatalogAddonApi
 ) : ViewModel() {
@@ -349,133 +340,10 @@ class DebridSettingsViewModel @Inject constructor(
                     response.errorBody()?.close()
                     response.isSuccessful
                 }
-                DebridProviders.PREMIUMIZE_ID -> {
-                    val response = premiumizeApi.accountInfo("Bearer $apiKey")
-                    response.errorBody()?.close()
-                    response.isSuccessful && !response.body()?.status.equals("error", ignoreCase = true)
-                }
                 else -> false
             }
         } catch (error: Exception) {
             false
-        }
-    }
-
-    suspend fun startDeviceAuthorization(providerId: String): DebridDeviceAuthorization? {
-        return when (DebridProviders.byId(providerId)?.id) {
-            DebridProviders.TORBOX_ID -> {
-                val response = torboxApi.startDeviceAuthorization("Nuvio")
-                val data = response.body()?.takeIf { response.isSuccessful && it.success != false }?.data
-                    ?: return null
-                val deviceCode = data.deviceCode?.takeIf { it.isNotBlank() } ?: return null
-                val userCode = data.code?.takeIf { it.isNotBlank() } ?: return null
-                val verificationUrl = data.verificationUrl?.takeIf { it.isNotBlank() } ?: return null
-                DebridDeviceAuthorization(
-                    providerId = DebridProviders.TORBOX_ID,
-                    deviceCode = deviceCode,
-                    userCode = userCode,
-                    verificationUrl = verificationUrl,
-                    friendlyVerificationUrl = data.friendlyVerificationUrl?.takeIf { it.isNotBlank() } ?: verificationUrl,
-                    intervalSeconds = data.interval?.coerceAtLeast(1) ?: 5,
-                    expiresAt = data.expiresAt?.takeIf { it.isNotBlank() }
-                )
-            }
-            DebridProviders.PREMIUMIZE_ID -> {
-                val clientId = premiumizeClientIdOrThrow()
-                val response = premiumizeApi.startDeviceAuthorization(clientId = clientId)
-                val data = response.body()?.takeIf { response.isSuccessful } ?: return null
-                val deviceCode = data.deviceCode?.takeIf { it.isNotBlank() } ?: return null
-                val userCode = data.userCode?.takeIf { it.isNotBlank() } ?: return null
-                val verificationUrl = data.verificationUri?.takeIf { it.isNotBlank() } ?: return null
-                DebridDeviceAuthorization(
-                    providerId = DebridProviders.PREMIUMIZE_ID,
-                    deviceCode = deviceCode,
-                    userCode = userCode,
-                    verificationUrl = verificationUrl,
-                    friendlyVerificationUrl = data.verificationUriComplete?.takeIf { it.isNotBlank() } ?: verificationUrl,
-                    intervalSeconds = data.interval?.coerceAtLeast(1) ?: 5,
-                    expiresAt = data.expiresIn?.takeIf { it > 0 }?.let { "${it}s" }
-                )
-            }
-            else -> null
-        }
-    }
-
-    suspend fun redeemDeviceAuthorization(providerId: String, deviceCode: String): DebridDeviceAuthorizationTokenResult {
-        val normalized = deviceCode.trim()
-        if (normalized.isBlank()) return DebridDeviceAuthorizationTokenResult.Failed(null)
-        return when (DebridProviders.byId(providerId)?.id) {
-            DebridProviders.TORBOX_ID -> {
-                val response = torboxApi.redeemDeviceAuthorization(TorboxDeviceTokenRequestDto(normalized))
-                torboxDeviceAuthorizationTokenResult(response)
-            }
-            DebridProviders.PREMIUMIZE_ID -> {
-                val clientId = premiumizeClientIdOrThrow()
-                val response = premiumizeApi.redeemDeviceAuthorization(
-                    deviceCode = normalized,
-                    clientId = clientId
-                )
-                premiumizeDeviceAuthorizationTokenResult(response)
-            }
-            else -> DebridDeviceAuthorizationTokenResult.Unsupported
-        }
-    }
-
-    private fun premiumizeClientIdOrThrow(): String =
-        BuildConfig.PREMIUMIZE_CLIENT_ID.trim().takeIf { it.isNotBlank() }
-            ?: throw IllegalStateException("Premiumize sign-in is missing PREMIUMIZE_CLIENT_ID.")
-
-    private fun torboxDeviceAuthorizationTokenResult(
-        response: retrofit2.Response<TorboxEnvelopeDto<TorboxDeviceTokenDto>>
-    ): DebridDeviceAuthorizationTokenResult {
-        val envelope = response.body()
-        val accessToken = envelope
-            ?.takeIf { response.isSuccessful && it.success != false }
-            ?.data
-            ?.accessToken
-            ?.takeIf { it.isNotBlank() }
-        if (accessToken != null) {
-            return DebridDeviceAuthorizationTokenResult.Authorized(accessToken)
-        }
-        val message = listOfNotNull(envelope?.error, envelope?.detail, response.errorBody()?.string())
-            .joinToString(" ")
-            .lowercase()
-        return when {
-            message.contains("pending") ||
-                message.contains("not authorized") ||
-                message.contains("not been used") ||
-                message.contains("not used yet") ||
-                message.contains("scan the code") ->
-                DebridDeviceAuthorizationTokenResult.Pending
-            message.contains("expired") ->
-                DebridDeviceAuthorizationTokenResult.Expired
-            response.code() == 404 || response.code() == 409 || response.code() == 425 ->
-                DebridDeviceAuthorizationTokenResult.Pending
-            response.code() == 410 ->
-                DebridDeviceAuthorizationTokenResult.Expired
-            else ->
-                DebridDeviceAuthorizationTokenResult.Failed(envelope?.detail ?: envelope?.error)
-        }
-    }
-
-    private fun premiumizeDeviceAuthorizationTokenResult(
-        response: retrofit2.Response<PremiumizeDeviceTokenDto>
-    ): DebridDeviceAuthorizationTokenResult {
-        val body = response.body()
-        body?.accessToken?.takeIf { response.isSuccessful && it.isNotBlank() }?.let { accessToken ->
-            return DebridDeviceAuthorizationTokenResult.Authorized(accessToken)
-        }
-        return when (body?.error?.lowercase()) {
-            "authorization_pending", "slow_down" -> DebridDeviceAuthorizationTokenResult.Pending
-            "invalid_grant", "expired_token" -> DebridDeviceAuthorizationTokenResult.Expired
-            "access_denied" -> DebridDeviceAuthorizationTokenResult.Failed(body.errorDescription)
-            else -> {
-                if (response.code() == 400 && body?.error.isNullOrBlank()) {
-                    DebridDeviceAuthorizationTokenResult.Pending
-                } else {
-                    DebridDeviceAuthorizationTokenResult.Failed(body?.errorDescription ?: body?.error ?: response.errorBody()?.string())
-                }
-            }
         }
     }
 

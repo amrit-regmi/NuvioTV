@@ -83,14 +83,40 @@ val useLocalFfmpegDecoder = truthy(
         ?: env("USE_LOCAL_FFMPEG_DECODER")
         ?: localProperties.getProperty("USE_LOCAL_FFMPEG_DECODER")
 )
+// Release signing material comes ONLY from env vars or local.properties.
+// There are intentionally NO baked fallback values: a missing key fails the
+// signed release build (see the fail-fast check below) instead of silently
+// signing with a hardcoded password.
 val releaseStoreFilePath = env("NUVIO_RELEASE_STORE_FILE")
     ?: localProperties.getProperty("NUVIO_RELEASE_STORE_FILE")
 val releaseKeyAliasValue = env("NUVIO_RELEASE_KEY_ALIAS")
-    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS", "nuviotv")
+    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS")
 val releaseKeyPasswordValue = env("NUVIO_RELEASE_KEY_PASSWORD")
-    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD", "815787")
+    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD")
 val releaseStorePasswordValue = env("NUVIO_RELEASE_STORE_PASSWORD")
-    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "815787")
+    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD")
+
+val missingReleaseSigningKeys = buildList {
+    if (releaseKeyAliasValue.isNullOrBlank()) add("NUVIO_RELEASE_KEY_ALIAS")
+    if (releaseKeyPasswordValue.isNullOrBlank()) add("NUVIO_RELEASE_KEY_PASSWORD")
+    if (releaseStorePasswordValue.isNullOrBlank()) add("NUVIO_RELEASE_STORE_PASSWORD")
+}
+// Fail fast when a signed release/bundle is requested without complete signing
+// material. CI_USE_DEBUG_SIGNING=true (beta/dry-run builds) legitimately skips
+// the release keystore, so it is exempt.
+if (missingReleaseSigningKeys.isNotEmpty() && !useDebugReleaseSigning) {
+    val requestsSignedRelease = gradle.startParameter.taskNames.any { taskName ->
+        taskName.contains("Release", ignoreCase = true) ||
+            taskName.contains("bundle", ignoreCase = true)
+    }
+    if (requestsSignedRelease) {
+        throw GradleException(
+            "Missing release signing configuration: ${missingReleaseSigningKeys.joinToString()}. " +
+                "Provide these via environment variables or local.properties. " +
+                "Hardcoded fallbacks were removed and will not be restored."
+        )
+    }
+}
 
 android {
     namespace = "com.nuvio.tv"
@@ -100,8 +126,8 @@ android {
         applicationId = "com.nuvio.tv"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1035
-        versionName = "1.0.2"
+        versionCode = 1038
+        versionName = "1.0.5"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -130,7 +156,6 @@ android {
         buildConfigField("String", "DONATIONS_DONATE_URL", "\"${localProperties.getProperty("DONATIONS_DONATE_URL", "")}\"")
         buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", "")}\"")
         buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", "")}\"")
-        buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
         buildConfigField("String", "CATALOG_ADDON_BASE_URL", "\"${localProperties.getProperty("CATALOG_ADDON_BASE_URL", "")}\"")
         // CATALOG_SECRET removed (F72): catalog-addon authenticates via the Supabase user
         // Bearer (see NetworkModule). No code usages; not baked into the APK.
@@ -187,7 +212,10 @@ android {
             isMinifyEnabled = false
 
             buildConfigField("boolean", "IS_DEBUG_BUILD", "true")
-            buildConfigField("String", "SYNC_BACKEND_MANIFEST_URL", "\"${resolveProperty(devProperties, localProperties, "SYNC_BACKEND_MANIFEST_URL", "https://switch.nuvioapp.space/config.json")}\"")
+            // SECURITY: default is BLANK — a missing SYNC_BACKEND_MANIFEST_URL key must
+            // yield NotConfigured (SyncBackendConfig/Repository) so default builds fetch
+            // NOTHING from a third-party kill-switch host. Opt in explicitly via properties.
+            buildConfigField("String", "SYNC_BACKEND_MANIFEST_URL", "\"${resolveProperty(devProperties, localProperties, "SYNC_BACKEND_MANIFEST_URL", "")}\"")
 
             // Dev environment (from local.dev.properties)
             buildConfigField("String", "SUPABASE_URL", "\"${resolveProperty(devProperties, localProperties, "SUPABASE_URL")}\"")
@@ -205,7 +233,6 @@ android {
             buildConfigField("String", "DONATIONS_DONATE_URL", "\"${devProperties.getProperty("DONATIONS_DONATE_URL", localProperties.getProperty("DONATIONS_DONATE_URL", ""))}\"")
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${devProperties.getProperty("AVATAR_PUBLIC_BASE_URL", localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", ""))}\"")
             buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${devProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", ""))}\"")
-            buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${devProperties.getProperty("PREMIUMIZE_CLIENT_ID", localProperties.getProperty("PREMIUMIZE_CLIENT_ID", ""))}\"")
             buildConfigField("String", "CATALOG_ADDON_BASE_URL", "\"${devProperties.getProperty("CATALOG_ADDON_BASE_URL", localProperties.getProperty("CATALOG_ADDON_BASE_URL", ""))}\"")
             // CATALOG_SECRET removed (F72): catalog-addon uses Supabase user Bearer. Not baked.
             // F32: switch to hamrocinema.regmig.com at deploy — this is the SINGLE source of
@@ -242,7 +269,9 @@ android {
             }
 
             buildConfigField("boolean", "IS_DEBUG_BUILD", "false")
-            buildConfigField("String", "SYNC_BACKEND_MANIFEST_URL", "\"${localProperties.getProperty("SYNC_BACKEND_MANIFEST_URL", "https://switch.nuvioapp.space/config.json")}\"")
+            // SECURITY: default is BLANK — see the debug variant note. Missing key must
+            // never silently point releases at the third-party switch host.
+            buildConfigField("String", "SYNC_BACKEND_MANIFEST_URL", "\"${localProperties.getProperty("SYNC_BACKEND_MANIFEST_URL", "")?.trim() ?: ""}\"")
 
             // Production environment (from local.properties)
             buildConfigField("String", "SUPABASE_URL", "\"${resolveLocalProperty(localProperties, "SUPABASE_URL")}\"")
@@ -260,7 +289,6 @@ android {
             buildConfigField("String", "DONATIONS_DONATE_URL", "\"${localProperties.getProperty("DONATIONS_DONATE_URL", "")}\"")
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", "")}\"")
             buildConfigField("String", "UNIQUE_CONTRIBUTIONS_BASE_URL", "\"${localProperties.getProperty("UNIQUE_CONTRIBUTIONS_BASE_URL", "")}\"")
-            buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
             // F32: switch to hamrocinema.regmig.com at deploy — this is the SINGLE source of
             // truth for the reco/taste-engine host. All app code derives from BuildConfig.RECO_API_BASE_URL
             // (directly, or via com.nuvio.tv.core.reco.RecoBackend for host/catalog-addon matching).
@@ -314,6 +342,21 @@ android {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
         }
+    }
+
+    androidResources {
+        // English-only resources: drops the 30+ translated locale variants from
+        // the APK (the app UI is effectively English-only for this fork).
+        localeFilters += listOf("en")
+    }
+
+    lint {
+        // The audit batch deletes dead strings from the BASE values/strings.xml
+        // only; the ~30 locale copies are intentionally left untouched (and are
+        // excluded from the APK by the en-only localeFilters above). A translation
+        // without a default-locale entry trips the fatal ExtraTranslation check in
+        // lintVitalRelease, so disable that check explicitly.
+        disable += "ExtraTranslation"
     }
 
     packaging {
@@ -386,7 +429,6 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.profileinstaller)
-    implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation(composeBom)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
@@ -436,8 +478,6 @@ dependencies {
     // stock Maven.
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.exoplayer.dash)
-    implementation(libs.media3.exoplayer.smoothstreaming)
-    implementation(libs.media3.exoplayer.rtsp)
     implementation(libs.media3.datasource)
     implementation(libs.media3.datasource.okhttp)
     implementation(libs.media3.decoder)
@@ -445,6 +485,9 @@ dependencies {
     implementation(libs.media3.common)
     implementation(libs.media3.container)
     implementation(libs.media3.extractor)
+
+    // REQUIRED at runtime by the custom media3-ui prebuilt (PlayerView uses RecyclerView); local AARs carry no transitive deps — do not remove as "unused"
+    implementation("androidx.recyclerview:recyclerview:1.4.0")
 
     // Local AAR libraries from forked ExoPlayer (matching Just Player setup):
     // - lib-exoplayer-release.aar    — Custom forked ExoPlayer core (replaces media3-exoplayer)
@@ -491,8 +534,9 @@ dependencies {
         exclude(group = "info.debatty", module = "java-string-similarity")
     }
 
-    // Markdown rendering
-    implementation(libs.markdown.renderer.m3)
+    // Markdown rendering — used only by the full-flavor in-app updater UI
+    // (UpdatePromptDialog), so keep it out of the playstore flavor.
+    add("fullImplementation", libs.markdown.renderer.m3)
 
     add("fullImplementation", libs.crypto.js)
     // QR code + local server for addon management

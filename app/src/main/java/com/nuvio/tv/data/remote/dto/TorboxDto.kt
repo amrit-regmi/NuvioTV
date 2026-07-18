@@ -78,24 +78,3 @@ data class TorboxCachedItemDto(
     @Json(name = "size") val size: Long? = null,
     @Json(name = "hash") val hash: String? = null
 )
-
-@JsonClass(generateAdapter = true)
-data class TorboxDeviceAuthorizationDto(
-    @Json(name = "device_code") val deviceCode: String? = null,
-    @Json(name = "code") val code: String? = null,
-    @Json(name = "verification_url") val verificationUrl: String? = null,
-    @Json(name = "friendly_verification_url") val friendlyVerificationUrl: String? = null,
-    @Json(name = "interval") val interval: Int? = null,
-    @Json(name = "expires_at") val expiresAt: String? = null
-)
-
-@JsonClass(generateAdapter = true)
-data class TorboxDeviceTokenRequestDto(
-    @Json(name = "device_code") val deviceCode: String
-)
-
-@JsonClass(generateAdapter = true)
-data class TorboxDeviceTokenDto(
-    @Json(name = "access_token") val accessToken: String? = null,
-    @Json(name = "token_type") val tokenType: String? = null
-)

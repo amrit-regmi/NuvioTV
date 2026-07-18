@@ -34,14 +34,14 @@ class MDBListSettingsDataStore @Inject constructor(
     val settings: Flow<MDBListSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
             MDBListSettings(
-                enabled = prefs[enabledKey] ?: true,
-                showTrakt = prefs[showTraktKey] ?: true,
-                showImdb = prefs[showImdbKey] ?: true,
-                showTmdb = prefs[showTmdbKey] ?: true,
-                showLetterboxd = prefs[showLetterboxdKey] ?: true,
-                showTomatoes = prefs[showTomatoesKey] ?: true,
-                showAudience = prefs[showAudienceKey] ?: true,
-                showMetacritic = prefs[showMetacriticKey] ?: true
+                enabled = prefs.safe(enabledKey) ?: true,
+                showTrakt = prefs.safe(showTraktKey) ?: true,
+                showImdb = prefs.safe(showImdbKey) ?: true,
+                showTmdb = prefs.safe(showTmdbKey) ?: true,
+                showLetterboxd = prefs.safe(showLetterboxdKey) ?: true,
+                showTomatoes = prefs.safe(showTomatoesKey) ?: true,
+                showAudience = prefs.safe(showAudienceKey) ?: true,
+                showMetacritic = prefs.safe(showMetacriticKey) ?: true
             )
         }
     }
