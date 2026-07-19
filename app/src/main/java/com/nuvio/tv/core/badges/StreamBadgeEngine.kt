@@ -271,6 +271,11 @@ object StreamBadgeEngine {
      * need >= 6 channels) rather than always flagging a downgrade.
      */
     private fun objectAudioSupported(badgeId: String, caps: DeviceCapabilityDetector.Snapshot): Boolean {
+        // Object/lossless audio only counts as natively rendered when the device can actually
+        // RENDER surround (>= 5.1). A stereo-only device that merely *decodes* Atmos downmixes it
+        // to 2.0, so the object badge must still downgrade to "core" there. Mirrors NuvioMobile,
+        // which empties objectAudioFormats when maxChannels < 6.
+        if (deviceMaxChannels(caps) < 6) return false
         val formats = caps.audioFormats
         fun has(vararg names: String) = names.any { n -> formats.any { it.equals(n, ignoreCase = true) } }
         return when (badgeId) {

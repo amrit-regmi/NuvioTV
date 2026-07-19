@@ -171,10 +171,11 @@ class DeviceCapabilityDetector @Inject constructor() {
      * decoders each report their real capability. Ported verbatim (structure) from NuvioMobile's
      * DeviceCapabilityRegistrar.detectAudioCaps. Three signals are unioned:
      *
-     *  1. On-board decoders — enumerate MediaCodecList audio decoders → format labels
+     *  1. On-board decoders — enumerate MediaCodecList audio decoders → format labels ONLY
      *     (ac3→Dolby Digital, eac3→Dolby Digital Plus, eac3-joc/ac4→Dolby Atmos, true-hd→Dolby TrueHD,
-     *     dts→DTS, dts-hd→DTS-HD, dts-uhd→DTS:X) + maxInputChannelCount.
-     *  2. HDMI / ARC / eARC sink channel counts via AudioManager.getDevices() (API 23+).
+     *     dts→DTS, dts-hd→DTS-HD, dts-uhd→DTS:X). Decoder maxInputChannelCount is NOT used for the
+     *     channel count — what a decoder can DECODE is not what the device can RENDER.
+     *  2. Real output sink channel counts via AudioManager.getDevices() (API 23+) decide channels.
      *  3. Bitstream passthrough probe via AudioTrack.isDirectPlaybackSupported (API 29+) for
      *     E-AC3-JOC / AC4 / E-AC3 / AC3 / TrueHD / DTS / DTS-HD.
      *
@@ -203,30 +204,24 @@ class DeviceCapabilityDetector @Inject constructor() {
                         "dts.hd" in t || "dts-hd" in t -> formats += "DTS-HD"
                         "dts" in t -> formats += "DTS"
                     }
-                    val caps = runCatching { info.getCapabilitiesForType(type) }.getOrNull() ?: continue
-                    val ch = runCatching { caps.audioCapabilities?.maxInputChannelCount ?: 0 }.getOrNull() ?: 0
-                    if (ch > maxChannels) maxChannels = ch
                 }
             }
         } catch (_: Exception) {
         }
 
-        // (2) HDMI / ARC / eARC passthrough to an external AVR or soundbar.
+        // (2) Real OUTPUT sinks decide the renderable PCM channel count — a stereo-speaker device
+        // reports [2] here regardless of what its decoders can DECODE; a device on an AVR/soundbar
+        // reports the sink's real channel count (HDMI/ARC/eARC/USB/BT). Empty channelCounts = skip.
         if (context != null) {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
                     val devices = am?.getDevices(AudioManager.GET_DEVICES_OUTPUTS) ?: emptyArray()
                     for (d in devices) {
-                        if (d.type == AudioDeviceInfo.TYPE_HDMI ||
-                            d.type == AudioDeviceInfo.TYPE_HDMI_ARC ||
-                            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && d.type == AudioDeviceInfo.TYPE_HDMI_EARC)
-                        ) {
-                            val chans = d.channelCounts
-                            if (chans != null && chans.isNotEmpty()) {
-                                val hi = chans.max()
-                                if (hi > maxChannels) maxChannels = hi
-                            }
+                        val chans = d.channelCounts
+                        if (chans != null && chans.isNotEmpty()) {
+                            val hi = chans.max()
+                            if (hi > maxChannels) maxChannels = hi
                         }
                     }
                 }
@@ -238,10 +233,10 @@ class DeviceCapabilityDetector @Inject constructor() {
         // the device has no software decoder for them. API 29+ only; guarded.
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                fun supports(encoding: Int): Boolean = runCatching {
+                fun supports(encoding: Int, mask: Int): Boolean = runCatching {
                     val fmt = AudioFormat.Builder()
                         .setEncoding(encoding)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_5POINT1)
+                        .setChannelMask(mask)
                         .setSampleRate(48000)
                         .build()
                     val attrs = AudioAttributes.Builder()
@@ -251,13 +246,22 @@ class DeviceCapabilityDetector @Inject constructor() {
                     AudioTrack.isDirectPlaybackSupported(fmt, attrs)
                 }.getOrDefault(false)
 
-                if (supports(AudioFormat.ENCODING_E_AC3_JOC)) { formats += "Dolby Digital Plus"; formats += "Dolby Atmos" }
-                if (supports(AudioFormat.ENCODING_AC4)) formats += "Dolby Atmos"
-                if (supports(AudioFormat.ENCODING_E_AC3)) formats += "Dolby Digital Plus"
-                if (supports(AudioFormat.ENCODING_AC3)) formats += "Dolby Digital"
-                if (supports(AudioFormat.ENCODING_DOLBY_TRUEHD)) formats += "Dolby TrueHD"
-                if (supports(AudioFormat.ENCODING_DTS)) formats += "DTS"
-                if (supports(AudioFormat.ENCODING_DTS_HD)) formats += "DTS-HD"
+                // A working passthrough path means the sink RENDERS surround even when its PCM
+                // channelCounts reports only 2. 7.1-mask pass ⇒ 8ch, 5.1-mask pass ⇒ 6ch, else none.
+                // A device with no such sink returns false for every probe and stays at stereo.
+                fun floorFor(encoding: Int): Int = when {
+                    supports(encoding, AudioFormat.CHANNEL_OUT_7POINT1_SURROUND) -> 8
+                    supports(encoding, AudioFormat.CHANNEL_OUT_5POINT1) -> 6
+                    else -> 0
+                }
+
+                floorFor(AudioFormat.ENCODING_E_AC3_JOC).let { if (it > 0) { formats += "Dolby Digital Plus"; formats += "Dolby Atmos"; maxChannels = maxOf(maxChannels, it) } }
+                floorFor(AudioFormat.ENCODING_AC4).let { if (it > 0) { formats += "Dolby Atmos"; maxChannels = maxOf(maxChannels, it) } }
+                floorFor(AudioFormat.ENCODING_E_AC3).let { if (it > 0) { formats += "Dolby Digital Plus"; maxChannels = maxOf(maxChannels, it) } }
+                floorFor(AudioFormat.ENCODING_AC3).let { if (it > 0) { formats += "Dolby Digital"; maxChannels = maxOf(maxChannels, it) } }
+                floorFor(AudioFormat.ENCODING_DOLBY_TRUEHD).let { if (it > 0) { formats += "Dolby TrueHD"; maxChannels = maxOf(maxChannels, it) } }
+                floorFor(AudioFormat.ENCODING_DTS).let { if (it > 0) { formats += "DTS"; maxChannels = maxOf(maxChannels, it) } }
+                floorFor(AudioFormat.ENCODING_DTS_HD).let { if (it > 0) { formats += "DTS-HD"; maxChannels = maxOf(maxChannels, it) } }
             }
         } catch (_: Exception) {
         }
