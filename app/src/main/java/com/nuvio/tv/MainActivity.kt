@@ -884,7 +884,8 @@ class MainActivity : ComponentActivity() {
                             onInstall = { updateViewModel.installUpdateOrRequestPermission() },
                             onIgnore = { updateViewModel.ignoreThisVersion() },
                             onOpenUnknownSources = { updateViewModel.openUnknownSourcesSettings() },
-                            onRecheckInstallPermission = { updateViewModel.recheckInstallPermissionAndProceed() }
+                            onRecheckInstallPermission = { updateViewModel.recheckInstallPermissionAndProceed() },
+                            onRefreshInstallPermission = { updateViewModel.refreshInstallPermission() }
                         )
                     }
 

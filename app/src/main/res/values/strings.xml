@@ -1838,6 +1838,7 @@
     <string name="update_close">Close</string>
     <string name="update_open_settings">Open Settings</string>
     <string name="update_enabled_install">I\'ve enabled it — Install</string>
+    <string name="update_enable_install">Enable &amp; Install</string>
     <string name="update_install">Install</string>
     <string name="update_ignore">Ignore</string>
 
