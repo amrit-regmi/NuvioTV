@@ -79,6 +79,10 @@ fun StreamInfoContent(
     deviceCaps: DeviceCapabilityDetector.Snapshot? = null
 ) {
     val info = streamInfo
+    // #159 Elite-Badges: when both are supplied (stream picker) the logo badges replace the
+    // duplicated quality/codec/audio TEXT rows. Player-side callers (releaseName == null) keep
+    // the full text layout unchanged.
+    val badgeMode = releaseName != null && deviceCaps != null
     val titleStyle = MaterialTheme.typography.bodyMedium.copy(
         fontSize = 14.sp,
         fontWeight = FontWeight.Bold,
@@ -128,8 +132,9 @@ fun StreamInfoContent(
     }
     val qualityText = listOfNotNull(
         seText.takeIf { it.isNotBlank() },
-        info.resolution?.takeIf { it.isNotBlank() },
-        info.source?.takeIf { it.isNotBlank() }
+        // In badge mode resolution + source are shown as badges, so drop them from text.
+        info.resolution?.takeIf { it.isNotBlank() && !badgeMode },
+        info.source?.takeIf { it.isNotBlank() && !badgeMode }
     ).joinToString(dot)
     if (qualityText.isNotBlank()) {
         InfoRow {
@@ -148,7 +153,8 @@ fun StreamInfoContent(
         info.audioCodec?.takeIf { it.isNotBlank() },
         info.audioChannels?.takeIf { it.isNotBlank() }
     ).joinToString(" ")
-    if (videoText.isNotBlank() || audioText.isNotBlank()) {
+    // In badge mode the entire video+audio line is represented by badges, so skip it.
+    if (!badgeMode && (videoText.isNotBlank() || audioText.isNotBlank())) {
         InfoRow {
             if (videoText.isNotBlank()) {
                 InfoSegment(Icons.Rounded.Movie, videoText, secondary, lineStyle, Modifier.weight(1f, fill = false))
@@ -213,18 +219,18 @@ private fun StreamBadgeRow(
     val renderable = badges.filter { it.bitmap != null }
     if (renderable.isEmpty()) return
 
-    Spacer(modifier = Modifier.height(5.dp))
+    Spacer(modifier = Modifier.height(6.dp))
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         renderable.forEach { badge ->
             Image(
                 bitmap = badge.bitmap!!,
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.height(26.dp)
+                modifier = Modifier.height(18.dp)
             )
             badge.downgradeTarget?.let { target ->
                 DowngradePill(target)
@@ -242,13 +248,13 @@ private fun DowngradePill(target: String) {
             .clip(RoundedCornerShape(6.dp))
             .background(Color(0xFF3A2B10))
             .border(1.dp, amber.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+            .padding(horizontal = 6.dp, vertical = 1.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = "↓ $target",
             color = amber,
-            fontSize = 10.sp,
+            fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
