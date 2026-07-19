@@ -93,7 +93,8 @@ fun UpdatePromptDialog(
     onInstall: () -> Unit,
     onIgnore: () -> Unit,
     onOpenUnknownSources: () -> Unit,
-    onRecheckInstallPermission: () -> Unit
+    onRecheckInstallPermission: () -> Unit,
+    onRefreshInstallPermission: () -> Unit
 ) {
     if (!state.showDialog) return
 
@@ -105,9 +106,13 @@ fun UpdatePromptDialog(
     var installButtonEnabled by remember(state.downloadedApkPath) {
         mutableStateOf(state.downloadedApkPath == null)
     }
-    val hasPrimaryAction = state.showUnknownSourcesDialog ||
-        state.downloadedApkPath != null ||
-        canDownload
+    val hasPrimaryAction = state.downloadedApkPath != null || canDownload
+
+    // Publish the live install-unknown-apps grant when the dialog appears so the ready-to-
+    // install step renders the correct single action (Install vs Enable & Install).
+    LaunchedEffect(Unit) {
+        onRefreshInstallPermission()
+    }
 
     LaunchedEffect(state.downloadedApkPath) {
         if (state.downloadedApkPath != null) {
@@ -124,10 +129,14 @@ fun UpdatePromptDialog(
     DisposableEffect(lifecycleOwner, state.showUnknownSourcesDialog) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
+                // Always re-read the grant so the single primary button flips to "Install"
+                // as soon as the user enables the toggle and returns.
+                onRefreshInstallPermission()
                 if (state.showUnknownSourcesDialog) {
                     // Returning from the Settings screen: do NOT blindly re-run the install
                     // path (that re-reads a stale canRequestPackageInstalls() on TV). Instead
-                    // re-query the grant FRESH with a short poll so the appop can propagate.
+                    // re-query the grant FRESH with a short poll so the appop can propagate,
+                    // then auto-proceed to install.
                     onRecheckInstallPermission()
                 }
             }
@@ -415,7 +424,10 @@ fun UpdatePromptDialog(
                     }
                 }
 
-                if (state.showUnknownSourcesDialog) {
+                // Explain the extra permission step only when we actually need it: an APK is
+                // ready to install but the "install unknown apps" grant is still missing.
+                val needsInstallPermission = state.downloadedApkPath != null && !state.installPermissionGranted
+                if (needsInstallPermission) {
                     Text(
                         text = stringResource(R.string.update_unknown_sources),
                         style = MaterialTheme.typography.bodyMedium,
@@ -441,39 +453,14 @@ fun UpdatePromptDialog(
                         Text(stringResource(R.string.update_close))
                     }
 
-                    if (state.showUnknownSourcesDialog) {
+                    if (state.downloadedApkPath != null) {
+                        // Single permission-state-aware install action. When the grant is ON we
+                        // install directly; when it's OFF we open the unknown-sources settings
+                        // (labelled "Enable & Install") and the ON_RESUME recheck auto-installs
+                        // on return. Never both an "Open Settings" and a dead "Install" button.
+                        val installReady = state.installPermissionGranted
                         Button(
-                            onClick = onOpenUnknownSources,
-                            modifier = Modifier.focusRequester(primaryFocusRequester),
-                            colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.Background,
-                                contentColor = NuvioColors.TextPrimary,
-                                focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
-                            ),
-                            shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
-                        ) {
-                            Text(stringResource(R.string.update_open_settings))
-                        }
-
-                        // Manual affirmative fallback: user confirms they enabled the grant,
-                        // triggering the same fresh re-check + proceed as the resume auto-retry,
-                        // so they aren't solely dependent on ON_RESUME firing on TV.
-                        Button(
-                            onClick = onRecheckInstallPermission,
-                            colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.Background,
-                                contentColor = NuvioColors.TextPrimary,
-                                focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
-                            ),
-                            shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
-                        ) {
-                            Text(stringResource(R.string.update_enabled_install))
-                        }
-                    } else if (state.downloadedApkPath != null) {
-                        Button(
-                            onClick = onInstall,
+                            onClick = if (installReady) onInstall else onOpenUnknownSources,
                             enabled = installButtonEnabled,
                             modifier = Modifier.focusRequester(primaryFocusRequester),
                             colors = ButtonDefaults.colors(
@@ -484,7 +471,10 @@ fun UpdatePromptDialog(
                             ),
                             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                         ) {
-                            Text(stringResource(R.string.update_install))
+                            Text(
+                                if (installReady) stringResource(R.string.update_install)
+                                else stringResource(R.string.update_enable_install)
+                            )
                         }
                     } else if (canDownload) {
                         Button(

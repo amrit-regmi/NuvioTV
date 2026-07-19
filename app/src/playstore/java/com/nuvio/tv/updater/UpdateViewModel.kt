@@ -38,4 +38,6 @@ class UpdateViewModel @Inject constructor() : ViewModel() {
     fun openUnknownSourcesSettings() = Unit
 
     fun recheckInstallPermissionAndProceed() = Unit
+
+    fun refreshInstallPermission() = Unit
 }

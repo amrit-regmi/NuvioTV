@@ -11,5 +11,6 @@ fun UpdatePromptDialog(
     onInstall: () -> Unit,
     onIgnore: () -> Unit,
     onOpenUnknownSources: () -> Unit,
-    onRecheckInstallPermission: () -> Unit
+    onRecheckInstallPermission: () -> Unit,
+    onRefreshInstallPermission: () -> Unit
 ) = Unit

@@ -1174,8 +1174,22 @@ private fun StreamsList(
     instantStreamKeys: Set<String> = emptySet()
 ) {
     val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    val deviceCapabilityContext = LocalContext.current
     val firstCardFocusRequester = remember { FocusRequester() }
     val lastKeyRepeatDispatchRef = remember { java.util.concurrent.atomic.AtomicLong(0L) }
+
+    // #159 Elite-Badges: detect THIS device's real capabilities ONCE for the whole list
+    // (MediaCodecList enumeration is costly). Reused by every StreamCard for its downgrade
+    // pills. Fully defensive — falls back to the Unknown (1080p/SDR/stereo) snapshot.
+    val badgeDeviceCaps = remember {
+        runCatching {
+            val dm = deviceCapabilityContext.getSystemService(android.content.Context.DISPLAY_SERVICE)
+                as? android.hardware.display.DisplayManager
+            val display = dm?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
+            com.nuvio.tv.core.device.DeviceCapabilityDetector()
+                .detect(display, deviceCapabilityContext.applicationContext)
+        }.getOrDefault(com.nuvio.tv.core.device.DeviceCapabilityDetector.Snapshot.Unknown)
+    }
     val restoreFocusRequester = remember { FocusRequester() }
     val firstStreamKey = streams.firstOrNull()?.let { first ->
         "${first.addonName}_${first.url ?: first.infoHash ?: first.ytId ?: "unknown"}"
@@ -1259,6 +1273,7 @@ private fun StreamsList(
                     activeDownloadState = if (isThisActiveDownload) activeDownload else null,
                     isInstant = instantStreamKeys.contains(stream.stableKey()),
                     isNonCachedDebrid = stream.isNonCachedDebridStream(),
+                    deviceCaps = badgeDeviceCaps,
                     onClick = { onStreamSelected(stream) },
                     focusRequester = when {
                         shouldRestoreFocusedStream && index == focusedStreamIndex.coerceIn(0, (streams.lastIndex).coerceAtLeast(0)) -> restoreFocusRequester
@@ -1290,12 +1305,17 @@ private fun StreamCard(
     activeDownloadState: DebridDownloadState? = null,
     isInstant: Boolean = false,
     isNonCachedDebrid: Boolean = false,
+    deviceCaps: com.nuvio.tv.core.device.DeviceCapabilityDetector.Snapshot? = null,
     onClick: () -> Unit,
     focusRequester: FocusRequester? = null,
     onUpKey: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
+    // #159 Elite-Badges: raw release name to regex-match for badge selection.
+    val badgeReleaseName = remember(stream) {
+        com.nuvio.tv.core.badges.StreamReleaseName.of(stream)
+    }
     val unknownStreamLabel = stringResource(R.string.stream_unknown)
     val streamName = remember(stream, isInstant, unknownStreamLabel) {
         val name = stream.getDisplayNameOrNull() ?: unknownStreamLabel
@@ -1376,7 +1396,11 @@ private fun StreamCard(
                 if (streamInfo != null) {
                     // Backend structured info: render the fixed 6-line layout and DROP the
                     // raw torrent name/description (contract: streamInfo).
-                    com.nuvio.tv.ui.components.StreamInfoContent(streamInfo = streamInfo)
+                    com.nuvio.tv.ui.components.StreamInfoContent(
+                        streamInfo = streamInfo,
+                        releaseName = badgeReleaseName,
+                        deviceCaps = deviceCaps
+                    )
                 } else {
                     Text(
                         text = streamName,

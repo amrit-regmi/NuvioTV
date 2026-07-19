@@ -13,6 +13,11 @@
 **/build/
 !app/src/**/java/**/core/build/
 !app/src/**/java/**/core/build/*.kt
+/build-artifacts/
+*.apk
+*.ipa
+*.perfetto-trace
+*.hprof
 /captures
 .externalNativeBuild
 .cxx

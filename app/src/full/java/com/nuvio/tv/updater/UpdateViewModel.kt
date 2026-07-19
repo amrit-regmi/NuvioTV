@@ -30,6 +30,10 @@ data class UpdateUiState(
     val showDialog: Boolean = false,
     val showNoUpdateToastHint: Boolean = false,
     val showUnknownSourcesDialog: Boolean = false,
+    // Live "install unknown apps" (REQUEST_INSTALL_PACKAGES appop) grant state. Refreshed
+    // when the dialog is shown and on every ON_RESUME so the install step can present a
+    // single permission-state-aware primary action instead of two competing buttons.
+    val installPermissionGranted: Boolean = false,
     val errorMessage: String? = null
 )
 
@@ -140,9 +144,14 @@ class UpdateViewModel @Inject constructor(
                             errorMessage = null
                         )
                     }
-                    // Auto-start installation flow immediately after successful download.
-                    // If unknown sources permission is missing, this will surface the settings prompt.
-                    installUpdateOrRequestPermission()
+                    // Publish the live grant state so the dialog shows the right single
+                    // primary action. Only auto-launch the OS install UI when the grant is
+                    // already present; otherwise land on the "ready to install" state whose
+                    // "Enable & Install" button opens settings on an explicit user tap.
+                    refreshInstallPermission()
+                    if (ApkInstaller.canRequestPackageInstalls(context)) {
+                        installUpdateOrRequestPermission()
+                    }
                 }
                 .onFailure { e ->
                     _uiState.update {
@@ -157,6 +166,15 @@ class UpdateViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Re-read the OS "install unknown apps" grant and publish it to the UiState so the
+     * dialog can render the correct single primary action (Install vs Enable & Install).
+     * Cheap; called when the dialog is shown and on every ON_RESUME.
+     */
+    fun refreshInstallPermission() {
+        _uiState.update { it.copy(installPermissionGranted = ApkInstaller.canRequestPackageInstalls(context)) }
+    }
+
     fun installUpdateOrRequestPermission() {
         val apkPath = _uiState.value.downloadedApkPath ?: return
         val apkFile = File(apkPath)
@@ -165,12 +183,16 @@ class UpdateViewModel @Inject constructor(
             return
         }
 
-        if (!ApkInstaller.canRequestPackageInstalls(context)) {
-            _uiState.update { it.copy(showUnknownSourcesDialog = true) }
+        val granted = ApkInstaller.canRequestPackageInstalls(context)
+        if (!granted) {
+            // Not granted: surface the settings step and arm the ON_RESUME recheck so we
+            // auto-proceed to install once the user flips the toggle and returns.
+            _uiState.update { it.copy(showUnknownSourcesDialog = true, installPermissionGranted = false) }
+            openUnknownSourcesSettings()
             return
         }
 
-        _uiState.update { it.copy(showUnknownSourcesDialog = false) }
+        _uiState.update { it.copy(showUnknownSourcesDialog = false, installPermissionGranted = true) }
         ApkInstaller.launchInstall(context, apkFile)
     }
 
@@ -199,7 +221,7 @@ class UpdateViewModel @Inject constructor(
             // Poll ~1.5-2s total so the appop has time to propagate on TV.
             repeat(PERMISSION_POLL_ATTEMPTS) { attempt ->
                 if (ApkInstaller.canRequestPackageInstalls(context)) {
-                    _uiState.update { it.copy(showUnknownSourcesDialog = false) }
+                    _uiState.update { it.copy(showUnknownSourcesDialog = false, installPermissionGranted = true) }
                     ApkInstaller.launchInstall(context, apkFile)
                     return@launch
                 }
@@ -207,12 +229,16 @@ class UpdateViewModel @Inject constructor(
                     kotlinx.coroutines.delay(PERMISSION_POLL_INTERVAL_MS)
                 }
             }
-            // Still not granted: leave the unknown-sources dialog in place.
+            // Still not granted: leave the "Enable & Install" action in place.
+            _uiState.update { it.copy(installPermissionGranted = false) }
             Log.d(TAG, "Install permission still not granted after poll window")
         }
     }
 
     fun openUnknownSourcesSettings() {
+        // Arm the ON_RESUME recheck so that, when the user returns from Settings with the
+        // grant now ON, recheckInstallPermissionAndProceed() auto-launches the install.
+        _uiState.update { it.copy(showUnknownSourcesDialog = true) }
         val intent = ApkInstaller.buildUnknownSourcesSettingsIntent(context)
         if (intent != null) {
             try {

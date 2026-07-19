@@ -884,7 +884,8 @@ class MainActivity : ComponentActivity() {
                             onInstall = { updateViewModel.installUpdateOrRequestPermission() },
                             onIgnore = { updateViewModel.ignoreThisVersion() },
                             onOpenUnknownSources = { updateViewModel.openUnknownSourcesSettings() },
-                            onRecheckInstallPermission = { updateViewModel.recheckInstallPermissionAndProceed() }
+                            onRecheckInstallPermission = { updateViewModel.recheckInstallPermissionAndProceed() },
+                            onRefreshInstallPermission = { updateViewModel.refreshInstallPermission() }
                         )
                     }
 
@@ -970,7 +971,7 @@ class MainActivity : ComponentActivity() {
                 isFirstResumeAfterCreate = false
                 val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
                 val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY)
-                val snapshot = deviceCapabilityDetector.detect(display)
+                val snapshot = deviceCapabilityDetector.detect(display, applicationContext)
                 deviceProfileDataStore.applyDetectedIfNotOverridden(snapshot.suggestedProfileId())
                 val streamEngineEnabled = deviceProfileDataStore.isStreamEngineEnabled.first()
                 if (streamEngineEnabled) {
@@ -1039,7 +1040,7 @@ class MainActivity : ComponentActivity() {
             }
             // Always re-register so backend stays current even when URL or
             // build config changes between installs.
-            val hash = "$deviceId|$maxResolution|${hdrTypes.sorted()}|${codecs.sorted()}|${com.nuvio.tv.core.reco.RecoBackend.catalogAddonBaseUrl}"
+            val hash = "$deviceId|$maxResolution|${hdrTypes.sorted()}|${codecs.sorted()}|${snapshot.audioChannelsLabel}|${snapshot.audioFormats.sorted()}|${com.nuvio.tv.core.reco.RecoBackend.catalogAddonBaseUrl}"
             deviceProfileDataStore.updateCapabilitiesHashIfChanged(hash)  // update stored hash but don't gate on it
             val downloadSpeedMbps = deviceProfileDataStore.estimateDownloadSpeedMbps()
             val userId = (authManager.authState.value as? AuthState.FullAccount)?.userId ?: ""
@@ -1050,8 +1051,8 @@ class MainActivity : ComponentActivity() {
                 append("\"device_name\":\"${android.os.Build.MODEL}\",")
                 append("\"max_resolution\":\"$maxResolution\",")
                 append("\"hdr_types_supported\":${hdrTypes.joinToString(",", "[", "]") { "\"$it\"" }},")
-                append("\"max_audio_channels\":\"7.1\",")
-                append("\"preferred_audio_formats\":[\"Dolby Atmos\",\"DTS:X\",\"AAC\"],")
+                append("\"max_audio_channels\":\"${snapshot.audioChannelsLabel}\",")
+                append("\"preferred_audio_formats\":${snapshot.audioFormats.joinToString(",", "[", "]") { "\"$it\"" }},")
                 append("\"supported_codecs\":${codecs.joinToString(",", "[", "]") { "\"$it\"" }},")
                 append("\"max_size_gb\":0,")
                 append("\"download_speed_mbps\":$downloadSpeedMbps")

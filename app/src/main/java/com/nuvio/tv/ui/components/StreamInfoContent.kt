@@ -1,7 +1,11 @@
 package com.nuvio.tv.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -29,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import com.nuvio.tv.core.badges.StreamBadgeEngine
+import com.nuvio.tv.core.device.DeviceCapabilityDetector
 import com.nuvio.tv.domain.model.StreamCacheStatus
 import com.nuvio.tv.domain.model.StreamInfo
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -62,7 +70,12 @@ fun StreamInfoContent(
     streamInfo: StreamInfo,
     modifier: Modifier = Modifier,
     isCurrentStream: Boolean = false,
-    currentLabel: String? = null
+    currentLabel: String? = null,
+    // #159 Elite-Badges: the raw release name to regex-match, and THIS device's real
+    // capabilities for the downgrade pill. Both optional — when either is null the badge
+    // row is skipped entirely (player-side callers don't pass them). Stream picker only.
+    releaseName: String? = null,
+    deviceCaps: DeviceCapabilityDetector.Snapshot? = null
 ) {
     val info = streamInfo
     val titleStyle = MaterialTheme.typography.bodyMedium.copy(
@@ -169,6 +182,76 @@ fun StreamInfoContent(
                 InfoSegment(Icons.Rounded.Subtitles, subLangs, secondary, lineStyle, Modifier.weight(1f, fill = false))
             }
         }
+    }
+
+    // #159 Elite-Badges row — AFTER the language row. Logo badges (one per group) with an
+    // amber "↓ target" pill on any badge that exceeds this device's capability. Rendered
+    // only when releaseName + deviceCaps are supplied (stream picker) and something matches.
+    if (releaseName != null && deviceCaps != null) {
+        StreamBadgeRow(releaseName = releaseName, deviceCaps = deviceCaps)
+    }
+}
+
+/**
+ * #159 — horizontally-wrapping row of Elite-Badge logos for the stream picker.
+ * Each downgradeable badge is immediately followed by an amber "↓ target" pill.
+ * Renders nothing when zero badges match (no empty row). Fully defensive.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StreamBadgeRow(
+    releaseName: String,
+    deviceCaps: DeviceCapabilityDetector.Snapshot
+) {
+    val context = LocalContext.current
+    val badges = remember(releaseName, deviceCaps) {
+        runCatching { StreamBadgeEngine.badgesFor(context, releaseName, deviceCaps) }
+            .getOrDefault(emptyList())
+    }
+    // Drop entries whose bitmap failed to load so we never show a gap.
+    val renderable = badges.filter { it.bitmap != null }
+    if (renderable.isEmpty()) return
+
+    Spacer(modifier = Modifier.height(5.dp))
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        renderable.forEach { badge ->
+            Image(
+                bitmap = badge.bitmap!!,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.height(26.dp)
+            )
+            badge.downgradeTarget?.let { target ->
+                DowngradePill(target)
+            }
+        }
+    }
+}
+
+/** Amber "↓ target" pill shown right after a badge that exceeds the device's capability. */
+@Composable
+private fun DowngradePill(target: String) {
+    val amber = Color(0xFFEBA840)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFF3A2B10))
+            .border(1.dp, amber.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "↓ $target",
+            color = amber,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
