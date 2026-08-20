@@ -1783,7 +1783,8 @@ private class CueNormalizingTextOutput(
 
     override fun onCues(cueGroup: CueGroup) {
         val processed = cueGroup.cues.map { cue ->
-            var c = fixRtlCueText(cue)
+            var c = SubtitleMojibakeSanitizer.sanitizeCue(cue)
+            c = fixRtlCueText(c)
             if (shouldNormalizeCuePositionProvider()) c = normalizeCuePosition(c)
             c
         }
@@ -1793,7 +1794,8 @@ private class CueNormalizingTextOutput(
     @Deprecated("Uses the deprecated Media3 callback for text outputs.")
     override fun onCues(cues: List<Cue>) {
         val processed = cues.map { cue ->
-            var c = fixRtlCueText(cue)
+            var c = SubtitleMojibakeSanitizer.sanitizeCue(cue)
+            c = fixRtlCueText(c)
             if (shouldNormalizeCuePositionProvider()) c = normalizeCuePosition(c)
             c
         }
