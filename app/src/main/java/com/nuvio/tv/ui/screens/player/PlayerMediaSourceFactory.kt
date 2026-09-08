@@ -136,10 +136,14 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 setDefaultRequestProperties(sanitizedHeaders)
                 setUserAgent(DEFAULT_USER_AGENT)
             }
+            // Runtime enforcement of the tier chunk cap: a value persisted before the
+            // cap existed (or on another device) must not bypass the low-RAM 16 MB ceiling.
+            val effectiveChunkMb = parallelChunkSizeMb
+                .coerceAtMost(com.nuvio.tv.ui.screens.settings.MemoryBudget.tierMaxChunkMb)
             ParallelRangeDataSource.Factory(
                 okHttpFactory,
                 parallelConnectionCount,
-                parallelChunkSizeMb.toLong() * 1024L * 1024L,
+                effectiveChunkMb.toLong() * 1024L * 1024L,
                 shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
                 onResolvedUri = { resolved -> currentVodCacheResolvedUrl = resolved?.toString() }
             )
@@ -174,7 +178,12 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             progressiveUpstreamFactory
         }
 
-        val extractorsFactory = customExtractorsFactory ?: DefaultExtractorsFactory()
+        // Wrap the extractors with NuvioMp4Extractor so a trailing (non-faststart) MP4 `moov`
+        // is cached in RAM and the parallel-range session can drop only the chunks that overlap
+        // it — replayed on seek without re-fetching EOF. Harmless for non-MP4 and when parallel
+        // connections are off (releaseTailChunks no-ops without a live chunk session).
+        val baseExtractorsFactory = customExtractorsFactory ?: DefaultExtractorsFactory()
+        val extractorsFactory = baseExtractorsFactory.withNuvioMp4Extractor()
         val defaultFactory = DefaultMediaSourceFactory(progressiveFactory, extractorsFactory).apply {
             setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
             customSubtitleParserFactory?.let { parserFactory ->
@@ -204,7 +213,11 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         return wrapAudioDelay(mediaSource = mediaSource, audioDelayUsProvider = audioDelayUsProvider)
     }
 
-    fun shutdown() = Unit
+    fun shutdown() {
+        // Free any chunk buffers retained across seek reopens so the heap
+        // allocations never outlive the player.
+        ParallelRangeDataSource.releaseRetainedSession()
+    }
 
     private fun buildVodCacheDataSourceFactory(upstreamFactory: DataSource.Factory, cache: SimpleCache): DataSource.Factory {
         val dataSinkFactory = CacheDataSink.Factory().setCache(cache).setFragmentSize(2L * 1024L * 1024L)
