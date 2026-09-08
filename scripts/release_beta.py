@@ -374,7 +374,44 @@ def _apk_is_test_only(apk_path: Path) -> bool:
     return False
 
 
+def _prepare_host_build_props() -> None:
+    """Adjust gradle.properties for the CURRENT host — working tree only, never committed.
+
+    The checked-in gradle.properties pins an ARM64 AAPT2 (android.aapt2FromMavenOverride)
+    that exists only on the ARM build box, plus a tight org.gradle.jvmargs for that
+    memory-starved box. On a host where the pinned AAPT2 is absent (e.g. an x86_64 CI
+    runner), strip the override so AGP falls back to the Maven AAPT2 (otherwise
+    :app:mergeReleaseResources fails), and raise the JVM heap so R8/KSP don't OOM.
+    These edits stay in the working tree; commit_tag_push() stages only the version
+    file, so the repo keeps its ARM settings and nothing here is ever pushed.
+    """
+    import re
+
+    gp = ROOT / "gradle.properties"
+    try:
+        text = gp.read_text(encoding="utf-8")
+    except OSError:
+        return
+    m = re.search(r"^android\.aapt2FromMavenOverride=(.+)$", text, re.M)
+    if not m:
+        return
+    override_path = m.group(1).strip()
+    if Path(override_path).exists():
+        return  # ARM build box — keep the pinned AAPT2 and the box's tight JVM args
+    new_text = re.sub(
+        r"^android\.aapt2FromMavenOverride=.*\n?", "", text, flags=re.M
+    )
+    # Last org.gradle.jvmargs wins in a .properties file; append a CI-sized one.
+    new_text += "\norg.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\n"
+    gp.write_text(new_text, encoding="utf-8")
+    print(
+        f"release_beta: host lacks the pinned ARM64 AAPT2 ({override_path}); "
+        "stripped the override and raised JVM heap for this build."
+    )
+
+
 def build_release() -> list[Path]:
+    _prepare_host_build_props()
     # Force testOnly OFF for the distributable. AGP auto-sets
     # android:testOnly="true" when android.injected.testOnly is truthy (IDE
     # device deploy, install* tasks, or an inherited -P/env flag). Passing it
