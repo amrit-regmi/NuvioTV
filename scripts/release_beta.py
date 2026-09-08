@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_FILE = ROOT / "app" / "build.gradle.kts"
 RELEASE_OUTPUT_DIR = ROOT / "build" / "release"
-APK_DIR = ROOT / "app" / "build" / "outputs" / "apk" / "release"
+APK_DIR = ROOT / "app" / "build" / "outputs" / "apk" / "full" / "release"
 DEFAULT_BETA_NOTICE = (
     "## This is a beta version intended for testing only. Expect breaking changes "
     "in updates. Normal users are advised to wait for the stable release."
@@ -418,7 +418,7 @@ def build_release() -> list[Path]:
     # explicitly false here makes the assembleRelease output directly
     # installable (no `adb install -t` required) regardless of environment.
     subprocess.run(
-        ["./gradlew", "app:assembleRelease", "-Pandroid.injected.testOnly=false"],
+        ["./gradlew", "app:assembleFullRelease", "-Pandroid.injected.testOnly=false"],
         cwd=ROOT,
         check=True,
         text=True,
