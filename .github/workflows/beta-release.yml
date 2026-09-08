@@ -88,6 +88,19 @@ jobs:
             printf '%s' "$LOCAL_DEV_PROPERTIES_BASE64" | base64 --decode > local.dev.properties
           fi
 
+      - name: Use the runner's x86_64 AAPT2 (drop the ARM64 build-box override)
+        run: |
+          # gradle.properties pins an aarch64 AAPT2 that only exists on the ARM build box.
+          # GitHub runners are x86_64, so remove the override and let AGP use the Maven AAPT2.
+          # (Mirrors release-tv.yml; without this, :app:mergeFullReleaseResources fails.)
+          sed -i '/android.aapt2FromMavenOverride/d' gradle.properties
+
+      - name: Tune Gradle JVM for CI (avoid Metaspace OOM)
+        run: |
+          # Appended last so this org.gradle.jvmargs wins over the box's tight -Xmx1g line.
+          # CI-only — the runner has ~16GB, so give KSP/R8 room.
+          printf '\norg.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\n' >> gradle.properties
+
       - name: Prepare signing config
         if: ${{ inputs.release_mode != 'dry_run' }}
         env:
