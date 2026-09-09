@@ -981,7 +981,8 @@ private fun MetaInfoRow(
         }
 
         // Secondary row: Runtime, Age Rating, Status, Country, Language
-        if (ageRatingBadge != null || statusBadge != null || secondaryItems.isNotEmpty()) {
+        val showNoStreamsPill = meta.streamStatus == StreamStatus.UNAVAILABLE
+        if (ageRatingBadge != null || statusBadge != null || showNoStreamsPill || secondaryItems.isNotEmpty()) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
                 verticalAlignment = Alignment.CenterVertically
@@ -1004,7 +1005,13 @@ private fun MetaInfoRow(
                         )
                     }
                 }
-                if ((ageRatingBadge != null || statusBadge != null) && secondaryItems.isNotEmpty()) {
+                if (showNoStreamsPill) {
+                    HeroMetaBadge(
+                        text = stringResource(R.string.stream_status_unavailable_pill),
+                        contentColor = NuvioTheme.colors.Error
+                    )
+                }
+                if ((ageRatingBadge != null || statusBadge != null || showNoStreamsPill) && secondaryItems.isNotEmpty()) {
                     MetaInfoDivider()
                 }
                 secondaryItems.forEachIndexed { index, value ->

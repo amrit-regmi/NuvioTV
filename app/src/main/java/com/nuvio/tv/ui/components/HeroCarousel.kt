@@ -63,6 +63,7 @@ import coil3.request.crossfade
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.model.StreamStatus
 import com.nuvio.tv.ui.util.LocalRecompositionHighlighterEnabled
 import kotlinx.coroutines.delay
 
@@ -341,6 +342,18 @@ private fun HeroCarouselSlide(
                         text = year,
                         style = MaterialTheme.typography.labelLarge,
                         color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+
+                if (item.streamStatus == StreamStatus.UNAVAILABLE) {
+                    Text(
+                        text = stringResource(R.string.stream_status_unavailable_pill),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = NuvioTheme.colors.Error,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(NuvioTheme.radii.xs))
+                            .background(NuvioTheme.colors.Error.copy(alpha = 0.15f))
+                            .padding(horizontal = NuvioTheme.spacing.sm, vertical = NuvioTheme.spacing.xs)
                     )
                 }
             }
