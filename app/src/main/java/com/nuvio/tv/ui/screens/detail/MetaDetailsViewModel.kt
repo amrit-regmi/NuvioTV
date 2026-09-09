@@ -90,6 +90,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController,
     private val streamWarmer: StreamWarmer,
+    private val streamAvailabilityRegistry: com.nuvio.tv.core.stream.StreamAvailabilityRegistry,
     private val recoRatingService: com.nuvio.tv.core.reco.RecoRatingService,
     private val recoMetadataService: com.nuvio.tv.core.reco.RecoMetadataService,
     private val httpClient: okhttp3.OkHttpClient,
@@ -163,7 +164,39 @@ class MetaDetailsViewModel @Inject constructor(
         observeShowFullReleaseDate()
         observeHideUnreleasedContent()
         observeActivePrepare()
+        observeStreamAvailability()
         loadMeta()
+    }
+
+    /**
+     * `streamStatus` is DYNAMIC (backend recomputes it per fetch, no-store), so the value the
+     * meta was loaded with can be stale by the time a stream actually resolves. When a resolve
+     * path (StreamWarmer prewarm, the stream picker) publishes fresh availability for this
+     * title via [com.nuvio.tv.core.stream.StreamAvailabilityRegistry], promote the details pill
+     * so the "No streams" pill clears live. Only ever promotes toward available.
+     */
+    private fun observeStreamAvailability() {
+        viewModelScope.launch {
+            // React to BOTH the meta loading and later registry emissions so a resolve that
+            // landed before OR after the details opened still clears the stale pill.
+            combine(
+                _uiState.map { it.meta?.id }.distinctUntilChanged(),
+                streamAvailabilityRegistry.statuses
+            ) { metaId, statuses ->
+                if (metaId == null) return@combine null
+                statuses[com.nuvio.tv.core.stream.StreamAvailabilityRegistry.baseContentId(metaId)]
+            }.distinctUntilChanged().collectLatest { observed ->
+                if (observed != com.nuvio.tv.domain.model.StreamStatus.INSTANT) return@collectLatest
+                _uiState.update { state ->
+                    val current = state.meta ?: return@update state
+                    if (current.streamStatus == com.nuvio.tv.domain.model.StreamStatus.INSTANT) {
+                        state
+                    } else {
+                        state.copy(meta = current.copy(streamStatus = com.nuvio.tv.domain.model.StreamStatus.INSTANT))
+                    }
+                }
+            }
+        }
     }
 
     /**

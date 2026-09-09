@@ -92,6 +92,7 @@ class HomeViewModel @Inject constructor(
     internal val recoMetadataService: com.nuvio.tv.core.reco.RecoMetadataService,
     internal val homeCatalogSettingsSyncService: com.nuvio.tv.core.sync.HomeCatalogSettingsSyncService,
     private val streamWarmer: StreamWarmer,
+    internal val streamAvailabilityRegistry: com.nuvio.tv.core.stream.StreamAvailabilityRegistry,
     internal val serverHealthNotifier: com.nuvio.tv.core.network.ServerHealthNotifier
 ) : ViewModel() {
     companion object {
@@ -349,6 +350,7 @@ class HomeViewModel @Inject constructor(
 
         observeStartupAuthNotice()
         observeServerHealth()
+        observeStreamAvailability()
         viewModelScope.launch {
             profileManager.activeProfileReady.first { it }
             loadSavedRowOrder()

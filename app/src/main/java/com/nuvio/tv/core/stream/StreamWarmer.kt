@@ -72,6 +72,7 @@ class StreamWarmer @Inject constructor(
     private val deviceProfileDataStore: DeviceProfileDataStore,
     private val playerPreWarmer: PlayerPreWarmer,
     private val torboxResolver: TorboxDirectDebridResolver,
+    private val streamAvailabilityRegistry: StreamAvailabilityRegistry,
     okHttpClient: OkHttpClient
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -350,6 +351,10 @@ class StreamWarmer @Inject constructor(
             cache[cacheKey] = CachedStreams(reordered, System.currentTimeMillis())
             Log.d(TAG, "Cached ${reordered.size} probed streams for type=$type videoId=$videoId")
 
+            // A stream just probed to a live, servable CDN response — publish availability so
+            // stale "No streams" pills on the home tiles / details clear live.
+            streamAvailabilityRegistry.markAvailable(videoId)
+
             // Resolve MIME type from probe Content-Type header, falling back to filename.
             // Stored in WarmSession so the player's init block can skip its own probe.
             val detectedMimeType = normalizeMimeType(firstValidContentType)
@@ -445,6 +450,7 @@ class StreamWarmer @Inject constructor(
                                         resolvedAt = System.currentTimeMillis()
                                     )
                                     Log.d(TAG, "Tier2 warm resolved: key=$key url=${result.url.take(60)}…")
+                                    streamAvailabilityRegistry.markAvailable(videoId)
                                 }
                                 DirectDebridResolveResult.RateLimited -> {
                                     Log.w(TAG, "Tier2 warm: rate-limited, stopping")
@@ -490,6 +496,7 @@ class StreamWarmer @Inject constructor(
                                         resolvedAt = System.currentTimeMillis()
                                     )
                                     Log.d(TAG, "Tier2 warm (all-cached) resolved: key=$key url=${result.url.take(60)}…")
+                                    streamAvailabilityRegistry.markAvailable(videoId)
                                 }
                                 DirectDebridResolveResult.RateLimited -> {
                                     Log.w(TAG, "Tier2 warm (all-cached): rate-limited, stopping")
@@ -635,6 +642,7 @@ class StreamWarmer @Inject constructor(
         synchronized(resolvedUrlCache) { resolvedUrlCache.clear() }
         synchronized(cache) { cache.clear() }
         synchronized(stubUrls) { stubUrls.clear() }
+        streamAvailabilityRegistry.clear()
         Log.d(TAG, "Cleared all stream warmer caches (sign-out)")
     }
 

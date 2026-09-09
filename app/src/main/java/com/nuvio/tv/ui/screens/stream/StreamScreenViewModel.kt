@@ -83,6 +83,7 @@ class StreamScreenViewModel @Inject constructor(
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     private val streamWarmer: StreamWarmer,
+    private val streamAvailabilityRegistry: com.nuvio.tv.core.stream.StreamAvailabilityRegistry,
     private val forceRescrapeService: ForceRescrapeService,
     private val deviceProfileDataStore: DeviceProfileDataStore,
     private val catalogAddonApi: com.nuvio.tv.data.remote.api.CatalogAddonApi,
@@ -614,6 +615,13 @@ class StreamScreenViewModel @Inject constructor(
 
                 val allStreams = mergedAddonStreams.flatMap { it.streams }
                 val availableAddons = mergedAddonStreams.map { it.addonName }
+                // A servable stream (a cached debrid entry or a direct playable URL) proves the
+                // title is NOT "no streams". Publish availability so a stale UNAVAILABLE pill on
+                // the home tiles / details clears live. Uncached-only (queueable) titles don't
+                // match, so their download affordance is preserved.
+                if (allStreams.any { it.isDirectDebrid() || it.getStreamUrl() != null }) {
+                    streamAvailabilityRegistry.markAvailable(videoId)
+                }
                 // Auto-select only after all addons have responded or the
                 // configured timeout has elapsed. This gives slower addons a
                 // chance to return higher-quality streams before the selector

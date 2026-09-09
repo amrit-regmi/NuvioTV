@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.model.StreamStatus
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
 import com.nuvio.tv.core.util.filterReleasedItems
@@ -915,6 +916,111 @@ private fun stableHeroSortKey(
     item: MetaPreview
 ): Int {
     return "${row.addonId}|${row.apiType}|${row.catalogId}|${item.id}".hashCode()
+}
+
+/**
+ * `streamStatus` is a DYNAMIC, non-cacheable value: the backend recomputes it on every
+ * catalog/meta fetch. Once a catalog row is loaded into the in-memory home rows it is never
+ * re-derived, so a title that gained (or lost) cached streams AFTER its row was fetched keeps
+ * showing a stale pill. When a stream-resolve path publishes the ground truth it just observed
+ * (via [com.nuvio.tv.core.stream.StreamAvailabilityRegistry]), patch the affected item across
+ * the in-memory source of truth AND the live UI state so the grid chip, focus hero pill and
+ * details pill all reflect it immediately — no hard refresh, no poster graying.
+ */
+internal fun HomeViewModel.observeStreamAvailability() {
+    viewModelScope.launch {
+        streamAvailabilityRegistry.statuses.collect { statuses ->
+            if (statuses.isEmpty()) return@collect
+            statuses.forEach { (itemId, status) ->
+                applyStreamStatusUpdate(itemId, status)
+            }
+        }
+    }
+}
+
+/** Returns the same list instance when [transform] changed nothing, so identity-guarded
+ *  StateFlow consumers avoid needless recomposition. */
+private inline fun <T> List<T>.mapIfChanged(transform: (T) -> T): List<T> {
+    var changed = false
+    val out = ArrayList<T>(size)
+    for (element in this) {
+        val mapped = transform(element)
+        if (mapped !== element) changed = true
+        out.add(mapped)
+    }
+    return if (changed) out else this
+}
+
+private fun CatalogRow.withItemStreamStatus(itemId: String, status: StreamStatus): CatalogRow {
+    val idx = items.indexOfFirst { it.id == itemId }
+    if (idx < 0 || items[idx].streamStatus == status) return this
+    val newItems = items.toMutableList()
+    newItems[idx] = newItems[idx].copy(streamStatus = status)
+    return copy(items = newItems)
+}
+
+/**
+ * Applies a freshly-observed [status] to the item [itemId] everywhere it is held: the
+ * catalogsMap source of truth (so a later row rebuild keeps it), the enriched-hero cache, and
+ * each displayed uiState collection (catalogRows, homeRows, heroItems, gridItems).
+ */
+internal fun HomeViewModel.applyStreamStatusUpdate(itemId: String, status: StreamStatus) {
+    // 1. Source of truth — survives the next updateCatalogRows() rebuild. Also clears the
+    //    per-row truncated cache so a rebuild re-derives the truncated row with the new status.
+    updateIndexedCatalogItem(itemId) { item ->
+        if (item.streamStatus == status) item else item.copy(streamStatus = status)
+    }
+
+    // 2. Enriched-hero cache — hero tiles are enriched copies keyed by a signature that does
+    //    not include streamStatus, so patch the cached copy or a later rebuild would revert it.
+    lastHeroEnrichedItems = lastHeroEnrichedItems.mapIfChanged { item ->
+        if (item.id == itemId && item.streamStatus != status) item.copy(streamStatus = status) else item
+    }
+
+    // 3. Live UI state — patch the currently-displayed rows/tiles for an immediate pill flip.
+    _uiState.update { state ->
+        val newCatalogRows = state.catalogRows.mapIfChanged { it.withItemStreamStatus(itemId, status) }
+        val newHomeRows = state.homeRows.mapIfChanged { hr ->
+            when (hr) {
+                is HomeRow.Catalog -> {
+                    val patched = hr.row.withItemStreamStatus(itemId, status)
+                    if (patched === hr.row) hr else HomeRow.Catalog(patched)
+                }
+                else -> hr
+            }
+        }
+        val newHeroItems = state.heroItems.mapIfChanged {
+            if (it.id == itemId && it.streamStatus != status) it.copy(streamStatus = status) else it
+        }
+        val newGridItems = state.gridItems.mapIfChanged { gi ->
+            when (gi) {
+                is GridItem.Content ->
+                    if (gi.item.id == itemId && gi.item.streamStatus != status)
+                        gi.copy(item = gi.item.copy(streamStatus = status)) else gi
+                is GridItem.Hero -> {
+                    val patched = gi.items.mapIfChanged {
+                        if (it.id == itemId && it.streamStatus != status) it.copy(streamStatus = status) else it
+                    }
+                    if (patched === gi.items) gi else GridItem.Hero(patched)
+                }
+                else -> gi
+            }
+        }
+        if (newCatalogRows === state.catalogRows &&
+            newHomeRows === state.homeRows &&
+            newHeroItems === state.heroItems &&
+            newGridItems === state.gridItems
+        ) {
+            state
+        } else {
+            state.copy(
+                catalogRows = newCatalogRows,
+                homeRows = newHomeRows,
+                heroItems = newHeroItems,
+                gridItems = newGridItems
+            )
+        }
+    }
 }
 
 internal fun HomeViewModel.schedulePosterStatusReconcilePipeline(rows: List<CatalogRow>) {
