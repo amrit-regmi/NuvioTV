@@ -88,6 +88,21 @@ jobs:
             printf '%s' "$LOCAL_DEV_PROPERTIES_BASE64" | base64 --decode > local.dev.properties
           fi
 
+      - name: Provision app config (self-hosted hamrocinema, not localhost)
+        env:
+          APP_CONFIG_PROPERTIES: ${{ secrets.APP_CONFIG_PROPERTIES }}
+        run: |
+          # Same secret release-tv.yml uses. Without it the app falls back to
+          # SUPABASE_URL=https://localhost and TV QR sign-in fails
+          # (ConnectException to localhost:443). Fail loudly rather than ship a
+          # misconfigured beta.
+          if [ -z "$APP_CONFIG_PROPERTIES" ]; then
+            echo "::error::APP_CONFIG_PROPERTIES secret is not set — refusing to build a localhost-misconfigured beta."
+            exit 1
+          fi
+          printf '\n%s\n' "$APP_CONFIG_PROPERTIES" >> local.properties
+          echo "Appended app config to local.properties ($(grep -c '=' local.properties) keys)."
+
       - name: Prepare signing config
         if: ${{ inputs.release_mode != 'dry_run' }}
         env:
