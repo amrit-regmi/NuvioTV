@@ -64,6 +64,7 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
+import com.nuvio.tv.domain.model.StreamStatus
 import com.nuvio.tv.ui.theme.NuvioTheme
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -502,6 +503,25 @@ fun ContentCard(
                             modifier = Modifier.size(20.dp)
                         )
                     }
+                }
+
+                // Compact corner chip flagging that a title has no known streams.
+                // Poster art stays full color (no overlay/dimming); the chip just
+                // sits in the top-start corner so users see it while browsing rows.
+                if (item.streamStatus == StreamStatus.UNAVAILABLE && !isPlaceholderItem) {
+                    Text(
+                        text = stringResource(R.string.stream_status_unavailable_pill),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = NuvioTheme.colors.Error,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(start = NuvioTheme.spacing.sm, top = NuvioTheme.spacing.sm)
+                            .zIndex(2f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.72f))
+                            .padding(horizontal = NuvioTheme.spacing.sm, vertical = NuvioTheme.spacing.xxs)
+                    )
                 }
             }
         }
