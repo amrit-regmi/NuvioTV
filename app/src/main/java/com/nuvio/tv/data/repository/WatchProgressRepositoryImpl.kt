@@ -84,9 +84,12 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val hydratedProgressIds = mutableSetOf<String>()
     private var syncJob: Job? = null
-    private var watchedItemsSyncJob: Job? = null
+    // Per-profile debounce jobs + pending buffers so watched-item mutations made
+    // under one profile never mix into another profile's push batch (cross-profile
+    // watch-state leak). Keyed by the profile id captured when the mutation happened.
+    private val watchedItemsSyncJobs = mutableMapOf<Int, Job>()
     private val pendingWatchedItemsLock = Any()
-    private val pendingWatchedItems = linkedMapOf<WatchedItemSyncKey, WatchedItem>()
+    private val pendingWatchedItems = mutableMapOf<Int, LinkedHashMap<WatchedItemSyncKey, WatchedItem>>()
     var isSyncingFromRemote = false
     var hasCompletedInitialPull = false
     var hasCompletedInitialWatchedItemsPull = false
@@ -121,22 +124,28 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (isSyncingFromRemote) return
         if (!hasCompletedInitialWatchedItemsPull) return
         if (!authManager.isAuthenticated) return
+        // Capture the profile ID now so the buffered items and the delayed push stay
+        // bound to the profile that owns them, even if the user switches profiles
+        // during the debounce window (prevents cross-profile watch-state leaks).
+        val profileId = profileManager.activeProfileId.value
         synchronized(pendingWatchedItemsLock) {
+            val bucket = pendingWatchedItems.getOrPut(profileId) { linkedMapOf() }
             items.forEach { item ->
-                pendingWatchedItems[item.syncKey()] = item
+                bucket[item.syncKey()] = item
             }
-        }
-        watchedItemsSyncJob?.cancel()
-        watchedItemsSyncJob = syncScope.launch {
-            delay(2000)
-            val batch = synchronized(pendingWatchedItemsLock) {
-                pendingWatchedItems.values.toList().also {
-                    pendingWatchedItems.clear()
+            // Debounce per profile: a rapid succession of marks under the same
+            // profile still collapses into one push, while a different profile's
+            // pending push is left untouched.
+            watchedItemsSyncJobs.remove(profileId)?.cancel()
+            watchedItemsSyncJobs[profileId] = syncScope.launch {
+                delay(2000)
+                val batch = synchronized(pendingWatchedItemsLock) {
+                    pendingWatchedItems.remove(profileId)?.values?.toList().orEmpty()
                 }
-            }
-            if (batch.isEmpty()) return@launch
-            withContext(NonCancellable) {
-                watchedItemsSyncService.pushItemsToRemote(batch)
+                if (batch.isEmpty()) return@launch
+                withContext(NonCancellable) {
+                    watchedItemsSyncService.pushItemsToRemote(batch, profileId = profileId)
+                }
             }
         }
     }
