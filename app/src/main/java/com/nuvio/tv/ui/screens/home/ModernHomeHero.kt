@@ -61,6 +61,7 @@ import kotlinx.coroutines.delay
 import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
 import com.nuvio.tv.ui.components.MDBListRatingsRow
 import com.nuvio.tv.ui.components.TrailerPlayer
+import com.nuvio.tv.domain.model.StreamStatus
 import androidx.compose.ui.res.stringResource
 
 private data class ModernHeroSecondaryMeta(
@@ -440,6 +441,9 @@ private fun HeroTitleContent(
         val statusBadge = secondaryMeta.status
         val secondaryDetails = secondaryMeta.details
         val hasSecondaryBadge = ageRatingBadge != null || statusBadge != null
+        // "No streams" pill — mirrors the details hero (HeroSection.kt). Shown for the focused
+        // item when the backend reports no known stream hashes.
+        val showNoStreamsPill = preview.streamStatus == StreamStatus.UNAVAILABLE
         // Aggregated ratings (fetched on focus). Mirrors the details hero placement:
         //   ≥2 sources → the full MDBListRatingsRow on its OWN line below the meta rows.
         //   0–1 source → keep the existing inline IMDb badge (async: shows immediately, the
@@ -530,7 +534,7 @@ private fun HeroTitleContent(
             }
         }
 
-        if (secondaryHighlightText != null || ageRatingBadge != null || showImdbInSecondary || statusBadge != null || secondaryDetails.isNotEmpty()) {
+        if (secondaryHighlightText != null || ageRatingBadge != null || showImdbInSecondary || statusBadge != null || secondaryDetails.isNotEmpty() || showNoStreamsPill) {
             Row(
                 modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = metaAlpha },
                 verticalAlignment = Alignment.CenterVertically,
@@ -572,7 +576,14 @@ private fun HeroTitleContent(
                         )
                     }
                 }
-                if ((ageRatingBadge != null || statusBadge != null) && (showImdbInSecondary || secondaryDetails.isNotEmpty())) {
+                if (showNoStreamsPill) {
+                    HeroMetaBadge(
+                        text = stringResource(R.string.stream_status_unavailable_pill),
+                        textStyle = labelMedium,
+                        contentColor = NuvioTheme.colors.Error
+                    )
+                }
+                if ((ageRatingBadge != null || statusBadge != null || showNoStreamsPill) && (showImdbInSecondary || secondaryDetails.isNotEmpty())) {
                     HeroMetaDivider(metaScale)
                 }
                 if (showImdbInSecondary) {

@@ -601,6 +601,10 @@ fun ModernHomeContent(
                             imdbText = enrichedItem.imdbRating?.let { String.format(java.util.Locale.US, "%.1f", it) },
                             ageRatingText = enrichedItem.ageRating,
                             statusText = enrichedItem.status,
+                            // TMDB enrichment does not carry stream availability, so preserve the
+                            // stream status from the original catalog item's hero preview.
+                            streamStatus = activeCarouselItem?.heroPreview?.streamStatus
+                                ?: enrichedItem.streamStatus,
                             countryText = enrichedItem.country,
                             languageText = enrichedItem.language?.uppercase(),
                             genres = enrichedItem.genres.take(3).asStable(),

@@ -15,6 +15,7 @@ import com.nuvio.tv.ui.util.localizedContentType
 import com.nuvio.tv.ui.util.computeAirDateBadgeText
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.MDBListRatings
+import com.nuvio.tv.domain.model.StreamStatus
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.components.formatContinueWatchingProgressLabel
 import com.nuvio.tv.ui.util.StableList
@@ -54,6 +55,9 @@ data class HeroPreview(
     val ratings: MDBListRatings? = null,
     val ageRatingText: String? = null,
     val statusText: String? = null,
+    /** Stream availability for the focused item, carried from its MetaPreview so the
+     *  focus-preview hero can render the "No streams" pill (mirrors the details hero). */
+    val streamStatus: StreamStatus = StreamStatus.UNKNOWN,
     val countryText: String? = null,
     val languageText: String? = null,
     val genres: StableList<String>,
@@ -474,6 +478,7 @@ internal fun buildCatalogItem(
         imdbText = item.imdbRating?.let { String.format("%.1f", it) },
         ageRatingText = item.ageRating,
         statusText = item.status,
+        streamStatus = item.streamStatus,
         countryText = item.country,
         languageText = item.language?.uppercase(),
         genres = item.genres.take(3).asStable(),
