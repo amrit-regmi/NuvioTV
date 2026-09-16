@@ -95,6 +95,10 @@ class StreamScreenViewModel @Inject constructor(
     private var streamLoadJob: Job? = null
     private var streamLoadScope: kotlinx.coroutines.CoroutineScope? = null
     private var streamLoadCompleted = false
+    // Bounded auto-poll after an on-demand scrape (force-fetch): the server-side
+    // scrape often finishes a few seconds AFTER the request returns empty, so we
+    // keep the spinner and re-fetch until streams appear or the budget elapses.
+    private var scrapePollJob: Job? = null
     // Snapshot of addon streams captured when loading is cancelled mid-flight.
     // On resume, new repository emissions are merged with this baseline so
     // already-fetched results stay visible while missing addons get re-fetched.
@@ -1531,8 +1535,9 @@ class StreamScreenViewModel @Inject constructor(
             "series", "tv", "show" -> "series"
             else -> "movie"
         }
-        updateUiStateIfChanged { it.copy(isForceFetching = true) }
-        viewModelScope.launch {
+        scrapePollJob?.cancel()
+        updateUiStateIfChanged { it.copy(isForceFetching = true, forceFetchMessage = null) }
+        scrapePollJob = viewModelScope.launch {
             val profileId = try {
                 deviceProfileDataStore.selectedProfileId.first()
             } catch (_: Exception) {
@@ -1544,29 +1549,53 @@ class StreamScreenViewModel @Inject constructor(
                 profileId = profileId
             )
             when (result) {
-                is ForceRescrapeService.Result.Success -> {
-                    if (!result.ok || (result.added == 0 && result.valid == 0)) {
-                        updateUiStateIfChanged {
-                            it.copy(forceFetchMessage = context.getString(R.string.stream_force_fetch_none))
-                        }
-                    }
-                    // Re-fetch the stream list regardless so the latest hashes show.
-                    resumeBaselineStreams = null
-                    streamLoadCompleted = false
-                    loadStreams()
-                }
                 is ForceRescrapeService.Result.RateLimited -> {
                     updateUiStateIfChanged {
-                        it.copy(forceFetchMessage = context.getString(R.string.stream_force_fetch_wait))
+                        it.copy(forceFetchMessage = context.getString(R.string.stream_force_fetch_wait),
+                                isForceFetching = false)
                     }
+                    return@launch
                 }
                 is ForceRescrapeService.Result.Failure -> {
                     updateUiStateIfChanged {
-                        it.copy(forceFetchMessage = context.getString(R.string.stream_force_fetch_failed))
+                        it.copy(forceFetchMessage = context.getString(R.string.stream_force_fetch_failed),
+                                isForceFetching = false)
+                    }
+                    return@launch
+                }
+                is ForceRescrapeService.Result.Success -> {
+                    // The server-side scrape often finishes a few seconds AFTER the
+                    // rescrape call returns, so keep the spinner (isForceFetching) and
+                    // re-fetch until streams appear or the budget elapses — instead of
+                    // showing "no streams" after a single fetch.
+                    val budgetMs = 75_000L
+                    val intervalMs = 4_000L
+                    val tickMs = 400L
+                    val deadline = System.currentTimeMillis() + budgetMs
+                    var gotStreams = _uiState.value.allStreams.isNotEmpty()
+                    while (isActive && !gotStreams && System.currentTimeMillis() < deadline) {
+                        // Re-fetch the stream list (loadStreams() cancels+restarts its
+                        // own scope, so repeated calls are safe; auto-play/badge init is
+                        // session-guarded and won't re-trigger).
+                        resumeBaselineStreams = null
+                        streamLoadCompleted = false
+                        loadStreams()
+                        val subDeadline = minOf(deadline, System.currentTimeMillis() + intervalMs)
+                        while (isActive && System.currentTimeMillis() < subDeadline &&
+                               _uiState.value.allStreams.isEmpty()) {
+                            delay(tickMs)
+                        }
+                        gotStreams = _uiState.value.allStreams.isNotEmpty()
+                    }
+                    updateUiStateIfChanged {
+                        it.copy(
+                            isForceFetching = false,
+                            forceFetchMessage = if (gotStreams) null
+                                else context.getString(R.string.stream_force_fetch_none)
+                        )
                     }
                 }
             }
-            updateUiStateIfChanged { it.copy(isForceFetching = false) }
         }
     }
 
