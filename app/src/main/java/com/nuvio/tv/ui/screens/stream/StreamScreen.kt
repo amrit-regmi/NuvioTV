@@ -856,10 +856,15 @@ private fun RightStreamSection(
                 contentAlignment = Alignment.Center
             ) {
                 when {
-                    isLoading || isAutoScraping -> {
-                        // isAutoScraping: the backend is still scraping this title, so
-                        // keep the skeleton up and let the view-model poll it in — never
-                        // flash "No streams" while streams are genuinely on their way.
+                    isAutoScraping -> {
+                        // The backend is still scraping this title and the view-model is
+                        // polling it in. Show a STABLE scraping indicator (keyed only on
+                        // isAutoScraping, which stays true for the whole poll) rather than
+                        // the reload-driven skeleton — otherwise the per-tick re-fetch
+                        // re-churns the skeleton and the screen visibly flashes.
+                        ScrapingState()
+                    }
+                    isLoading -> {
                         LoadingState(showAddonLogo = showAddonLogo)
                     }
                     error != null -> {
@@ -1066,6 +1071,34 @@ private fun AddonFilterChips(
 @Composable
 private fun LoadingState(showAddonLogo: Boolean = true) {
     StreamsSkeletonList(showAddonLogo = showAddonLogo)
+}
+
+/**
+ * Shown while the backend is scraping this title and the view-model auto-polls it in.
+ * A single static spinner + label that stays mounted for the whole poll (its only
+ * driver is the stable isAutoScraping flag), so the per-tick re-fetch never re-churns
+ * it — no flashing between refreshes.
+ */
+@Composable
+private fun ScrapingState() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.padding(NuvioTheme.spacing.xxl)
+    ) {
+        androidx.compose.material3.CircularProgressIndicator(
+            modifier = Modifier.size(NuvioTheme.spacing.xxl),
+            color = NuvioTheme.colors.Primary,
+            strokeWidth = 2.dp
+        )
+        Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
+        Text(
+            text = stringResource(R.string.stream_scraping),
+            style = MaterialTheme.typography.bodyLarge,
+            color = NuvioTheme.extendedColors.textSecondary,
+            textAlign = TextAlign.Center
+        )
+    }
 }
 
 @Composable
