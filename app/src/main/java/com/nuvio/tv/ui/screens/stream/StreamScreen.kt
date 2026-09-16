@@ -402,6 +402,7 @@ fun StreamScreen(
                 // Right side - Streams container
                 RightStreamSection(
                     isLoading = uiState.isLoading,
+                    isAutoScraping = uiState.isAutoScraping,
                     error = uiState.error,
                     streams = uiState.filteredStreams,
                     availableAddons = uiState.availableAddons,
@@ -458,7 +459,6 @@ fun StreamScreen(
                     focusedStreamIndex = focusedStreamIndex,
                     shouldRestoreFocusedStream = restoreFocusedStream,
                     onRestoreFocusedStreamHandled = { restoreFocusedStream = false },
-                    onRetry = { viewModel.onEvent(StreamScreenEvent.OnRetry) },
                     activeDownloadKey = activeDownload?.streamKey,
                     activeDownload = activeDownload,
                     instantStreamKeys = uiState.instantStreamKeys,
@@ -739,6 +739,7 @@ private fun LeftContentSection(
 @Composable
 private fun RightStreamSection(
     isLoading: Boolean,
+    isAutoScraping: Boolean = false,
     error: String?,
     streams: List<Stream>,
     availableAddons: List<String>,
@@ -755,7 +756,6 @@ private fun RightStreamSection(
     focusedStreamIndex: Int,
     shouldRestoreFocusedStream: Boolean,
     onRestoreFocusedStreamHandled: () -> Unit,
-    onRetry: () -> Unit,
     activeDownloadKey: String? = null,
     activeDownload: DebridDownloadState? = null,
     instantStreamKeys: Set<String> = emptySet(),
@@ -856,14 +856,14 @@ private fun RightStreamSection(
                 contentAlignment = Alignment.Center
             ) {
                 when {
-                    isLoading -> {
+                    isLoading || isAutoScraping -> {
+                        // isAutoScraping: the backend is still scraping this title, so
+                        // keep the skeleton up and let the view-model poll it in — never
+                        // flash "No streams" while streams are genuinely on their way.
                         LoadingState(showAddonLogo = showAddonLogo)
                     }
                     error != null -> {
-                        ErrorState(
-                            message = error,
-                            onRetry = onRetry
-                        )
+                        ErrorState(message = error)
                     }
                     streams.isEmpty() -> {
                         EmptyState()
@@ -1068,12 +1068,13 @@ private fun LoadingState(showAddonLogo: Boolean = true) {
     StreamsSkeletonList(showAddonLogo = showAddonLogo)
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ErrorState(
-    message: String,
-    onRetry: () -> Unit
+    message: String
 ) {
+    // No manual "Retry" button: the normal-path auto-poll re-fetches on its own while a
+    // scrape is in flight, and "Force fetch" (always available in the sources header) is
+    // the single manual escalation. A plain error just shows the reason.
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -1094,33 +1095,6 @@ private fun ErrorState(
             color = NuvioTheme.extendedColors.textSecondary,
             textAlign = TextAlign.Center
         )
-
-        Spacer(modifier = Modifier.height(NuvioTheme.spacing.xl))
-
-        var isFocused by remember { mutableStateOf(false) }
-        Card(
-            onClick = onRetry,
-            modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
-            colors = CardDefaults.colors(
-                containerColor = NuvioTheme.colors.BackgroundCard,
-                focusedContainerColor = NuvioTheme.colors.Secondary
-            ),
-            border = CardDefaults.border(
-                focusedBorder = Border(
-                    border = BorderStroke(NuvioTheme.spacing.xxs, NuvioTheme.colors.FocusRing),
-                    shape = RoundedCornerShape(NuvioTheme.radii.sm)
-                )
-            ),
-            shape = CardDefaults.shape(shape = RoundedCornerShape(NuvioTheme.radii.sm)),
-            scale = CardDefaults.scale(focusedScale = 1.02f)
-        ) {
-            Text(
-                text = stringResource(R.string.stream_retry),
-                style = MaterialTheme.typography.labelLarge,
-                color = if (isFocused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.TextPrimary,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
-            )
-        }
     }
 }
 

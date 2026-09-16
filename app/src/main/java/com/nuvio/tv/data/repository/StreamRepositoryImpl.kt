@@ -53,7 +53,8 @@ class StreamRepositoryImpl @Inject constructor(
     private val streamBadgePresentation: StreamBadgePresentation,
     private val localDebridAvailabilityService: LocalDebridAvailabilityService,
     private val streamWarmer: StreamWarmer,
-    private val deviceProfileDataStore: DeviceProfileDataStore
+    private val deviceProfileDataStore: DeviceProfileDataStore,
+    private val onDemandScrapeTracker: com.nuvio.tv.core.stream.OnDemandScrapeTracker
 ) : StreamRepository {
     private enum class StreamFailureKind {
         MISSING,
@@ -484,7 +485,8 @@ class StreamRepositoryImpl @Inject constructor(
         val encodedType = encodePathSegment(type)
         val encodedVideoId = encodePathSegment(videoId)
         // F32: detect the backend addon via the centralized host (RecoBackend.host).
-        val streamUrl = if (baseUrl.contains(BACKEND_ADDON_HOST, ignoreCase = true)) {
+        val isBackendAddon = baseUrl.contains(BACKEND_ADDON_HOST, ignoreCase = true)
+        val streamUrl = if (isBackendAddon) {
             val profileId = deviceProfileDataStore.selectedProfileId.first()
             val profileParam = if (baseQuery.isEmpty()) "?profile=$profileId" else "&profile=$profileId"
             "$basePath/stream/$encodedType/$encodedVideoId.json$baseQuery$profileParam"
@@ -515,6 +517,12 @@ class StreamRepositoryImpl @Inject constructor(
                     it.toDomain(addonName, addonLogo)
                 } ?: emptyList()
                 Log.d(TAG, "Streams success addon=$addonName count=${streams.size} url=$streamUrl")
+                if (isBackendAddon) {
+                    // Record the backend's on-demand-scrape signal so the Stream screen
+                    // can auto-poll only while a scrape is genuinely in flight.
+                    val scrapePending = streams.isEmpty() && result.data.notice?.retry == true
+                    onDemandScrapeTracker.record(type, videoId, scrapePending)
+                }
                 NetworkResult.Success(streams)
             }
             is NetworkResult.Error -> {

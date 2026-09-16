@@ -42,6 +42,11 @@ data class StreamScreenUiState(
     // Force-fetch (re-scrape) button state.
     val isForceFetching: Boolean = false,
     val forceFetchMessage: String? = null,
+    // True while the normal-path auto-poll is waiting for a backend on-demand scrape
+    // to land (empty streams + a "scrape in flight" notice). Renders the loading
+    // skeleton instead of the empty state, so the user never sees a premature "no
+    // streams" while the server is still fetching.
+    val isAutoScraping: Boolean = false,
     // Active non-cached download state (null = no active download)
     val activeDownload: DebridDownloadState? = null,
     // Set of stream stable keys for direct-debrid streams that are already

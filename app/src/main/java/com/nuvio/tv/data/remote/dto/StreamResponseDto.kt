@@ -5,7 +5,20 @@ import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
 data class StreamResponseDto(
-    @Json(name = "streams") val streams: List<StreamDto>? = null
+    @Json(name = "streams") val streams: List<StreamDto>? = null,
+    // Backend on-demand scrape signal: present (retry=true) ONLY when the title was
+    // uncovered, a background scrape was just fired, and the bounded wait window
+    // expired with nothing cached yet — i.e. "streams are on their way, poll again".
+    // Absent when the title is genuinely empty/covered or unreleased, so the client
+    // can poll only when a scrape is really running.
+    @Json(name = "notice") val notice: StreamNoticeDto? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class StreamNoticeDto(
+    @Json(name = "type") val type: String? = null,
+    @Json(name = "retry") val retry: Boolean? = null,
+    @Json(name = "message") val message: String? = null
 )
 
 @JsonClass(generateAdapter = true)

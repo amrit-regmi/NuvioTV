@@ -44,6 +44,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.ensureActive
@@ -84,6 +85,7 @@ class StreamScreenViewModel @Inject constructor(
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     private val streamWarmer: StreamWarmer,
     private val streamAvailabilityRegistry: com.nuvio.tv.core.stream.StreamAvailabilityRegistry,
+    private val onDemandScrapeTracker: com.nuvio.tv.core.stream.OnDemandScrapeTracker,
     private val forceRescrapeService: ForceRescrapeService,
     private val deviceProfileDataStore: DeviceProfileDataStore,
     private val catalogAddonApi: com.nuvio.tv.data.remote.api.CatalogAddonApi,
@@ -99,6 +101,10 @@ class StreamScreenViewModel @Inject constructor(
     // scrape often finishes a few seconds AFTER the request returns empty, so we
     // keep the spinner and re-fetch until streams appear or the budget elapses.
     private var scrapePollJob: Job? = null
+    // True while a scrape-poll loop (force-fetch OR the normal-path auto-poll) is
+    // driving repeated loadStreams() calls. Guards loadStreams() from spawning a
+    // nested auto-poll on each of its own re-fetches.
+    private var scrapePolling = false
     // Snapshot of addon streams captured when loading is cancelled mid-flight.
     // On resume, new repository emissions are merged with this baseline so
     // already-fetched results stay visible while missing addons get re-fetched.
@@ -1001,7 +1007,66 @@ class StreamScreenViewModel @Inject constructor(
             // would block resumption on return.
             ensureActive()
             streamLoadCompleted = true
+            // If the load finished with no streams AND the backend told us a scrape
+            // is in flight for this title, keep the loading skeleton and poll until
+            // the freshly-scraped streams land (or the budget elapses) — instead of
+            // flashing "No streams" and making the user manually retry.
+            maybeStartAutoScrapePoll()
         }
+    }
+
+    /**
+     * Normal-path auto-poll: after a load completes empty, if the backend signalled an
+     * in-flight on-demand scrape (see [OnDemandScrapeTracker]), keep the loading state
+     * and re-fetch until streams appear or the budget elapses. Only ever runs when a
+     * scrape is genuinely running, so a truly empty/covered/unreleased title falls
+     * straight through to the empty state without a pointless wait.
+     */
+    private fun maybeStartAutoScrapePoll() {
+        if (scrapePolling) return
+        if (manualSelection) return
+        if (_uiState.value.isForceFetching) return
+        if (_uiState.value.allStreams.isNotEmpty()) return
+        if (!onDemandScrapeTracker.isScrapePending(contentType, videoId)) return
+        scrapePollJob?.cancel()
+        scrapePollJob = viewModelScope.launch {
+            scrapePolling = true
+            updateUiStateIfChanged { it.copy(isAutoScraping = true) }
+            try {
+                pollForStreamsUntilFoundOrBudget(75_000L)
+            } finally {
+                scrapePolling = false
+                updateUiStateIfChanged { it.copy(isAutoScraping = false) }
+            }
+        }
+    }
+
+    /**
+     * Repeatedly re-fetch the stream list until streams appear or [budgetMs] elapses.
+     * Shared by force-fetch and the normal-path auto-poll. loadStreams() cancels and
+     * restarts its own scope so repeated calls are safe; the [scrapePolling] guard set
+     * by callers stops each re-fetch from spawning a nested auto-poll. Returns true if
+     * streams were found.
+     */
+    private suspend fun pollForStreamsUntilFoundOrBudget(budgetMs: Long): Boolean {
+        val intervalMs = 4_000L
+        val tickMs = 400L
+        val deadline = System.currentTimeMillis() + budgetMs
+        var gotStreams = _uiState.value.allStreams.isNotEmpty()
+        while (currentCoroutineContext().isActive && !gotStreams &&
+               System.currentTimeMillis() < deadline) {
+            resumeBaselineStreams = null
+            streamLoadCompleted = false
+            loadStreams()
+            val subDeadline = minOf(deadline, System.currentTimeMillis() + intervalMs)
+            while (currentCoroutineContext().isActive &&
+                   System.currentTimeMillis() < subDeadline &&
+                   _uiState.value.allStreams.isEmpty()) {
+                delay(tickMs)
+            }
+            gotStreams = _uiState.value.allStreams.isNotEmpty()
+        }
+        return gotStreams
     }
 
     private fun shouldAttemptEmbeddedMetaStreamLookup(): Boolean {
@@ -1567,25 +1632,13 @@ class StreamScreenViewModel @Inject constructor(
                     // The server-side scrape often finishes a few seconds AFTER the
                     // rescrape call returns, so keep the spinner (isForceFetching) and
                     // re-fetch until streams appear or the budget elapses — instead of
-                    // showing "no streams" after a single fetch.
-                    val budgetMs = 75_000L
-                    val intervalMs = 4_000L
-                    val tickMs = 400L
-                    val deadline = System.currentTimeMillis() + budgetMs
-                    var gotStreams = _uiState.value.allStreams.isNotEmpty()
-                    while (isActive && !gotStreams && System.currentTimeMillis() < deadline) {
-                        // Re-fetch the stream list (loadStreams() cancels+restarts its
-                        // own scope, so repeated calls are safe; auto-play/badge init is
-                        // session-guarded and won't re-trigger).
-                        resumeBaselineStreams = null
-                        streamLoadCompleted = false
-                        loadStreams()
-                        val subDeadline = minOf(deadline, System.currentTimeMillis() + intervalMs)
-                        while (isActive && System.currentTimeMillis() < subDeadline &&
-                               _uiState.value.allStreams.isEmpty()) {
-                            delay(tickMs)
-                        }
-                        gotStreams = _uiState.value.allStreams.isNotEmpty()
+                    // showing "no streams" after a single fetch. The scrapePolling guard
+                    // stops each re-fetch from also spawning the normal-path auto-poll.
+                    scrapePolling = true
+                    val gotStreams = try {
+                        pollForStreamsUntilFoundOrBudget(75_000L)
+                    } finally {
+                        scrapePolling = false
                     }
                     updateUiStateIfChanged {
                         it.copy(
