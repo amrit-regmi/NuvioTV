@@ -105,6 +105,13 @@ class StreamScreenViewModel @Inject constructor(
     // driving repeated loadStreams() calls. Guards loadStreams() from spawning a
     // nested auto-poll on each of its own re-fetches.
     private var scrapePolling = false
+    // Safety ceiling for pollForStreamsUntilFoundOrBudget — NOT the expected wait (the
+    // loop resolves on the backend's own "still scraping" signal well before this in
+    // the common case). Set above the backend's hard scrape ceiling (debrid_ingest_live.py's
+    // subprocess is force-killed at 300s) so a genuinely slow-but-working scrape is never
+    // cut off early; there is no cost to this being generous since the backend's herd guard
+    // guarantees only ONE scrape ever runs per title/episode no matter how long we wait.
+    private val SCRAPE_POLL_BUDGET_MS = 320_000L
     // Snapshot of addon streams captured when loading is cancelled mid-flight.
     // On resume, new repository emissions are merged with this baseline so
     // already-fetched results stay visible while missing addons get re-fetched.
@@ -1033,7 +1040,7 @@ class StreamScreenViewModel @Inject constructor(
             scrapePolling = true
             updateUiStateIfChanged { it.copy(isAutoScraping = true) }
             try {
-                pollForStreamsUntilFoundOrBudget(75_000L)
+                pollForStreamsUntilFoundOrBudget(SCRAPE_POLL_BUDGET_MS)
             } finally {
                 scrapePolling = false
                 updateUiStateIfChanged { it.copy(isAutoScraping = false) }
@@ -1042,11 +1049,25 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     /**
-     * Repeatedly re-fetch the stream list until streams appear or [budgetMs] elapses.
-     * Shared by force-fetch and the normal-path auto-poll. loadStreams() cancels and
-     * restarts its own scope so repeated calls are safe; the [scrapePolling] guard set
-     * by callers stops each re-fetch from spawning a nested auto-poll. Returns true if
-     * streams were found.
+     * Repeatedly re-fetch the stream list until streams appear, the backend confirms
+     * the scrape has genuinely concluded, or [budgetMs] elapses. Shared by force-fetch
+     * and the normal-path auto-poll. loadStreams() cancels and restarts its own scope
+     * so repeated calls are safe; the [scrapePolling] guard set by callers stops each
+     * re-fetch from spawning a nested auto-poll. Returns true if streams were found.
+     *
+     * [budgetMs] is a SAFETY CEILING, not the expected wait: the backend never runs two
+     * concurrent scrapes for the same title/episode (its herd guard — _ondemand_scraping
+     * in catalog/main.py — makes every re-request either a no-op or a block-wait on the
+     * SAME in-flight scrape, never a second one), so there is no cost to waiting out the
+     * backend's full scrape duration rather than guessing a shorter client-side timeout.
+     * The loop instead resolves on the backend's OWN signal: as soon as its response for
+     * this title stops carrying the "still scraping" notice (onDemandScrapeTracker records
+     * this on every fetch), the scrape has genuinely concluded — with real streams if any
+     * were found, or with nothing if not — and we stop immediately rather than idling out
+     * the rest of the budget. [budgetMs] only guards against a pathological case (a hung
+     * process, a desynced in-memory flag) and is set well above the backend's own hard
+     * ceiling (debrid_ingest_live.py's subprocess is force-killed at 300s) so a genuinely
+     * slow-but-still-working scrape is never cut off early.
      */
     private suspend fun pollForStreamsUntilFoundOrBudget(budgetMs: Long): Boolean {
         val intervalMs = 4_000L
@@ -1065,6 +1086,12 @@ class StreamScreenViewModel @Inject constructor(
                 delay(tickMs)
             }
             gotStreams = _uiState.value.allStreams.isNotEmpty()
+            if (!gotStreams && !onDemandScrapeTracker.isScrapePending(contentType, videoId)) {
+                // The backend's latest response no longer signals an in-flight scrape for
+                // this title — it has genuinely concluded and found nothing. Stop now
+                // rather than idling out the rest of the (generous) safety-ceiling budget.
+                break
+            }
         }
         return gotStreams
     }
@@ -1636,7 +1663,7 @@ class StreamScreenViewModel @Inject constructor(
                     // stops each re-fetch from also spawning the normal-path auto-poll.
                     scrapePolling = true
                     val gotStreams = try {
-                        pollForStreamsUntilFoundOrBudget(75_000L)
+                        pollForStreamsUntilFoundOrBudget(SCRAPE_POLL_BUDGET_MS)
                     } finally {
                         scrapePolling = false
                     }
