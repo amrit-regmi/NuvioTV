@@ -399,6 +399,7 @@ class MetaDetailsViewModel @Inject constructor(
             is MetaDetailsEvent.OnMarkPreviousEpisodesWatched -> markPreviousEpisodesWatched(event.video)
             is MetaDetailsEvent.OnMarkPreviousSeasonsWatched -> markPreviousSeasonsWatched(event.season)
             MetaDetailsEvent.OnLibraryLongPress -> openListPicker()
+            MetaDetailsEvent.OnRecommendClick -> onRecommendClick()
             is MetaDetailsEvent.OnPickerMembershipToggled -> togglePickerMembership(event.listKey)
             MetaDetailsEvent.OnPickerSave -> savePickerMembership()
             MetaDetailsEvent.OnPickerDismiss -> dismissListPicker()
@@ -2652,6 +2653,48 @@ class MetaDetailsViewModel @Inject constructor(
         } else {
             null
         }
+    }
+
+    /**
+     * "Recommend to…" from the Hero screen's own action-button row (bypasses the generic
+     * long-press options dialog entirely — see [PosterOptionsController.openRecommendPickerFor]).
+     */
+    private fun onRecommendClick() {
+        val meta = _uiState.value.meta ?: return
+        posterOptions.openRecommendPickerFor(meta.toMetaPreview(), preferredAddonBaseUrl)
+    }
+
+    private fun Meta.toMetaPreview(): com.nuvio.tv.domain.model.MetaPreview {
+        return com.nuvio.tv.domain.model.MetaPreview(
+            id = id,
+            type = type,
+            rawType = rawType,
+            name = name,
+            poster = poster,
+            posterShape = posterShape,
+            background = background,
+            logo = logo,
+            description = description,
+            releaseInfo = releaseInfo,
+            imdbRating = imdbRating,
+            genres = genres,
+            status = status,
+            ageRating = ageRating,
+            language = language,
+            released = released,
+            country = country,
+            imdbId = imdbId,
+            slug = slug,
+            landscapePoster = landscapePoster,
+            rawPosterUrl = rawPosterUrl,
+            director = director,
+            writer = writer,
+            links = links,
+            behaviorHints = behaviorHints,
+            trailers = trailers,
+            trailerYtIds = trailerYtIds,
+            streamStatus = streamStatus
+        )
     }
 
     private fun Meta.toLibraryEntryInput(): LibraryEntryInput {

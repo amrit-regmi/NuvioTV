@@ -380,6 +380,53 @@ class PosterOptionsController @Inject constructor(
         }
     }
 
+    /**
+     * "Recommend to…" entry point for screens that don't route through the generic
+     * long-press options dialog (e.g. the Details/Hero screen's own dedicated action-button
+     * row) — skips the "must call .show(item) first" requirement [openRecommendPicker] has,
+     * taking the target item directly instead of reading [PosterOptionsState.target].
+     */
+    fun openRecommendPickerFor(item: MetaPreview, addonBaseUrl: String?) {
+        val scope = this.scope ?: return
+        if (_state.value.recommendPickerActive) return
+
+        _state.update { current ->
+            current.copy(
+                recommendPickerActive = true,
+                recommendPickerTitle = item.name,
+                recommendPickerPending = true,
+                recommendPickerError = null,
+                recommendPickerRecipients = emptyList(),
+                recommendPickerSentRecipientId = null
+            )
+        }
+
+        scope.launch {
+            val canonical = canonicalize(item)
+            activeRecommendItem = canonical
+            activeRecommendAddonBaseUrl = addonBaseUrl?.takeIf { it.isNotBlank() }
+            runCatching {
+                sharesRepository.getGrantedRecipients()
+            }.onSuccess { recipients ->
+                _state.update { current ->
+                    current.copy(
+                        recommendPickerPending = false,
+                        recommendPickerError = null,
+                        recommendPickerRecipients = recipients
+                    )
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to load recommend picker for ${canonical.id}: ${error.message}")
+                _state.update { current ->
+                    current.copy(
+                        recommendPickerPending = false,
+                        recommendPickerError = error.message ?: appContext.getString(com.nuvio.tv.R.string.poster_options_error_load_recipients_failed)
+                    )
+                }
+            }
+        }
+    }
+
     fun sendRecommendation(recipientUserId: String) {
         val state = _state.value
         if (state.recommendPickerPending) return

@@ -599,6 +599,7 @@ fun MetaDetailsScreen(
                     onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
                     onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
                     onLibraryLongPress = { viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress) },
+                    onRecommend = { viewModel.onEvent(MetaDetailsEvent.OnRecommendClick) },
                     onToggleMovieWatched = { viewModel.onEvent(MetaDetailsEvent.OnToggleMovieWatched) },
                     onToggleEpisodeWatched = { video ->
                         viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
@@ -903,6 +904,7 @@ private fun MetaDetailsContent(
     onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
     onLibraryLongPress: () -> Unit,
+    onRecommend: () -> Unit = {},
     onToggleMovieWatched: () -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
     onMarkSeasonWatched: (Int) -> Unit,
@@ -1696,6 +1698,7 @@ private fun MetaDetailsContent(
                         isInLibrary = isInLibrary,
                         onToggleLibrary = onToggleLibrary,
                         onLibraryLongPress = onLibraryLongPress,
+                        onRecommend = onRecommend,
                         isMovieWatched = isMovieWatched,
                         isMovieWatchedPending = isMovieWatchedPending,
                         onToggleMovieWatched = onToggleMovieWatched,

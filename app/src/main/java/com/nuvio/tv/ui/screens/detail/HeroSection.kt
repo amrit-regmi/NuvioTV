@@ -87,6 +87,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.StarHalf
@@ -121,6 +122,7 @@ fun HeroContentSection(
     isInLibrary: Boolean,
     onToggleLibrary: () -> Unit,
     onLibraryLongPress: () -> Unit,
+    onRecommend: () -> Unit = {},
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
     onToggleMovieWatched: () -> Unit,
@@ -313,6 +315,13 @@ fun HeroContentSection(
                             contentDescription = if (isInLibrary) stringResource(R.string.hero_remove_from_library) else stringResource(R.string.hero_add_to_library),
                             onClick = onToggleLibrary,
                             onLongPress = onLibraryLongPress,
+                            onFocused = onHeroActionFocused
+                        )
+
+                        ActionIconButton(
+                            icon = Icons.Default.Share,
+                            contentDescription = stringResource(R.string.poster_options_recommend_to),
+                            onClick = onRecommend,
                             onFocused = onHeroActionFocused
                         )
 
