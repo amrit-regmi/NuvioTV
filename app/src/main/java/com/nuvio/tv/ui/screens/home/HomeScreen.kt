@@ -487,9 +487,23 @@ fun HomeScreen(
                     viewModel.togglePosterSeriesWatched(item)
                 }
                 posterOptionsTarget = null
+            },
+            onRecommend = {
+                viewModel.posterOptions.openRecommendPickerFor(item, selectedPoster.addonBaseUrl)
+                posterOptionsTarget = null
             }
         )
     }
+
+    // Renders only the "Recommend to..." picker dialog triggered above — the Home screen's
+    // own HomePosterOptionsDialog (not this shared controller's .show()) handles everything
+    // else, so PosterOptionsState.target here is always null from this screen's path.
+    val sharedPosterOptionsState by viewModel.posterOptions.state.collectAsStateWithLifecycle()
+    com.nuvio.tv.ui.components.posteroptions.PosterOptionsHost(
+        state = sharedPosterOptionsState,
+        controller = viewModel.posterOptions,
+        onNavigateToDetail = onNavigateToDetail
+    )
 
     if (uiState.showPosterListPicker) {
         HomeLibraryListPickerDialog(
@@ -703,7 +717,8 @@ private fun HomePosterOptionsDialog(
     onDismiss: () -> Unit,
     onDetails: () -> Unit,
     onToggleLibrary: () -> Unit,
-    onToggleWatched: () -> Unit
+    onToggleWatched: () -> Unit,
+    onRecommend: () -> Unit
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
 
@@ -769,6 +784,17 @@ private fun HomePosterOptionsDialog(
                     }
                 )
             }
+        }
+
+        Button(
+            onClick = onRecommend,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioTheme.colors.BackgroundCard,
+                contentColor = NuvioTheme.colors.TextPrimary
+            )
+        ) {
+            Text(stringResource(R.string.poster_options_recommend_to))
         }
     }
 }

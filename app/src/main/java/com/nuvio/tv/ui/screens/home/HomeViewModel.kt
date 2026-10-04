@@ -93,7 +93,8 @@ class HomeViewModel @Inject constructor(
     internal val homeCatalogSettingsSyncService: com.nuvio.tv.core.sync.HomeCatalogSettingsSyncService,
     private val streamWarmer: StreamWarmer,
     internal val streamAvailabilityRegistry: com.nuvio.tv.core.stream.StreamAvailabilityRegistry,
-    internal val serverHealthNotifier: com.nuvio.tv.core.network.ServerHealthNotifier
+    internal val serverHealthNotifier: com.nuvio.tv.core.network.ServerHealthNotifier,
+    internal val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsController
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -332,6 +333,7 @@ class HomeViewModel @Inject constructor(
         get() = trailerPreviewAudioUrlsState
 
     init {
+        posterOptions.bind(viewModelScope)
         // Accumulates individual watched status changes and flushes them as a single
         // update after 150ms of inactivity, preventing N separate recompositions.
         viewModelScope.launch {
