@@ -194,6 +194,7 @@ internal fun ModernSidebarBlurPanel(
                             label = item.label,
                             iconRes = item.iconRes,
                             icon = item.icon,
+                            badgeCount = item.badgeCount,
                             selected = selectedDrawerRoute == item.route,
                             focusEnabled = keepSidebarFocusDuringCollapse,
                             labelAlpha = sidebarLabelAlpha,
@@ -226,6 +227,7 @@ private fun SidebarNavigationItem(
     iconScale: Float,
     onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    badgeCount: Int = 0,
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -301,6 +303,9 @@ private fun SidebarNavigationItem(
                     tint = contentColor,
                     modifier = Modifier.size(NuvioComponents.tokens.sidebar.iconSize)
                 )
+            }
+            if (badgeCount > 0) {
+                SidebarBadgeDot(count = badgeCount, modifier = Modifier.align(Alignment.TopEnd))
             }
         }
         Spacer(modifier = Modifier.width(SidebarContentGap))

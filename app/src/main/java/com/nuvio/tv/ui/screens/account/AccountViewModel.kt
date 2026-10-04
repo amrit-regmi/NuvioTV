@@ -14,6 +14,7 @@ import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.qr.QrCodeGenerator
 import com.nuvio.tv.core.reco.RecommendationRepository
+import com.nuvio.tv.core.shares.SharesRepository
 import com.nuvio.tv.core.sync.AddonSyncService
 import com.nuvio.tv.core.sync.LibrarySyncService
 import com.nuvio.tv.core.sync.PluginSyncService
@@ -69,6 +70,7 @@ class AccountViewModel @Inject constructor(
     private val syncBackendRepository: SyncBackendRepository,
     private val supabaseProvider: SyncBackendSupabaseProvider,
     private val recommendationRepository: RecommendationRepository,
+    private val sharesRepository: SharesRepository,
     private val featureAvailabilityManager: FeatureAvailabilityManager,
     private val profileManager: ProfileManager,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
@@ -86,6 +88,20 @@ class AccountViewModel @Inject constructor(
         observeSyncBackend()
         observeFeatureAvailability()
         observeActiveProfile()
+        observeActiveProfileForShares()
+    }
+
+    // "Receive recommendations from" permissions are profile-level (te_user_id), so a profile
+    // switch needs its own reload — independent of observeActiveProfile() above, which only
+    // tracks the primary/admin bit for the (account-level) Connected Devices gate.
+    private fun observeActiveProfileForShares() {
+        viewModelScope.launch {
+            profileManager.activeProfileId.collect {
+                if (_uiState.value.authState is AuthState.FullAccount) {
+                    loadReceiveFromPermissions()
+                }
+            }
+        }
     }
 
     // F28: track whether the primary/admin profile is active so device management can be
@@ -127,6 +143,7 @@ class AccountViewModel @Inject constructor(
                     loadConnectedStats()
                     loadSyncOverview()
                     loadSuperAdminFlag(state.userId)
+                    loadReceiveFromPermissions()
                 } else {
                     _uiState.update {
                         it.copy(
@@ -320,6 +337,94 @@ class AccountViewModel @Inject constructor(
         viewModelScope.launch {
             syncRepository.unlinkDevice(deviceUserId)
             loadLinkedDevices()
+        }
+    }
+
+    // --- "Receive recommendations from" (Feature 2 permission model) ---
+
+    fun loadReceiveFromPermissions() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isReceiveFromLoading = true) }
+            val permissions = runCatching { sharesRepository.getMyPermissions() }.getOrDefault(emptyList())
+            _uiState.update { it.copy(receiveFromPermissions = permissions, isReceiveFromLoading = false) }
+        }
+    }
+
+    fun openRosterPicker() {
+        _uiState.update {
+            it.copy(
+                rosterPickerActive = true,
+                rosterPickerPending = true,
+                rosterPickerError = null,
+                roster = emptyList(),
+                rosterFilterQuery = ""
+            )
+        }
+        viewModelScope.launch {
+            runCatching { sharesRepository.getRoster() }
+                .onSuccess { roster ->
+                    _uiState.update { it.copy(rosterPickerPending = false, roster = roster) }
+                }
+                .onFailure { e ->
+                    _uiState.update {
+                        it.copy(
+                            rosterPickerPending = false,
+                            rosterPickerError = e.message ?: context.getString(R.string.account_error_generic_retry)
+                        )
+                    }
+                }
+        }
+    }
+
+    fun closeRosterPicker() {
+        _uiState.update { it.copy(rosterPickerActive = false, roster = emptyList(), rosterFilterQuery = "") }
+    }
+
+    fun setRosterFilterQuery(query: String) {
+        _uiState.update { it.copy(rosterFilterQuery = query) }
+    }
+
+    /** The roster filtered by [AccountUiState.rosterFilterQuery], alphabetical by name. */
+    fun filteredRoster(): List<com.nuvio.tv.core.shares.RosterEntryDto> {
+        val state = _uiState.value
+        val query = state.rosterFilterQuery.trim()
+        val base = state.roster.sortedBy { (it.name ?: it.userId).lowercase() }
+        return if (query.isBlank()) base else base.filter {
+            (it.name ?: it.userId).contains(query, ignoreCase = true)
+        }
+    }
+
+    fun requestReceiveFrom(sourceId: String) {
+        viewModelScope.launch {
+            val ok = runCatching { sharesRepository.requestPermission(sourceId) }.getOrDefault(false)
+            if (ok) {
+                closeRosterPicker()
+                loadReceiveFromPermissions()
+            } else {
+                _uiState.update { it.copy(rosterPickerError = context.getString(R.string.account_error_generic_retry)) }
+            }
+        }
+    }
+
+    fun startAliasEdit(permissionId: String, currentAlias: String?) {
+        _uiState.update { it.copy(aliasEditTargetId = permissionId, aliasEditValue = currentAlias.orEmpty()) }
+    }
+
+    fun updateAliasEditValue(value: String) {
+        _uiState.update { it.copy(aliasEditValue = value) }
+    }
+
+    fun cancelAliasEdit() {
+        _uiState.update { it.copy(aliasEditTargetId = null, aliasEditValue = "") }
+    }
+
+    fun saveAliasEdit() {
+        val id = _uiState.value.aliasEditTargetId ?: return
+        val alias = _uiState.value.aliasEditValue
+        viewModelScope.launch {
+            runCatching { sharesRepository.updatePermissionAlias(id, alias) }
+            _uiState.update { it.copy(aliasEditTargetId = null, aliasEditValue = "") }
+            loadReceiveFromPermissions()
         }
     }
 

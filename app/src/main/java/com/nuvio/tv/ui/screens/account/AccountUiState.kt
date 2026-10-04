@@ -1,6 +1,8 @@
 package com.nuvio.tv.ui.screens.account
 
 import android.graphics.Bitmap
+import com.nuvio.tv.core.shares.MyPermissionDto
+import com.nuvio.tv.core.shares.RosterEntryDto
 import com.nuvio.tv.data.remote.supabase.SupabaseLinkedDevice
 import com.nuvio.tv.domain.model.AuthState
 
@@ -65,5 +67,18 @@ data class AccountUiState(
     val isPrimaryProfileActive: Boolean = false,
     // Dashboard ("Manage / Super Admin") deep-link state shown as a QR on the TV.
     val manageDashboardUrl: String? = null,
-    val manageDashboardQrBitmap: Bitmap? = null
+    val manageDashboardQrBitmap: Bitmap? = null,
+    // "Receive recommendations from" (Feature 2 permission model) — caller's own outgoing
+    // requests, any status. Split client-side into allowed (main list) vs pending (sub-list).
+    val receiveFromPermissions: List<MyPermissionDto> = emptyList(),
+    val isReceiveFromLoading: Boolean = false,
+    // Roster picker ("Add" action) state.
+    val rosterPickerActive: Boolean = false,
+    val rosterPickerPending: Boolean = false,
+    val rosterPickerError: String? = null,
+    val roster: List<RosterEntryDto> = emptyList(),
+    val rosterFilterQuery: String = "",
+    // Inline alias-edit dialog state (editing one permission row's alias).
+    val aliasEditTargetId: String? = null,
+    val aliasEditValue: String = ""
 )

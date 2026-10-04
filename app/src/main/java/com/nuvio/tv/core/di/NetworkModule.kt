@@ -86,6 +86,10 @@ object NetworkModule {
         // ServerHealthNotifier has no OkHttpClient dependency, but keep it Lazy for symmetry
         // and to avoid any eager-init surprises; resolved on the first reco-host request.
         serverHealthNotifier: dagger.Lazy<com.nuvio.tv.core.network.ServerHealthNotifier>,
+        // DeviceProfileDataStore transitively depends on ProfileDataStoreFactory, which (like
+        // RecoAuthTokenProvider above) sits behind this same OkHttpClient elsewhere in the graph.
+        // Lazy for the same reason: let the client build first, resolve on first use.
+        deviceProfileDataStore: dagger.Lazy<com.nuvio.tv.data.local.DeviceProfileDataStore>,
     ): OkHttpClient {
         // SECURITY (#15): No trust-all X509TrustManager / custom sslSocketFactory /
         // permissive hostnameVerifier here. The upstream trust-all (commit 000b4d68,
@@ -113,6 +117,11 @@ object NetworkModule {
                 // host scoping.
                 if (original.url.host.equals(RecoBackend.host, ignoreCase = true)) {
                     builder.header("X-Profile-Id", ProfileManager.currentProfileId.toString())
+                    // Abuse-detection device heartbeat (see MEMORY/plan): opaque per-install
+                    // device id only, host-scoped like X-Profile-Id above. getOrCreateDeviceId()
+                    // is synchronous (derived from ANDROID_ID+MODEL, no DataStore read), so this
+                    // is safe to call directly on the OkHttp dispatcher thread.
+                    builder.header("X-Device-Id", deviceProfileDataStore.get().getOrCreateDeviceId())
                 }
                 chain.proceed(builder.build())
             }

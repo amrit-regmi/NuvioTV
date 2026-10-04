@@ -2,6 +2,9 @@ package com.nuvio.tv.ui.components.posteroptions
 
 import android.util.Log
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.shares.GrantedRecipientDto
+import com.nuvio.tv.core.shares.ShareRequestBody
+import com.nuvio.tv.core.shares.SharesRepository
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.WatchedSeriesStateHolder
 import com.nuvio.tv.data.repository.parseContentIds
@@ -44,7 +47,8 @@ class PosterOptionsController @Inject constructor(
     private val watchProgressRepository: WatchProgressRepository,
     private val metaRepository: MetaRepository,
     private val watchedSeriesStateHolder: WatchedSeriesStateHolder,
-    private val tmdbService: TmdbService
+    private val tmdbService: TmdbService,
+    private val sharesRepository: SharesRepository
 ) {
     private val _state = MutableStateFlow(PosterOptionsState())
     val state: StateFlow<PosterOptionsState> = _state.asStateFlow()
@@ -326,6 +330,114 @@ class PosterOptionsController @Inject constructor(
         }
     }
 
+    /**
+     * "Recommend to…" — mirrors [openListPicker] exactly: closes the main options dialog,
+     * opens a picker sheet of its own, loads its content async, and the user's pick both
+     * sends and closes it. Recipients come from `GET /shares/permissions/granted` (never the
+     * full roster — see Feature 2's permission model).
+     */
+    fun openRecommendPicker() {
+        val state = _state.value
+        val item = state.target ?: return
+        val scope = this.scope ?: return
+
+        _state.update { current ->
+            current.copy(
+                target = null,
+                recommendPickerActive = true,
+                recommendPickerTitle = item.name,
+                recommendPickerPending = true,
+                recommendPickerError = null,
+                recommendPickerRecipients = emptyList(),
+                recommendPickerSentRecipientId = null
+            )
+        }
+        targetFlow.value = null
+
+        scope.launch {
+            val canonical = canonicalize(item)
+            activeRecommendItem = canonical
+            activeRecommendAddonBaseUrl = state.addonBaseUrl.takeIf { it.isNotBlank() }
+            runCatching {
+                sharesRepository.getGrantedRecipients()
+            }.onSuccess { recipients ->
+                _state.update { current ->
+                    current.copy(
+                        recommendPickerPending = false,
+                        recommendPickerError = null,
+                        recommendPickerRecipients = recipients
+                    )
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to load recommend picker for ${canonical.id}: ${error.message}")
+                _state.update { current ->
+                    current.copy(
+                        recommendPickerPending = false,
+                        recommendPickerError = error.message ?: appContext.getString(com.nuvio.tv.R.string.poster_options_error_load_recipients_failed)
+                    )
+                }
+            }
+        }
+    }
+
+    fun sendRecommendation(recipientUserId: String) {
+        val state = _state.value
+        if (state.recommendPickerPending) return
+        val item = activeRecommendItem ?: return
+        val scope = this.scope ?: return
+
+        _state.update { it.copy(recommendPickerPending = true, recommendPickerError = null) }
+        scope.launch {
+            runCatching {
+                sharesRepository.sendShare(item.toShareRequest(activeRecommendAddonBaseUrl, recipientUserId))
+            }.onSuccess { success ->
+                if (success) {
+                    activeRecommendItem = null
+                    activeRecommendAddonBaseUrl = null
+                    _state.update {
+                        it.copy(
+                            recommendPickerActive = false,
+                            recommendPickerPending = false,
+                            recommendPickerError = null,
+                            recommendPickerTitle = null,
+                            recommendPickerSentRecipientId = recipientUserId
+                        )
+                    }
+                } else {
+                    _state.update {
+                        it.copy(
+                            recommendPickerPending = false,
+                            recommendPickerError = appContext.getString(com.nuvio.tv.R.string.poster_options_error_send_recommendation_failed)
+                        )
+                    }
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to send recommendation: ${error.message}")
+                _state.update {
+                    it.copy(
+                        recommendPickerPending = false,
+                        recommendPickerError = error.message ?: appContext.getString(com.nuvio.tv.R.string.poster_options_error_send_recommendation_failed)
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissRecommendPicker() {
+        activeRecommendItem = null
+        activeRecommendAddonBaseUrl = null
+        _state.update {
+            it.copy(
+                recommendPickerActive = false,
+                recommendPickerPending = false,
+                recommendPickerError = null,
+                recommendPickerTitle = null,
+                recommendPickerRecipients = emptyList(),
+                recommendPickerSentRecipientId = null
+            )
+        }
+    }
+
     fun toggleMovieWatched() {
         val state = _state.value
         val item = state.target ?: return
@@ -443,6 +555,8 @@ class PosterOptionsController @Inject constructor(
     }
 
     private var activeListPickerInput: LibraryEntryInput? = null
+    private var activeRecommendItem: MetaPreview? = null
+    private var activeRecommendAddonBaseUrl: String? = null
 
     companion object {
         private const val TAG = "PosterOptionsCtrl"
@@ -476,6 +590,31 @@ private fun buildCompletedMovieProgress(item: MetaPreview): WatchProgress {
         duration = 1L,
         lastWatched = System.currentTimeMillis(),
         progressPercent = 100f
+    )
+}
+
+/**
+ * Maps a canonicalized [MetaPreview] to the `POST /shares` request body for the given
+ * recipient. Mirrors [toLibraryEntryInput] below — same source fields, different destination
+ * shape (the `nuvio_shares` row, which mirrors `nuvio_library`'s column set per the plan).
+ */
+private fun MetaPreview.toShareRequest(addonBaseUrl: String?, recipientUserId: String): ShareRequestBody {
+    val isLandscapeSource = posterShape == com.nuvio.tv.domain.model.PosterShape.LANDSCAPE
+    val portraitPoster = rawPosterUrl?.takeIf { it.isNotBlank() }
+    val savedPoster = if (isLandscapeSource && portraitPoster != null) portraitPoster else poster
+    return ShareRequestBody(
+        recipientUserId = recipientUserId,
+        contentId = id,
+        contentType = apiType,
+        name = name,
+        poster = savedPoster,
+        background = background,
+        logo = logo,
+        description = description,
+        releaseInfo = releaseInfo,
+        imdbRating = imdbRating?.toString(),
+        genres = genres,
+        addonBaseUrl = addonBaseUrl
     )
 }
 

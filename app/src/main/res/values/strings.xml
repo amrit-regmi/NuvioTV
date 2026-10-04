@@ -1789,6 +1789,26 @@
     <string name="account_no_linked_devices">No linked devices</string>
     <string name="account_unlink">Unlink</string>
 
+    <!-- "Recommend to…" (Feature 2) — Settings "Receive recommendations from" -->
+    <string name="account_receive_recommendations_title">Receive recommendations from</string>
+    <string name="account_receive_recommendations_add">Add</string>
+    <string name="account_receive_recommendations_empty">No one yet. Add someone to receive recommendations from them.</string>
+    <string name="account_receive_recommendations_edit_alias">Edit alias</string>
+    <string name="account_receive_recommendations_pending">Pending (%1$d)</string>
+    <string name="account_roster_picker_subtitle">Pick someone to ask for recommendations</string>
+    <string name="account_roster_picker_filter_placeholder">Filter by name</string>
+    <string name="account_roster_picker_empty">No one else found.</string>
+
+    <!-- Inbox (Feature 2 "Recommend to…") -->
+    <string name="inbox_title">Inbox</string>
+    <string name="inbox_empty">Nothing here yet.</string>
+    <string name="inbox_share_recommends">%1$s recommends this</string>
+    <string name="inbox_add_to_watchlist">Add to Watchlist</string>
+    <string name="inbox_dismiss">Dismiss</string>
+    <string name="inbox_permission_request">%1$s wants to receive recommendations from you</string>
+    <string name="inbox_allow">Allow</string>
+    <string name="inbox_deny">Deny</string>
+
     <!-- EpisodeRatingsSection -->
     <string name="ratings_loading">Loading episode ratings...</string>
     <string name="ratings_unavailable">Episode ratings are unavailable.</string>
@@ -1830,6 +1850,7 @@
     <string name="nav_movies">Movies</string>
     <string name="nav_series">Series</string>
     <string name="nav_settings">Settings</string>
+    <string name="nav_inbox">Inbox</string>
     <string name="action_select">Select</string>
     <string name="settings_rounded_ui">Rounded UI</string>
     <string name="cd_expand_sidebar">Expand sidebar</string>
@@ -2311,6 +2332,10 @@
     <string name="detail_error_update_episode_watched_failed">Failed to update episode watched status</string>
     <string name="poster_options_error_load_lists_failed">Failed to load lists</string>
     <string name="poster_options_error_update_lists_failed">Failed to update lists</string>
+    <string name="poster_options_error_load_recipients_failed">Failed to load recipients</string>
+    <string name="poster_options_error_send_recommendation_failed">Failed to send recommendation</string>
+    <string name="poster_options_recommend_to">Recommend to…</string>
+    <string name="poster_options_recommend_no_recipients">No one has allowed you to send recommendations yet. Add this in Settings → Receive recommendations from.</string>
 
     <!-- Search errors -->
     <string name="search_error_load_addons_failed">Failed to load addons</string>

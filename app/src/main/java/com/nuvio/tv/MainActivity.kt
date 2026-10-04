@@ -45,6 +45,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -203,7 +204,10 @@ data class DrawerItem(
     val route: String,
     val label: String,
     val iconRes: Int? = null,
-    val icon: ImageVector? = null
+    val icon: ImageVector? = null,
+    // "Recommend to…" inbox unread count (InboxManager.badgeCount), 0 = no badge shown.
+    // Default 0 so every other DrawerItem call site is unaffected.
+    val badgeCount: Int = 0
 )
 
 private data class MainUiPrefs(
@@ -755,6 +759,7 @@ class MainActivity : ComponentActivity() {
                             add(Screen.Search.route)
                             add(Screen.Library.route)
                             add(Screen.Settings.route)
+                            add(Screen.Inbox.route)
                             if (discoverLocation == DiscoverLocation.IN_SIDEBAR) {
                                 add(Screen.Discover.route)
                             }
@@ -766,12 +771,20 @@ class MainActivity : ComponentActivity() {
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
                     val strNavSettings = stringResource(R.string.nav_settings)
+                    val strNavInbox = stringResource(R.string.nav_inbox)
+                    // "Recommend to…" unread badge — InboxViewModel just mirrors the app-wide
+                    // InboxManager singleton's StateFlow, so this is cheap regardless of how many
+                    // places obtain it (sidebar here, InboxScreen separately).
+                    val inboxViewModel: com.nuvio.tv.ui.screens.inbox.InboxViewModel = hiltViewModel(this@MainActivity)
+                    val inboxBadgeCount by inboxViewModel.badgeCount.collectAsState()
                     val drawerItems = remember(
                         strNavHome,
                         strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
                         strNavSettings,
+                        strNavInbox,
+                        inboxBadgeCount,
                         discoverLocation
                     ) {
                         buildList {
@@ -803,6 +816,14 @@ class MainActivity : ComponentActivity() {
                                     route = Screen.Library.route,
                                     label = strNavLibrary,
                                     iconRes = R.raw.sidebar_library
+                                )
+                            )
+                            add(
+                                DrawerItem(
+                                    route = Screen.Inbox.route,
+                                    label = strNavInbox,
+                                    icon = Icons.Default.Notifications,
+                                    badgeCount = inboxBadgeCount
                                 )
                             )
                             add(
@@ -1288,6 +1309,7 @@ private fun LegacySidebarScaffold(
                                     label = item.label,
                                     iconRes = item.iconRes,
                                     icon = item.icon,
+                                    badgeCount = item.badgeCount,
                                     selected = selectedDrawerRoute == item.route,
                                     expanded = isExpanded,
                                     onClick = {
@@ -1363,6 +1385,7 @@ private fun LegacySidebarButton(
     icon: ImageVector?,
     selected: Boolean,
     expanded: Boolean,
+    badgeCount: Int = 0,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
@@ -1426,15 +1449,22 @@ private fun LegacySidebarButton(
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-        DrawerItemIcon(
-            iconRes = iconRes,
-            icon = icon,
-            tint = iconTint,
+        Box(
             modifier = Modifier
                 .size(NuvioComponents.tokens.sidebar.iconSize)
                 .align(Alignment.CenterStart)
                 .offset(x = 13.dp)
-        )
+        ) {
+            DrawerItemIcon(
+                iconRes = iconRes,
+                icon = icon,
+                tint = iconTint,
+                modifier = Modifier.fillMaxSize()
+            )
+            if (badgeCount > 0) {
+                SidebarBadgeDot(count = badgeCount, modifier = Modifier.align(Alignment.TopEnd))
+            }
+        }
         if (expanded) {
             com.nuvio.tv.ui.components.AutoResizeText(
                 text = label,
@@ -2021,6 +2051,28 @@ private fun DrawerItemIcon(
             contentDescription = null,
             tint = tint,
             modifier = modifier
+        )
+    }
+}
+
+/**
+ * Small unread-count badge for a sidebar nav item's icon (the "Recommend to…" inbox entry).
+ * Not marked `private` — [com.nuvio.tv.ModernSidebarBlurPanel] (same package, separate file)
+ * reuses this for the modern sidebar variant instead of duplicating it.
+ */
+@Composable
+internal fun SidebarBadgeDot(count: Int, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(16.dp)
+            .background(color = androidx.compose.ui.graphics.Color(0xFFE53935), shape = androidx.compose.foundation.shape.CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        com.nuvio.tv.ui.components.AutoResizeText(
+            text = if (count > 9) "9+" else count.toString(),
+            color = androidx.compose.ui.graphics.Color.White,
+            style = androidx.tv.material3.MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 1.dp)
         )
     }
 }

@@ -1137,6 +1137,12 @@ fun NuvioNavHost(
             )
         }
 
+        composable(Screen.Inbox.route) {
+            com.nuvio.tv.ui.screens.inbox.InboxScreen(
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
         composable(Screen.ManageProfiles.route) {
             ProfileSelectionScreen(
                 onProfileSelected = {},

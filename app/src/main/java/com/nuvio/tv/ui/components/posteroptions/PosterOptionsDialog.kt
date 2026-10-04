@@ -44,7 +44,8 @@ fun PosterOptionsDialog(
     onDismiss: () -> Unit,
     onDetails: () -> Unit,
     onToggleLibrary: () -> Unit,
-    onToggleWatched: () -> Unit
+    onToggleWatched: () -> Unit,
+    onRecommend: () -> Unit
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
 
@@ -109,6 +110,88 @@ fun PosterOptionsDialog(
                         stringResource(R.string.hero_mark_watched)
                     }
                 )
+            }
+        }
+
+        Button(
+            onClick = onRecommend,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioTheme.colors.BackgroundCard,
+                contentColor = NuvioTheme.colors.TextPrimary
+            )
+        ) {
+            Text(stringResource(R.string.poster_options_recommend_to))
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun PosterRecommendPickerDialog(
+    title: String,
+    recipients: List<com.nuvio.tv.core.shares.GrantedRecipientDto>,
+    isPending: Boolean,
+    error: String?,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val primaryFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        primaryFocusRequester.requestFocus()
+    }
+
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.poster_options_recommend_to),
+        subtitle = title,
+        width = 500.dp
+    ) {
+        if (!error.isNullOrBlank()) {
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFFFB6B6)
+            )
+        }
+
+        if (recipients.isEmpty() && !isPending && error.isNullOrBlank()) {
+            Text(
+                text = stringResource(R.string.poster_options_recommend_no_recipients),
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioTheme.colors.TextTertiary
+            )
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 300.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(recipients, key = { it.userId }) { recipient ->
+                Button(
+                    onClick = { onPick(recipient.userId) },
+                    enabled = !isPending,
+                    modifier = if (recipient.userId == recipients.firstOrNull()?.userId) {
+                        Modifier
+                            .fillMaxWidth()
+                            .focusRequester(primaryFocusRequester)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    },
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioTheme.colors.BackgroundCard,
+                        contentColor = NuvioTheme.colors.TextPrimary
+                    )
+                ) {
+                    Text(
+                        text = recipient.name ?: recipient.userId,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
@@ -237,7 +320,8 @@ fun PosterOptionsHost(
                     controller.toggleSeriesWatched()
                 }
                 controller.dismiss()
-            }
+            },
+            onRecommend = { controller.openRecommendPicker() }
         )
     }
 
@@ -251,6 +335,17 @@ fun PosterOptionsHost(
             onToggle = { key -> controller.toggleListMembership(key) },
             onSave = { controller.saveListPicker() },
             onDismiss = { controller.dismissListPicker() }
+        )
+    }
+
+    if (state.recommendPickerActive) {
+        PosterRecommendPickerDialog(
+            title = state.recommendPickerTitle.orEmpty(),
+            recipients = state.recommendPickerRecipients,
+            isPending = state.recommendPickerPending,
+            error = state.recommendPickerError,
+            onPick = { recipientId -> controller.sendRecommendation(recipientId) },
+            onDismiss = { controller.dismissRecommendPicker() }
         )
     }
 }
