@@ -856,12 +856,16 @@ private fun RightStreamSection(
                 contentAlignment = Alignment.Center
             ) {
                 when {
-                    isAutoScraping -> {
-                        // The backend is still scraping this title and the view-model is
-                        // polling it in. Show a STABLE scraping indicator (keyed only on
-                        // isAutoScraping, which stays true for the whole poll) rather than
-                        // the reload-driven skeleton — otherwise the per-tick re-fetch
-                        // re-churns the skeleton and the screen visibly flashes.
+                    isAutoScraping || isForceFetching -> {
+                        // A scrape-poll loop is driving repeated loadStreams() re-fetches —
+                        // either the normal-path auto-poll (isAutoScraping) or Force fetch
+                        // (isForceFetching), which share the same poll loop in the VM. Each
+                        // re-fetch flips isLoading true->false between ticks, and while
+                        // false with streams still empty the `isLoading` / `streams.isEmpty()`
+                        // branches below would show the skeleton then "No streams" then the
+                        // skeleton again — a visible flash every ~4s. Show ONE STABLE scraping
+                        // indicator for the whole poll instead, keyed only on these two flags
+                        // (which stay true for the whole poll), not on the per-tick isLoading.
                         ScrapingState()
                     }
                     isLoading -> {
