@@ -14,7 +14,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private val Context.backendBaseUrlDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "backend_base_url_store"
+    name = "backend_base_url_store",
+    // Every other DataStore in this package has this handler (upstream audit, Sep 2026). This
+    // one is read SYNCHRONOUSLY at app startup (see RecoBackend, below) before any DI/network
+    // setup exists — a corrupted file here (e.g. app killed mid-write) would otherwise crash on
+    // launch with no recovery path, which is worse for a self-hosted backend-URL override than
+    // for most other settings.
+    corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler { androidx.datastore.preferences.core.emptyPreferences() }
 )
 
 /**

@@ -7,6 +7,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
@@ -187,11 +188,25 @@ private fun PlayerRuntimeController.maybeLoadSubtitleAutoSyncCues(force: Boolean
 private suspend fun PlayerRuntimeController.downloadSubtitleBody(url: String): String =
     withContext(Dispatchers.IO) {
         val requestBuilder = Request.Builder().url(url)
-        currentHeaders
-            .filterKeys { key -> !key.equals("Range", ignoreCase = true) }
-            .forEach { (key, value) ->
-                requestBuilder.header(key, value)
-            }
+        // SECURITY: currentHeaders carries the ACTIVE STREAM's headers (an addon's
+        // behaviorHints.proxyHeaders.request — e.g. Authorization/Cookie/a debrid token under
+        // any custom header name, meant only for that stream's own CDN). Forwarding them
+        // unconditionally to every subtitle URL — as this previously did — sends those
+        // credentials to whatever host a (possibly malicious or simply unrelated) subtitle
+        // addon supplies, with no host check at all. Scope to an EXACT host match with the
+        // stream's own URL, mirroring RecoAuthInterceptor / BackendAuth's host-scoped auth
+        // pattern used elsewhere in this app. Also fixes the unrelated reliability issue where
+        // stream-only headers (Range, debrid CDN auth, …) sent to a generic subtitle host
+        // (OpenSubtitles-style) commonly caused intermittent HTTP 4xx / empty bodies.
+        val subtitleHost = url.toHttpUrlOrNull()?.host
+        val streamHost = currentStreamUrl.toHttpUrlOrNull()?.host
+        if (subtitleHost != null && streamHost != null && subtitleHost.equals(streamHost, ignoreCase = true)) {
+            currentHeaders
+                .filterKeys { key -> !key.equals("Range", ignoreCase = true) }
+                .forEach { (key, value) ->
+                    requestBuilder.header(key, value)
+                }
+        }
         requestBuilder.header(
             "User-Agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +

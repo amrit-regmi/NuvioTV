@@ -79,7 +79,6 @@ internal fun isRetryablePlaybackError(error: PlaybackException): Boolean {
         PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
-        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
         PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
         PlaybackException.ERROR_CODE_IO_NO_PERMISSION,
         PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED,
@@ -101,9 +100,24 @@ internal fun isRetryablePlaybackError(error: PlaybackException): Boolean {
             cause is IllegalStateException || cause is NullPointerException
         }
 
+        // A permanent (non-retryable) HTTP status (link expired/removed/blocked — 400/401/403/
+        // 404/410) was previously retried like any other IO error, which could re-launch the
+        // player against the same dead URL repeatedly before finally surfacing the error (each
+        // relaunch also re-running ExoPlayer's own retry policy below). Give up immediately for
+        // these; everything else in the bad-http-status case (timeouts, 429, 5xx, …) stays
+        // retryable, matching the non-retryable set used in getRetryDelayMsFor below.
+        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> {
+            val code = error.findInvalidResponseCodeException()?.responseCode
+            code !in PERMANENT_HTTP_ERROR_CODES
+        }
+
         else -> false
     }
 }
+
+// Shared with PlayerMediaSourceFactory.PlayerLoadErrorHandlingPolicy — a stream URL returning one
+// of these will NEVER succeed on retry (expired/removed/blocked), unlike a transient 429/5xx.
+internal val PERMANENT_HTTP_ERROR_CODES = setOf(400, 401, 403, 404, 410)
 
 /**
  * Audio-track failures that the safe-audio → audio-disabled fallback ladder can recover from.

@@ -80,6 +80,13 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Same fix as NuvioMobile's release workflows: the default "tools platform-tools"
+          # packages list fails on `sdkmanager tools` (Google removed the legacy SDK Tools
+          # package from the repo). This workflow hasn't run since v1.1.0 (2026-09-09),
+          # before that runner-image regression first surfaced (2026-09-16) — fixing
+          # preemptively so this stable cut doesn't hit the same wasted dispatch.
+          packages: platform-tools
 
       - name: Use the runner's x86_64 AAPT2 (drop the ARM64 build-box override)
         run: |

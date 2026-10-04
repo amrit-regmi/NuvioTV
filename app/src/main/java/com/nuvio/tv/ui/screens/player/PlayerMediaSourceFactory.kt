@@ -735,6 +735,16 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
 private class PlayerLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy(6) {
     override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+        // A permanent HTTP status (expired/removed/blocked link) will never succeed on retry —
+        // stop immediately instead of burning through this policy's 6 retries against a dead
+        // URL. Shared threshold with isRetryablePlaybackError (PlayerRuntimeControllerErrorRecovery.kt),
+        // which governs whether the APP itself relaunches the player after ExoPlayer gives up.
+        val httpCode = loadErrorInfo.exception
+            .findCause<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
+            ?.responseCode
+        if (httpCode in PERMANENT_HTTP_ERROR_CODES) {
+            return androidx.media3.common.C.TIME_UNSET
+        }
         val timeout = loadErrorInfo.exception.findCause<SocketTimeoutException>() != null
         return if (timeout) {
             when (loadErrorInfo.errorCount) {
