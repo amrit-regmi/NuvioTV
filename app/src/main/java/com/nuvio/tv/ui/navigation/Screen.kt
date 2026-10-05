@@ -142,6 +142,7 @@ sealed class Screen(val route: String) {
     data object BuiltInProviders : Screen("built_in_providers")
     data object CatalogOrder : Screen("catalog_order")
     data object Plugins : Screen("plugins")
+    data object ReceiveRecommendations : Screen("receive_recommendations")
     data object ExperienceModeSelection : Screen("experience_mode_selection")
     data object LayoutSelection : Screen("layout_selection")
     data object LayoutSettings : Screen("layout_settings")

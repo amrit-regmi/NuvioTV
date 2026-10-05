@@ -182,6 +182,7 @@ fun SettingsScreen(
     onNavigateToAddons: () -> Unit = {},
     onNavigateToPlugins: () -> Unit = {},
     onNavigateToBuiltInProviders: () -> Unit = {},
+    onNavigateToReceiveRecommendations: () -> Unit = {},
     onNavigateToAuthQrSignIn: () -> Unit = {},
     onNavigateToManageProfiles: () -> Unit = {},
     onNavigateToSupportersContributors: () -> Unit = {},
@@ -483,6 +484,7 @@ fun SettingsScreen(
                             onNavigateToAddons = onNavigateToAddons,
                             onNavigateToPlugins = onNavigateToPlugins,
                             onNavigateToBuiltInProviders = onNavigateToBuiltInProviders,
+                            onNavigateToReceiveRecommendations = onNavigateToReceiveRecommendations,
                             showPlugins = AppFeaturePolicy.pluginsEnabled && !isEssentialMode,
                             // Built-in providers expose stream-provider + reco config; only
                             // surface when those features are available.
@@ -509,6 +511,7 @@ private fun ContentDiscoverySettingsContent(
     onNavigateToAddons: () -> Unit,
     onNavigateToPlugins: () -> Unit,
     onNavigateToBuiltInProviders: () -> Unit,
+    onNavigateToReceiveRecommendations: () -> Unit,
     showPlugins: Boolean,
     streamProvidersAvailable: Boolean,
     initialFocusRequester: FocusRequester?
@@ -558,6 +561,12 @@ private fun ContentDiscoverySettingsContent(
                     leadingIcon = Icons.Default.Build
                 )
             }
+            SettingsActionRow(
+                title = stringResource(R.string.account_receive_recommendations_title),
+                subtitle = stringResource(R.string.poster_options_recommend_to),
+                onClick = onNavigateToReceiveRecommendations,
+                leadingIcon = Icons.Default.People
+            )
         }
     }
 }

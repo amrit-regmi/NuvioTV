@@ -1126,6 +1126,7 @@ fun NuvioNavHost(
                 onNavigateToAddons = { navController.navigate(Screen.AddonManager.route) },
                 onNavigateToPlugins = { navController.navigate(Screen.Plugins.route) },
                 onNavigateToBuiltInProviders = { navController.navigate(Screen.BuiltInProviders.route) },
+                onNavigateToReceiveRecommendations = { navController.navigate(Screen.ReceiveRecommendations.route) },
                 onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) },
                 onNavigateToManageProfiles = { navController.navigate(Screen.ManageProfiles.route) },
                 onNavigateToSupportersContributors = {
@@ -1205,6 +1206,12 @@ fun NuvioNavHost(
         composable(Screen.BuiltInProviders.route) {
             com.nuvio.tv.ui.screens.settings.BuiltInProvidersScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.ReceiveRecommendations.route) {
+            com.nuvio.tv.ui.screens.settings.ReceiveRecommendationsScreen(
                 onBackPress = { navController.popBackStack() }
             )
         }
