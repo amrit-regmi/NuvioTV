@@ -157,6 +157,22 @@ class SharesRepository @Inject constructor(
         }
     }
 
+    // --- DELETE /shares/permissions/{id} ---
+    // Removes a source from the caller's "Receive recommendations from" list (an allowed
+    // source, or a still-pending outgoing request). Unilateral on the requester's side.
+    suspend fun removePermission(id: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder()
+                .url(url("/shares/permissions/${id}"))
+                .delete()
+                .build()
+            httpClient.newCall(request).execute().use { it.isSuccessful }
+        }.getOrElse {
+            Log.w(TAG, "removePermission failed", it)
+            false
+        }
+    }
+
     // --- POST /shares ---
     suspend fun sendShare(body: ShareRequestBody): Boolean = withContext(Dispatchers.IO) {
         runCatching {

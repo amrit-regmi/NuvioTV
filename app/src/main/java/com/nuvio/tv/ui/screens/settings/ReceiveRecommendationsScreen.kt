@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +33,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
+import androidx.tv.material3.IconButton
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
@@ -95,22 +98,10 @@ fun ReceiveRecommendationsContent(
                 }
             } else {
                 allowed.forEach { row ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = row.sourceName?.takeIf { it.isNotBlank() } ?: row.sourceId,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = NuvioTheme.colors.TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                    }
+                    ReceiveRecommendationsRow(
+                        title = row.sourceName?.takeIf { it.isNotBlank() } ?: row.sourceId,
+                        onRemove = { viewModel.removePermission(row.id) }
+                    )
                 }
             }
         }
@@ -121,22 +112,10 @@ fun ReceiveRecommendationsContent(
                 title = stringResource(R.string.account_receive_recommendations_pending, pending.size)
             ) {
                 pending.forEach { row ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = row.sourceName?.takeIf { it.isNotBlank() } ?: row.sourceId,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = NuvioTheme.colors.TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                    }
+                    ReceiveRecommendationsRow(
+                        title = row.sourceName?.takeIf { it.isNotBlank() } ?: row.sourceId,
+                        onRemove = { viewModel.removePermission(row.id) }
+                    )
                 }
             }
         }
@@ -150,6 +129,36 @@ fun ReceiveRecommendationsContent(
             onPick = { viewModel.requestPermission(it) },
             onDismiss = { viewModel.dismissRosterPicker() }
         )
+    }
+}
+
+@Composable
+private fun ReceiveRecommendationsRow(
+    title: String,
+    onRemove: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = NuvioTheme.colors.TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        IconButton(onClick = onRemove) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = stringResource(R.string.cd_remove),
+                tint = NuvioTheme.colors.TextSecondary
+            )
+        }
     }
 }
 

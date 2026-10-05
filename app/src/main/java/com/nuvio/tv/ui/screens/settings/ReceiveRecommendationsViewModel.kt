@@ -73,4 +73,12 @@ class ReceiveRecommendationsViewModel @Inject constructor(
             }
         }
     }
+
+    fun removePermission(id: String) {
+        viewModelScope.launch {
+            if (sharesRepository.removePermission(id)) {
+                _uiState.update { state -> state.copy(mine = state.mine.filterNot { it.id == id }) }
+            }
+        }
+    }
 }
