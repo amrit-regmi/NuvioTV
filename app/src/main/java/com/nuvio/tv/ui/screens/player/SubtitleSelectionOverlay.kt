@@ -1682,6 +1682,16 @@ private fun buildSubtitleLanguageRailItems(
     unknownLabel: String
 ): List<SubtitleLanguageRailItem> {
     val counts = linkedMapOf<String, Int>()
+    // Track which keys came from addon subtitles specifically, so the
+    // preferred-language narrowing below (which only makes sense for a long
+    // raw internal-track list) never re-narrows a best-per-language result
+    // the caller already decided NOT to narrow (PlayerRuntimeControllerObservers
+    // .filterToVisibleAddonSubtitles already returns the authoritative ≤3-entry
+    // set verbatim when lastSubtitleFetchWasBestPerLang is true — duplicating
+    // that filter here, with no knowledge of that decision, was the bug behind
+    // a user report of only ever seeing one (English) option despite the
+    // backend correctly returning 3 matched languages).
+    val addonLanguageKeys = mutableSetOf<String>()
     internalTracks.forEach { track ->
         val key = normalizeOverlayLanguageKeyForTrack(track)
         counts[key] = (counts[key] ?: 0) + 1
@@ -1689,6 +1699,7 @@ private fun buildSubtitleLanguageRailItems(
     addonSubtitles.forEach { subtitle ->
         val key = normalizeOverlayLanguageKey(subtitle.lang)
         counts[key] = (counts[key] ?: 0) + 1
+        addonLanguageKeys += key
     }
 
     val preferredOrder = preferredOverlayLanguageOrder(
@@ -1699,7 +1710,7 @@ private fun buildSubtitleLanguageRailItems(
     val languageEntries = if (showOnlyPreferredLanguages) {
         val preferredKeys = preferredOrder.toSet()
         counts.entries.filter { entry ->
-            entry.key in preferredKeys || entry.key == currentLanguageKey
+            entry.key in preferredKeys || entry.key == currentLanguageKey || entry.key in addonLanguageKeys
         }
     } else {
         counts.entries
